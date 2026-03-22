@@ -108,10 +108,11 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
 
   // Notify parent when xterm receives native focus (e.g. direct click on terminal canvas)
   useEffect(() => {
-    const term = termRef.current
-    if (!term || !onFocus) return
-    const disposable = term.onFocus(() => onFocus())
-    return () => disposable.dispose()
+    const container = containerRef.current
+    if (!container || !onFocus) return
+    const handler = () => onFocus()
+    container.addEventListener('focusin', handler)
+    return () => container.removeEventListener('focusin', handler)
   })
 
   return (

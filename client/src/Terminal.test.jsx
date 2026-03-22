@@ -9,7 +9,6 @@ const mockLoadAddon = vi.fn()
 const mockOnData = vi.fn()
 const mockOpen = vi.fn()
 const mockFocus = vi.fn()
-const mockOnFocus = vi.fn(() => ({ dispose: vi.fn() }))
 let mockCols = 80
 let mockRows = 24
 
@@ -22,7 +21,6 @@ vi.mock('@xterm/xterm', () => ({
       this.onData = mockOnData
       this.open = mockOpen
       this.focus = mockFocus
-      this.onFocus = mockOnFocus
     }
     get cols() { return mockCols }
     get rows() { return mockRows }
@@ -168,19 +166,22 @@ describe('Terminal', () => {
     expect(mockFocus).not.toHaveBeenCalled()
   })
 
-  it('registers onFocus listener on the xterm instance', () => {
+  it('registers focusin listener on the container element', () => {
     const onFocus = vi.fn()
-    render(<Terminal token="test-token" onFocus={onFocus} />)
-    expect(mockOnFocus).toHaveBeenCalledWith(expect.any(Function))
+    const { getByTestId } = render(<Terminal token="test-token" onFocus={onFocus} />)
+    const container = getByTestId('terminal')
+    container.dispatchEvent(new Event('focusin', { bubbles: true }))
+    expect(onFocus).toHaveBeenCalled()
   })
 
-  it('calls onFocus callback when xterm fires focus event', () => {
+  it('calls onFocus callback when a child element receives focus', () => {
     const onFocusCb = vi.fn()
-    render(<Terminal token="test-token" onFocus={onFocusCb} />)
-    // Get the handler registered with term.onFocus and call it
-    const handler = mockOnFocus.mock.calls[0]?.[0]
-    expect(handler).toBeDefined()
-    handler()
+    const { getByTestId } = render(<Terminal token="test-token" onFocus={onFocusCb} />)
+    const container = getByTestId('terminal')
+    // Simulate focus bubbling up from a child element
+    const child = document.createElement('textarea')
+    container.appendChild(child)
+    child.dispatchEvent(new Event('focusin', { bubbles: true }))
     expect(onFocusCb).toHaveBeenCalled()
   })
 
