@@ -68,13 +68,15 @@ export { app, httpServer, io };
 const TMUX_SESSION = process.env.DANCODE_TMUX_SESSION || 'dancode-test';
 
 export function startServer(port = PORT) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     httpServer.listen(port, async () => {
       console.log(`DanCode server listening on http://localhost:${port}`);
       try {
         await ensureSession(TMUX_SESSION);
       } catch (err) {
-        console.error(`Failed to ensure tmux session "${TMUX_SESSION}":`, err.message);
+        httpServer.close();
+        reject(new Error(`Failed to ensure tmux session "${TMUX_SESSION}": ${err.message}`));
+        return;
       }
       resolve(httpServer);
     });
