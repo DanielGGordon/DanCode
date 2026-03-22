@@ -72,8 +72,26 @@ test.describe('Sidebar visual', () => {
     }
   });
 
-  test('sidebar passes visual assertion', async ({ page, aiAssert }) => {
+  test('sidebar passes visual assertion', async ({ page, aiAssert, request }) => {
     token = await login(page);
+
+    // Delete all pre-existing projects so the test is hermetic
+    const res = await request.get('/api/projects', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const existing = await res.json();
+    for (const proj of existing) {
+      try {
+        await request.delete(`/api/projects/${proj.slug}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch { /* best-effort */ }
+      try {
+        await execFileAsync('tmux', ['kill-session', '-t', `dancode-${proj.slug}`]);
+      } catch { /* session may not exist */ }
+    }
+    await page.reload();
+    await expect(page.getByTestId('new-project-button')).toBeVisible();
 
     // Create two projects so the sidebar shows a list
     const a = await createProject(page, PROJECT_A);
