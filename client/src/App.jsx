@@ -73,8 +73,12 @@ function App() {
       if (res.ok) {
         const data = await res.json()
         setTmuxStatus(data)
+      } else {
+        setTmuxStatus({})
       }
-    } catch {}
+    } catch {
+      setTmuxStatus({})
+    }
   }, [token])
 
   useEffect(() => {
