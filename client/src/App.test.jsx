@@ -649,6 +649,38 @@ describe('App', () => {
     fetchSpy.mockRestore()
   })
 
+  it('closes dropdown when clicking outside', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (url === '/api/projects') {
+        return { ok: true, status: 200, json: () => Promise.resolve([
+          { slug: 'sidebar-project', name: 'My Project', path: '/tmp' },
+        ]) }
+      }
+      return { ok: true, status: 200, json: () => Promise.resolve({}) }
+    })
+    const { getByTestId, queryByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    fireEvent.click(getByTestId('mock-sidebar-select'))
+    await waitFor(() => {
+      expect(getByTestId('header-project-name')).toBeDefined()
+    })
+
+    // Open dropdown
+    fireEvent.click(getByTestId('header-project-name'))
+    expect(getByTestId('header-dropdown')).toBeDefined()
+
+    // Click outside the dropdown
+    fireEvent.mouseDown(document.body)
+    expect(queryByTestId('header-dropdown')).toBeNull()
+
+    fetchSpy.mockRestore()
+  })
+
   it('sidebar and command palette coexist — both switch projects in the same session', async () => {
     localStorageMock.setItem('dancode-auth-token', 'test-token')
     mockFetch(200, { valid: true })

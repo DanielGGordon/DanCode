@@ -199,7 +199,7 @@ The current project name is displayed in a top header bar. Clicking it reveals a
 - [x] Clicking the project name opens a dropdown listing all projects
 - [x] Selecting a project from the dropdown switches to it
 - [x] Active project is visually distinct in the dropdown (bold, checkmark, or similar)
-- [ ] Dropdown closes on selection or when clicking outside
+- [x] Dropdown closes on selection or when clicking outside
 - [ ] Header bar style matches Solarized Dark theme — subtle, not visually heavy
 - [ ] All three switching mechanisms (palette, sidebar, dropdown) coexist and work independently
 - [ ] E2E test: click header project name, dropdown appears, select project, terminals switch
