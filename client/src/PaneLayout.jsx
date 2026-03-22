@@ -19,9 +19,19 @@ export default function PaneLayout({ token, slug, panes = ALL_PANES }) {
   useEffect(() => {
     const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
     const onChange = (e) => setIsMobile(e.matches)
-    mql.addEventListener('change', onChange)
+    if (mql.addEventListener) {
+      mql.addEventListener('change', onChange)
+    } else {
+      mql.addListener(onChange)
+    }
     setIsMobile(mql.matches)
-    return () => mql.removeEventListener('change', onChange)
+    return () => {
+      if (mql.removeEventListener) {
+        mql.removeEventListener('change', onChange)
+      } else {
+        mql.removeListener(onChange)
+      }
+    }
   }, [])
 
   const effectiveLayout = isMobile ? 'tabs' : layoutMode
