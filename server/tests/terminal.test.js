@@ -41,7 +41,7 @@ describe('Socket.io /terminal namespace', () => {
     mockPty = null;
 
     httpServer = createServer();
-    io = new Server(httpServer);
+    io = new Server(httpServer, { transports: ['websocket'] });
 
     await new Promise((resolve) => {
       httpServer.listen(0, () => {
@@ -65,6 +65,7 @@ describe('Socket.io /terminal namespace', () => {
   function connect(query = {}, auth = { token: TEST_TOKEN }) {
     clientSocket = ioClient(`http://localhost:${port}/terminal`, {
       forceNew: true,
+      transports: ['websocket'],
       query,
       auth,
     });

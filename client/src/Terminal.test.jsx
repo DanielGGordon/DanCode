@@ -86,6 +86,7 @@ describe('Terminal', () => {
     expect(io).toHaveBeenCalledWith('/terminal', expect.objectContaining({
       query: { cols: 80, rows: 24 },
       auth: { token: 'test-token' },
+      transports: ['websocket'],
     }))
   })
 
@@ -144,6 +145,7 @@ describe('Terminal', () => {
     expect(io).toHaveBeenCalledWith('/terminal', expect.objectContaining({
       query: { cols: 80, rows: 24, slug: 'myproj', pane: 1 },
       auth: { token: 'test-token' },
+      transports: ['websocket'],
     }))
   })
 
