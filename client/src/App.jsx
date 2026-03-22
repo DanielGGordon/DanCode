@@ -156,6 +156,7 @@ function App() {
 
   function handlePaletteSelect(slug) {
     setPaletteOpen(false)
+    setDropdownOpen(false)
     setSelectedSlug(slug)
     setSelectedProjectName(Array.isArray(projects) ? projects.find((p) => p.slug === slug)?.name || null : null)
     setShowNewProject(false)
