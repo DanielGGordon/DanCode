@@ -181,7 +181,7 @@ A collapsible left sidebar listing all projects. Clicking a project switches to 
 - [x] Sidebar state (open/closed) is persisted to config
 - [x] Sidebar coexists with command palette — both work simultaneously
 - [x] E2E test: open sidebar, click a different project, terminals switch
-- [ ] Visual test: `aiAssert("a collapsible sidebar on the left lists project names, one is highlighted as active")`
+- [x] Visual test: `aiAssert("a collapsible sidebar on the left lists project names, one is highlighted as active")`
 
 ---
 
