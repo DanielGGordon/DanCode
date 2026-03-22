@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { Server } from 'socket.io';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { ensureSession } from './tmux.js';
+import { ensureSession, createProjectSession } from './tmux.js';
 import { setupTerminalNamespace } from './terminal.js';
 import { ensureAuthToken, validateToken } from './auth.js';
 import { validateProjectInput, createProject, getProjectsDir } from './projects.js';
@@ -110,6 +110,14 @@ app.post('/api/projects', async (req, res) => {
 
   try {
     const project = await createProject(name, path, projectsDir);
+
+    // Spin up the tmux session with CLI + Claude panes
+    try {
+      await createProjectSession(project.slug, project.path);
+    } catch (tmuxErr) {
+      console.error(`Failed to create tmux session for "${project.slug}":`, tmuxErr.message);
+    }
+
     res.status(201).json(project);
   } catch (err) {
     if (err.message.includes('already exists')) {

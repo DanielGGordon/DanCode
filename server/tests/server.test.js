@@ -3,7 +3,11 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { app, httpServer, startServer } from '../src/index.js';
+
+const execFileAsync = promisify(execFile);
 
 const TEST_PORT = 3099;
 
@@ -13,6 +17,7 @@ describe('DanCode server', () => {
   let tokenPath;
   let projectsDir;
   let storedToken;
+  const createdSessions = [];
 
   beforeAll(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'dancode-server-test-'));
@@ -23,6 +28,14 @@ describe('DanCode server', () => {
   afterAll(async () => {
     if (server) {
       await new Promise((resolve) => server.close(resolve));
+    }
+    // Clean up tmux sessions created during project creation tests
+    for (const name of createdSessions) {
+      try {
+        await execFileAsync('tmux', ['kill-session', '-t', name]);
+      } catch {
+        // session didn't exist — fine
+      }
     }
     if (tempDir) {
       await rm(tempDir, { recursive: true, force: true });
@@ -142,6 +155,7 @@ describe('DanCode server', () => {
         headers: authHeaders(),
         body: JSON.stringify({ name: 'Integration Test', path: projectDir }),
       });
+      createdSessions.push('dancode-integration-test');
       expect(res.status).toBe(201);
       const body = await res.json();
       expect(body.name).toBe('Integration Test');
@@ -157,6 +171,7 @@ describe('DanCode server', () => {
         headers: authHeaders(),
         body: JSON.stringify({ name: 'Dir Creator', path: projectDir }),
       });
+      createdSessions.push('dancode-dir-creator');
       expect(existsSync(projectDir)).toBe(true);
     });
 
@@ -199,6 +214,7 @@ describe('DanCode server', () => {
         headers: authHeaders(),
         body: JSON.stringify({ name: 'Unique Name', path: '/tmp/a' }),
       });
+      createdSessions.push('dancode-unique-name');
       const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
         method: 'POST',
         headers: authHeaders(),

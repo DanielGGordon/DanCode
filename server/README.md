@@ -9,7 +9,7 @@ Serves the DanCode web application and manages WebSocket connections for real-ti
 ## Public interface
 
 - **`GET /`** — Serves the DanCode placeholder page (will be replaced by the React build in production)
-- **`POST /api/projects`** — Create a new project. Accepts `{ name, path }`, validates inputs, writes config to `~/.dancode/projects/<slug>.json`, creates the project directory if needed. Returns 201 with the project object, 400 for validation errors, 409 for duplicates.
+- **`POST /api/projects`** — Create a new project. Accepts `{ name, path }`, validates inputs, writes config to `~/.dancode/projects/<slug>.json`, creates the project directory if needed, and spins up a tmux session `dancode-<slug>` with two panes (shell + Claude). Returns 201 with the project object, 400 for validation errors, 409 for duplicates.
 - **Socket.io** — Listens for WebSocket connections on the default namespace
 - **Socket.io `/terminal`** — Accepts connections and spawns a node-pty process attached to `tmux attach -t <session>`. Emits `output` events with terminal data; accepts `input` (keystrokes) and `resize` ({ cols, rows }) events.
 
@@ -44,6 +44,7 @@ Serves the DanCode web application and manages WebSocket connections for real-ti
 - `sessionExists(name)` — Check whether a tmux session exists. Returns `Promise<boolean>`.
 - `createSession(name)` — Create a detached tmux session.
 - `ensureSession(name)` — Ensure a tmux session exists, creating it if needed. Returns `Promise<{created: boolean}>`.
+- `createProjectSession(slug, projectPath)` — Create a tmux session `dancode-<slug>` with two panes: pane 0 is a shell at the project directory, pane 1 runs `claude --dangerously-skip-permissions` at the project directory. Returns `Promise<{sessionName, created}>`.
 
 ## Exports (src/terminal.js)
 
