@@ -15,7 +15,8 @@ function App() {
   const [selectedSlug, setSelectedSlug] = useState(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [projects, setProjects] = useState([])
-  const [tmuxStatus, setTmuxStatus] = useState({})
+  const [tmuxStatus, setTmuxStatus] = useState(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   useEffect(() => {
     if (!token) return
@@ -113,7 +114,7 @@ function App() {
     setShowNewProject(false)
     setSelectedSlug(null)
     setProjects([])
-    setTmuxStatus({})
+    setTmuxStatus(null)
   }
 
   if (validating) {
@@ -174,6 +175,8 @@ function App() {
           currentSlug={selectedSlug}
           onSelect={handleSidebarSelect}
           tmuxStatus={tmuxStatus}
+          collapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed((prev) => !prev)}
         />
         <main className="flex-1 min-h-0">
           {showNewProject ? (

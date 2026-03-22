@@ -15,7 +15,7 @@ DanCode/
 │   │   ├── NewProjectForm.test.jsx # NewProjectForm component unit tests
 │   │   ├── PaneLayout.jsx      # Multi-pane layout: split view (side-by-side) or tabbed view with toggle
 │   │   ├── PaneLayout.test.jsx # PaneLayout component unit tests
-│   │   ├── Sidebar.jsx         # Left sidebar listing all projects by name with active highlight and tmux status dot
+│   │   ├── Sidebar.jsx         # Collapsible left sidebar listing all projects by name with active highlight and tmux status dot
 │   │   ├── Sidebar.test.jsx    # Sidebar component unit tests
 │   │   ├── Terminal.jsx        # xterm.js terminal connected via Socket.io (supports per-pane connections)
 │   │   ├── Terminal.test.jsx   # Terminal component unit tests

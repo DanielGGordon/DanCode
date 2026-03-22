@@ -1,20 +1,41 @@
-export default function Sidebar({ projects, currentSlug, onSelect, tmuxStatus }) {
+export default function Sidebar({ projects, currentSlug, onSelect, tmuxStatus, collapsed, onToggle }) {
   return (
     <aside
       data-testid="sidebar"
-      className="w-52 bg-base02 border-r border-base01/30 flex flex-col shrink-0 overflow-y-auto"
+      className={`${collapsed ? 'w-10' : 'w-52'} bg-base02 border-r border-base01/30 flex flex-col shrink-0 overflow-y-auto transition-all duration-150`}
     >
-      <div className="px-3 py-2 border-b border-base01/30">
-        <h2 className="text-xs font-semibold text-base01 uppercase tracking-wider">Projects</h2>
+      <div className={`flex items-center border-b border-base01/30 ${collapsed ? 'justify-center py-2' : 'px-3 py-2'}`}>
+        {!collapsed && (
+          <h2 className="text-xs font-semibold text-base01 uppercase tracking-wider flex-1">Projects</h2>
+        )}
+        <button
+          data-testid="sidebar-toggle"
+          onClick={() => onToggle?.()}
+          className="text-base01 hover:text-base0 transition-colors text-xs leading-none"
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {collapsed ? '▶' : '◀'}
+        </button>
       </div>
-      <ul data-testid="sidebar-project-list" className="py-1">
+      {!collapsed && <ul data-testid="sidebar-project-list" className="py-1">
         {(!projects || projects.length === 0) && (
           <li data-testid="sidebar-empty" className="px-3 py-2 text-xs text-base01">
             No projects yet
           </li>
         )}
         {(projects || []).map((p) => {
-          const running = tmuxStatus?.[p.slug] ?? false
+          const status = tmuxStatus?.[p.slug]
+          const dotClass = status === true
+            ? 'bg-green'
+            : status === false
+              ? 'bg-base01/40'
+              : 'bg-base01/20 animate-pulse'
+          const dotTitle = status === true
+            ? 'tmux session running'
+            : status === false
+              ? 'no tmux session'
+              : 'checking status…'
           return (
             <li
               key={p.slug}
@@ -28,16 +49,14 @@ export default function Sidebar({ projects, currentSlug, onSelect, tmuxStatus })
             >
               <span
                 data-testid={`sidebar-status-${p.slug}`}
-                className={`inline-block w-2 h-2 rounded-full shrink-0 ${
-                  running ? 'bg-green' : 'bg-base01/40'
-                }`}
-                title={running ? 'tmux session running' : 'no tmux session'}
+                className={`inline-block w-2 h-2 rounded-full shrink-0 ${dotClass}`}
+                title={dotTitle}
               />
               {p.name}
             </li>
           )
         })}
-      </ul>
+      </ul>}
     </aside>
   )
 }

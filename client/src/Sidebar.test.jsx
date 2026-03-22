@@ -89,6 +89,65 @@ describe('Sidebar', () => {
     fireEvent.click(getByTestId('sidebar-project-alpha'))
   })
 
+  describe('collapse/expand toggle', () => {
+    it('renders a toggle button', () => {
+      const { getByTestId } = render(<Sidebar projects={PROJECTS} currentSlug={null} />)
+      expect(getByTestId('sidebar-toggle')).toBeDefined()
+    })
+
+    it('shows collapse arrow when expanded', () => {
+      const { getByTestId } = render(<Sidebar projects={PROJECTS} currentSlug={null} collapsed={false} />)
+      expect(getByTestId('sidebar-toggle').textContent).toBe('◀')
+      expect(getByTestId('sidebar-toggle').title).toBe('Collapse sidebar')
+    })
+
+    it('shows expand arrow when collapsed', () => {
+      const { getByTestId } = render(<Sidebar projects={PROJECTS} currentSlug={null} collapsed={true} />)
+      expect(getByTestId('sidebar-toggle').textContent).toBe('▶')
+      expect(getByTestId('sidebar-toggle').title).toBe('Expand sidebar')
+    })
+
+    it('calls onToggle when toggle button is clicked', () => {
+      const onToggle = vi.fn()
+      const { getByTestId } = render(<Sidebar projects={PROJECTS} currentSlug={null} onToggle={onToggle} />)
+      fireEvent.click(getByTestId('sidebar-toggle'))
+      expect(onToggle).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not crash when onToggle is not provided', () => {
+      const { getByTestId } = render(<Sidebar projects={PROJECTS} currentSlug={null} />)
+      fireEvent.click(getByTestId('sidebar-toggle'))
+    })
+
+    it('hides project list when collapsed', () => {
+      const { queryByTestId } = render(<Sidebar projects={PROJECTS} currentSlug={null} collapsed={true} />)
+      expect(queryByTestId('sidebar-project-list')).toBeNull()
+    })
+
+    it('shows project list when expanded', () => {
+      const { getByTestId } = render(<Sidebar projects={PROJECTS} currentSlug={null} collapsed={false} />)
+      expect(getByTestId('sidebar-project-list')).toBeDefined()
+    })
+
+    it('uses narrow width class when collapsed', () => {
+      const { getByTestId } = render(<Sidebar projects={PROJECTS} currentSlug={null} collapsed={true} />)
+      expect(getByTestId('sidebar').className).toContain('w-10')
+      expect(getByTestId('sidebar').className).not.toContain('w-52')
+    })
+
+    it('uses full width class when expanded', () => {
+      const { getByTestId } = render(<Sidebar projects={PROJECTS} currentSlug={null} collapsed={false} />)
+      expect(getByTestId('sidebar').className).toContain('w-52')
+      expect(getByTestId('sidebar').className).not.toContain('w-10')
+    })
+
+    it('hides Projects heading when collapsed', () => {
+      const { getByTestId } = render(<Sidebar projects={PROJECTS} currentSlug={null} collapsed={true} />)
+      const sidebar = getByTestId('sidebar')
+      expect(sidebar.querySelector('h2')).toBeNull()
+    })
+  })
+
   describe('tmux status indicator', () => {
     it('shows a status dot for each project', () => {
       const { getByTestId } = render(<Sidebar projects={PROJECTS} currentSlug={null} />)
@@ -120,22 +179,27 @@ describe('Sidebar', () => {
       expect(betaDot.title).toBe('no tmux session')
     })
 
-    it('defaults to not running when tmuxStatus is undefined', () => {
+    it('shows unknown state when tmuxStatus is undefined', () => {
       const { getByTestId } = render(
         <Sidebar projects={PROJECTS} currentSlug={null} />
       )
       const alphaDot = getByTestId('sidebar-status-alpha')
-      expect(alphaDot.className).toContain('bg-base01/40')
+      expect(alphaDot.className).toContain('bg-base01/20')
+      expect(alphaDot.className).toContain('animate-pulse')
       expect(alphaDot.className).not.toContain('bg-green')
+      expect(alphaDot.className).not.toContain('bg-base01/40')
+      expect(alphaDot.title).toBe('checking status…')
     })
 
-    it('defaults to not running when project slug is missing from tmuxStatus', () => {
+    it('shows unknown state when project slug is missing from tmuxStatus', () => {
       const tmuxStatus = { alpha: true }
       const { getByTestId } = render(
         <Sidebar projects={PROJECTS} currentSlug={null} tmuxStatus={tmuxStatus} />
       )
       const betaDot = getByTestId('sidebar-status-beta')
-      expect(betaDot.className).toContain('bg-base01/40')
+      expect(betaDot.className).toContain('bg-base01/20')
+      expect(betaDot.className).toContain('animate-pulse')
+      expect(betaDot.title).toBe('checking status…')
     })
   })
 })
