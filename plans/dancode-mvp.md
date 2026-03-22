@@ -128,7 +128,7 @@ Display multiple xterm.js terminals for the active project's tmux panes. Desktop
 - [x] Each pane has a label showing its type (CLI, Claude, Ralph)
 - [x] Users can click a pane to focus it for keyboard input
 - [x] Toggle button switches between split view and tabbed view on desktop
-- [ ] Mobile (<768px): automatically uses tabbed mode with tab buttons to switch panes
+- [x] Mobile (<768px): automatically uses tabbed mode with tab buttons to switch panes
 - [ ] Pane visibility toggles: buttons to show/hide individual panes (at least one must remain visible)
 - [ ] Layout mode (split/tabs) and pane visibility are saved to the project config and restored on next visit
 - [ ] Hidden panes remain running in tmux — only the UI display is affected

@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup, fireEvent, act } from '@testing-library/react'
-import PaneLayout, { ALL_PANES } from './PaneLayout.jsx'
+import PaneLayout, { ALL_PANES, MOBILE_BREAKPOINT } from './PaneLayout.jsx'
 
 // Mock Terminal to capture props without xterm.js side effects
 const terminalInstances = []
@@ -20,10 +20,43 @@ vi.mock('./Terminal.jsx', () => ({
   },
 }))
 
+// Helper: mock matchMedia for a given width
+function mockViewport(width) {
+  const listeners = []
+  Object.defineProperty(window, 'innerWidth', { value: width, writable: true, configurable: true })
+  window.matchMedia = vi.fn().mockImplementation((query) => ({
+    matches: width < MOBILE_BREAKPOINT,
+    media: query,
+    addEventListener: (event, cb) => listeners.push(cb),
+    removeEventListener: (event, cb) => {
+      const idx = listeners.indexOf(cb)
+      if (idx >= 0) listeners.splice(idx, 1)
+    },
+  }))
+  return {
+    resize(newWidth) {
+      Object.defineProperty(window, 'innerWidth', { value: newWidth, writable: true, configurable: true })
+      const matches = newWidth < MOBILE_BREAKPOINT
+      window.matchMedia = vi.fn().mockImplementation((query) => ({
+        matches,
+        media: query,
+        addEventListener: (event, cb) => listeners.push(cb),
+        removeEventListener: (event, cb) => {
+          const idx = listeners.indexOf(cb)
+          if (idx >= 0) listeners.splice(idx, 1)
+        },
+      }))
+      listeners.forEach((cb) => cb({ matches }))
+    },
+  }
+}
+
 beforeEach(() => {
   terminalInstances.length = 0
   vi.clearAllMocks()
   cleanup()
+  // Default: desktop viewport
+  mockViewport(1024)
 })
 
 describe('PaneLayout', () => {
@@ -265,5 +298,112 @@ describe('PaneLayout toggle (split ↔ tabs)', () => {
 
     // All three terminals should be rendered (even hidden ones)
     expect(terminalInstances).toHaveLength(3)
+  })
+})
+
+describe('PaneLayout mobile auto-tabs', () => {
+  it('exports MOBILE_BREAKPOINT constant', () => {
+    expect(MOBILE_BREAKPOINT).toBe(768)
+  })
+
+  it('auto-selects tabbed mode on mobile viewport (<768px)', () => {
+    mockViewport(375)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Should show tab bar (tabbed mode)
+    expect(getByTestId('tab-bar')).toBeDefined()
+    expect(getByTestId('tabbed-content')).toBeDefined()
+    // Toggle button should be hidden on mobile
+    expect(queryByTestId('layout-toggle')).toBeNull()
+  })
+
+  it('shows split mode on desktop viewport (>=768px)', () => {
+    mockViewport(1024)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Should be in split mode
+    expect(queryByTestId('tab-bar')).toBeNull()
+    expect(queryByTestId('tabbed-content')).toBeNull()
+    // Toggle button visible on desktop
+    expect(getByTestId('layout-toggle')).toBeDefined()
+  })
+
+  it('shows tab buttons for each pane on mobile', () => {
+    mockViewport(375)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    expect(getByTestId('tab-0').textContent).toBe('CLI')
+    expect(getByTestId('tab-1').textContent).toBe('Claude')
+    expect(getByTestId('tab-2').textContent).toBe('Ralph')
+  })
+
+  it('shows only the focused pane on mobile', () => {
+    mockViewport(375)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    expect(getByTestId('pane-0').className).not.toContain('hidden')
+    expect(getByTestId('pane-1').className).toContain('hidden')
+    expect(getByTestId('pane-2').className).toContain('hidden')
+  })
+
+  it('switches visible pane when a tab is clicked on mobile', () => {
+    mockViewport(375)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    fireEvent.click(getByTestId('tab-2'))
+
+    expect(getByTestId('pane-2').className).not.toContain('hidden')
+    expect(getByTestId('pane-0').className).toContain('hidden')
+  })
+
+  it('switches to tabs when viewport shrinks below breakpoint', () => {
+    const viewport = mockViewport(1024)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Initially desktop — split mode
+    expect(queryByTestId('tab-bar')).toBeNull()
+    expect(getByTestId('layout-toggle')).toBeDefined()
+
+    // Simulate resize to mobile
+    act(() => {
+      viewport.resize(375)
+    })
+
+    // Now should be in tabbed mode
+    expect(getByTestId('tab-bar')).toBeDefined()
+    expect(queryByTestId('layout-toggle')).toBeNull()
+  })
+
+  it('switches back to split when viewport grows above breakpoint', () => {
+    const viewport = mockViewport(375)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Initially mobile — tabbed mode
+    expect(getByTestId('tab-bar')).toBeDefined()
+
+    // Simulate resize to desktop
+    act(() => {
+      viewport.resize(1024)
+    })
+
+    // Should revert to split mode
+    expect(queryByTestId('tab-bar')).toBeNull()
+    expect(getByTestId('layout-toggle')).toBeDefined()
+  })
+
+  it('treats exactly 768px as desktop (not mobile)', () => {
+    mockViewport(768)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    expect(queryByTestId('tab-bar')).toBeNull()
+    expect(getByTestId('layout-toggle')).toBeDefined()
+  })
+
+  it('treats 767px as mobile', () => {
+    mockViewport(767)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    expect(getByTestId('tab-bar')).toBeDefined()
+    expect(queryByTestId('layout-toggle')).toBeNull()
   })
 })
