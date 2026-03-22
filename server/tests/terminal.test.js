@@ -42,7 +42,7 @@ describe('Socket.io /terminal namespace', () => {
       });
     });
 
-    setupTerminalNamespace(io, 'test-session', TEST_TOKEN);
+    setupTerminalNamespace(io, 'test-session', () => TEST_TOKEN);
   });
 
   afterEach(async () => {

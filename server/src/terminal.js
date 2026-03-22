@@ -8,14 +8,15 @@ import { validateToken } from './auth.js';
  *
  * @param {import('socket.io').Server} io - Socket.io server instance
  * @param {string} sessionName - tmux session to attach to
- * @param {string} authToken - expected auth token
+ * @param {() => string} getAuthToken - function returning the current auth token
  * @returns {import('socket.io').Namespace} the /terminal namespace
  */
-export function setupTerminalNamespace(io, sessionName, authToken) {
+export function setupTerminalNamespace(io, sessionName, getAuthToken) {
   const ns = io.of('/terminal');
 
   ns.use((socket, next) => {
     const token = socket.handshake.auth?.token;
+    const authToken = getAuthToken();
     if (!authToken || !validateToken(token, authToken)) {
       return next(new Error('Authentication failed'));
     }

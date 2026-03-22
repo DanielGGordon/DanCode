@@ -94,7 +94,7 @@ export async function startServer(port = PORT, { tokenPath } = {}) {
   }
 
   if (!terminalNamespaceRegistered) {
-    setupTerminalNamespace(io, TMUX_SESSION, authToken);
+    setupTerminalNamespace(io, TMUX_SESSION, () => authToken);
     terminalNamespaceRegistered = true;
   }
 
