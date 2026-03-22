@@ -1,17 +1,21 @@
 import pty from 'node-pty';
 import { validateToken } from './auth.js';
+import { isValidSlug } from './projects.js';
 
 /**
  * Set up the Socket.io /terminal namespace.
  * Each connecting client gets a node-pty process attached to
  * `tmux attach -t <session>`.
  *
+ * Clients may pass a `slug` query parameter to connect to a project-specific
+ * tmux session (`dancode-<slug>`) instead of the default bootstrap session.
+ *
  * @param {import('socket.io').Server} io - Socket.io server instance
- * @param {string} sessionName - tmux session to attach to
+ * @param {string} defaultSession - default tmux session to attach to
  * @param {() => string} getAuthToken - function returning the current auth token
  * @returns {import('socket.io').Namespace} the /terminal namespace
  */
-export function setupTerminalNamespace(io, sessionName, getAuthToken) {
+export function setupTerminalNamespace(io, defaultSession, getAuthToken) {
   const ns = io.of('/terminal');
 
   ns.use((socket, next) => {
@@ -30,6 +34,11 @@ export function setupTerminalNamespace(io, sessionName, getAuthToken) {
     const rows = socket.handshake.query.rows
       ? parseInt(socket.handshake.query.rows, 10)
       : 24;
+
+    const slug = socket.handshake.query.slug;
+    const sessionName = (slug && isValidSlug(slug))
+      ? `dancode-${slug}`
+      : defaultSession;
 
     const ptyProcess = pty.spawn('tmux', ['attach', '-t', sessionName], {
       name: 'xterm-256color',

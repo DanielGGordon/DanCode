@@ -4,7 +4,7 @@ import App from './App.jsx'
 
 // Mock Terminal to avoid xterm.js side effects
 vi.mock('./Terminal.jsx', () => ({
-  default: () => <div data-testid="terminal">Terminal</div>,
+  default: ({ slug }) => <div data-testid="terminal" data-slug={slug || ''}>Terminal</div>,
 }))
 
 // Mock NewProjectForm
@@ -160,7 +160,7 @@ describe('App', () => {
     expect(getByTestId('terminal')).toBeDefined()
   })
 
-  it('closes new project form after project is created', async () => {
+  it('closes new project form after project is created and passes slug to terminal', async () => {
     localStorageMock.setItem('dancode-auth-token', 'test-token')
     mockFetch(200, { valid: true })
     const { getByTestId, queryByTestId } = render(<App />)
@@ -175,5 +175,33 @@ describe('App', () => {
     fireEvent.click(getByTestId('mock-create'))
     expect(queryByTestId('new-project-form')).toBeNull()
     expect(getByTestId('terminal')).toBeDefined()
+    expect(getByTestId('terminal').dataset.slug).toBe('test')
+  })
+
+  it('resets new project form state on logout', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
+    const { getByTestId, queryByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    // Open the new project form
+    fireEvent.click(getByTestId('new-project-button'))
+    expect(getByTestId('new-project-form')).toBeDefined()
+
+    // Logout while form is open
+    fireEvent.click(getByTestId('logout-button'))
+    expect(getByTestId('token-input')).toBeDefined()
+
+    // Log back in — should see terminal, not the form
+    fireEvent.change(getByTestId('token-input'), { target: { value: 'new-token' } })
+    fireEvent.click(getByTestId('login-submit'))
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+    expect(queryByTestId('new-project-form')).toBeNull()
   })
 })

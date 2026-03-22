@@ -9,6 +9,7 @@ function App() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY))
   const [validating, setValidating] = useState(() => !!localStorage.getItem(TOKEN_KEY))
   const [showNewProject, setShowNewProject] = useState(false)
+  const [selectedSlug, setSelectedSlug] = useState(null)
 
   useEffect(() => {
     if (!token) return
@@ -50,6 +51,8 @@ function App() {
   function handleLogout() {
     localStorage.removeItem(TOKEN_KEY)
     setToken(null)
+    setShowNewProject(false)
+    setSelectedSlug(null)
   }
 
   if (validating) {
@@ -62,6 +65,7 @@ function App() {
 
   function handleProjectCreated(project) {
     setShowNewProject(false)
+    setSelectedSlug(project.slug)
   }
 
   return (
@@ -91,7 +95,7 @@ function App() {
             onCancel={() => setShowNewProject(false)}
           />
         ) : (
-          <Terminal token={token} />
+          <Terminal key={selectedSlug} token={token} slug={selectedSlug} />
         )}
       </main>
     </div>
