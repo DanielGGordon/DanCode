@@ -18,10 +18,12 @@ test('visual: a terminal with a dark solarized color scheme fills the browser wi
   await expect(terminal).toBeVisible();
   await expect(terminal.locator('.xterm')).toBeVisible();
 
-  // 1. Verify Solarized Dark color scheme via screenshot pixel analysis
-  //    xterm.js renders to canvas/WebGL, so CSS computed styles won't show
-  //    the theme — we must sample actual rendered pixels.
-  const screenshot = await page.screenshot({ type: 'png' });
+  // 1. Verify Solarized Dark color scheme via screenshot pixel analysis.
+  //    Screenshot the .xterm-screen element (the rendered terminal surface),
+  //    not the full page — the page background is also #002b36, so a page-level
+  //    sample would pass even if the terminal theme is broken or unpainted.
+  const xtermScreen = terminal.locator('.xterm-screen');
+  const screenshot = await xtermScreen.screenshot({ type: 'png' });
   const base64 = screenshot.toString('base64');
 
   const pixelData = await page.evaluate(async (imgBase64) => {
@@ -35,30 +37,30 @@ test('visual: a terminal with a dark solarized color scheme fills the browser wi
     const ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0);
 
-    // Sample background pixel from center of the page
+    // Sample from the center of the terminal surface
     const cx = Math.floor(img.width / 2);
     const cy = Math.floor(img.height / 2);
     const [r, g, b] = ctx.getImageData(cx, cy, 1, 1).data;
 
-    // Also sample a corner pixel (should be page background or terminal)
-    const [cr, cg, cb] = ctx.getImageData(10, 10, 1, 1).data;
-
-    return { center: { r, g, b }, corner: { r: cr, g: cg, b: cb } };
+    return { r, g, b };
   }, base64);
 
   // Solarized Dark base03 = #002b36 = RGB(0, 43, 54)
   // Allow ±5 tolerance for rendering differences
-  const { r, g, b } = pixelData.center;
+  const { r, g, b } = pixelData;
   expect(r).toBeLessThanOrEqual(5);
   expect(g).toBeGreaterThanOrEqual(38);
   expect(g).toBeLessThanOrEqual(48);
   expect(b).toBeGreaterThanOrEqual(49);
   expect(b).toBeLessThanOrEqual(59);
 
-  // 2. Verify terminal fills the browser window
+  // 2. Verify the rendered xterm surface fills the browser window.
+  //    Measure .xterm-screen (the actual terminal surface sized by fitAddon),
+  //    not the outer [data-testid="terminal"] container which fills the layout
+  //    via CSS regardless of whether fitAddon.fit() worked correctly.
   const metrics = await page.evaluate(() => {
-    const termEl = document.querySelector('[data-testid="terminal"]');
-    const rect = termEl.getBoundingClientRect();
+    const screen = document.querySelector('[data-testid="terminal"] .xterm-screen');
+    const rect = screen.getBoundingClientRect();
     return {
       termWidth: rect.width,
       termHeight: rect.height,
@@ -67,7 +69,7 @@ test('visual: a terminal with a dark solarized color scheme fills the browser wi
     };
   });
 
-  // Terminal should occupy at least 90% of viewport width and 80% of height
+  // Terminal surface should occupy at least 90% of viewport width and 80% of height
   // (allowing for a header bar)
   const widthRatio = metrics.termWidth / metrics.viewportWidth;
   const heightRatio = metrics.termHeight / metrics.viewportHeight;
