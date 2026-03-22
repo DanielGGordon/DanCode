@@ -407,3 +407,128 @@ describe('PaneLayout mobile auto-tabs', () => {
     expect(queryByTestId('layout-toggle')).toBeNull()
   })
 })
+
+describe('PaneLayout visibility toggles', () => {
+  it('renders visibility toggle buttons for each pane', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    expect(getByTestId('visibility-toggles')).toBeDefined()
+    expect(getByTestId('visibility-0').textContent).toBe('CLI')
+    expect(getByTestId('visibility-1').textContent).toBe('Claude')
+    expect(getByTestId('visibility-2').textContent).toBe('Ralph')
+  })
+
+  it('all panes are visible by default', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    // All visibility buttons should have active styling (text-base1)
+    expect(getByTestId('visibility-0').className).toContain('text-base1')
+    expect(getByTestId('visibility-1').className).toContain('text-base1')
+    expect(getByTestId('visibility-2').className).toContain('text-base1')
+  })
+
+  it('hides a pane when its visibility toggle is clicked', () => {
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    fireEvent.click(getByTestId('visibility-1'))
+
+    // Pane 1 (Claude) should no longer be rendered in split mode
+    expect(queryByTestId('pane-1')).toBeNull()
+    // Panes 0 and 2 should still be visible
+    expect(getByTestId('pane-0')).toBeDefined()
+    expect(getByTestId('pane-2')).toBeDefined()
+  })
+
+  it('shows a hidden pane when its visibility toggle is clicked again', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Hide pane 1
+    fireEvent.click(getByTestId('visibility-1'))
+    // Show pane 1 again
+    fireEvent.click(getByTestId('visibility-1'))
+
+    expect(getByTestId('pane-0')).toBeDefined()
+    expect(getByTestId('pane-1')).toBeDefined()
+    expect(getByTestId('pane-2')).toBeDefined()
+  })
+
+  it('prevents hiding the last visible pane', () => {
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Hide panes 1 and 2
+    fireEvent.click(getByTestId('visibility-1'))
+    fireEvent.click(getByTestId('visibility-2'))
+
+    // Only pane 0 remains — its toggle should be disabled
+    expect(getByTestId('visibility-0').disabled).toBe(true)
+
+    // Try to click it — pane 0 should still be visible
+    fireEvent.click(getByTestId('visibility-0'))
+    expect(getByTestId('pane-0')).toBeDefined()
+  })
+
+  it('marks hidden pane toggle with dimmed styling', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    fireEvent.click(getByTestId('visibility-2'))
+
+    // Hidden pane toggle should show inactive style
+    expect(getByTestId('visibility-2').className).toContain('text-base01')
+    // Visible pane toggles should still be active
+    expect(getByTestId('visibility-0').className).toContain('text-base1')
+  })
+
+  it('moves focus to first visible pane when focused pane is hidden', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Focus pane 1
+    fireEvent.click(getByTestId('pane-1'))
+
+    // Hide pane 1 — useEffect will move focus to first visible pane
+    act(() => {
+      fireEvent.click(getByTestId('visibility-1'))
+    })
+    terminalInstances.length = 0
+
+    // Trigger a re-render to capture the final state by interacting
+    // After the effect, pane 0 should now be focused
+    // Check via the pane label highlight (pane 0 label should have text-base1)
+    const pane0Label = getByTestId('pane-0').querySelector('div')
+    expect(pane0Label.className).toContain('text-base1')
+  })
+
+  it('only renders Terminal components for visible panes', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    terminalInstances.length = 0
+
+    fireEvent.click(getByTestId('visibility-2'))
+
+    // Should only have 2 Terminal instances after re-render
+    expect(terminalInstances).toHaveLength(2)
+    expect(terminalInstances.map((i) => i.pane)).toEqual([0, 1])
+  })
+
+  it('works with tabbed mode — hidden panes have no tab', () => {
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Switch to tabs
+    fireEvent.click(getByTestId('layout-toggle'))
+    // Hide pane 2
+    fireEvent.click(getByTestId('visibility-2'))
+
+    // Tab 2 should not exist
+    expect(queryByTestId('tab-2')).toBeNull()
+    // Tabs 0 and 1 should exist
+    expect(getByTestId('tab-0')).toBeDefined()
+    expect(getByTestId('tab-1')).toBeDefined()
+  })
+
+  it('last visible pane toggle shows disabled styling', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    fireEvent.click(getByTestId('visibility-1'))
+    fireEvent.click(getByTestId('visibility-2'))
+
+    // Last visible pane toggle should have opacity-50 class
+    expect(getByTestId('visibility-0').className).toContain('opacity-50')
+    expect(getByTestId('visibility-0').className).toContain('cursor-not-allowed')
+  })
+})

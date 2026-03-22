@@ -12,6 +12,7 @@ export const MOBILE_BREAKPOINT = 768
 export default function PaneLayout({ token, slug, panes = ALL_PANES }) {
   const [focusedPane, setFocusedPane] = useState(0)
   const [layoutMode, setLayoutMode] = useState('split')
+  const [hiddenPanes, setHiddenPanes] = useState(new Set())
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT
   )
@@ -36,6 +37,15 @@ export default function PaneLayout({ token, slug, panes = ALL_PANES }) {
 
   const effectiveLayout = isMobile ? 'tabs' : layoutMode
 
+  const visiblePanes = panes.filter(({ index }) => !hiddenPanes.has(index))
+
+  // If focused pane becomes hidden, switch focus to first visible pane
+  useEffect(() => {
+    if (hiddenPanes.has(focusedPane) && visiblePanes.length > 0) {
+      setFocusedPane(visiblePanes[0].index)
+    }
+  }, [hiddenPanes, focusedPane, visiblePanes])
+
   const handlePaneClick = useCallback((index) => {
     setFocusedPane(index)
   }, [])
@@ -44,13 +54,28 @@ export default function PaneLayout({ token, slug, panes = ALL_PANES }) {
     setLayoutMode((prev) => (prev === 'split' ? 'tabs' : 'split'))
   }, [])
 
+  const togglePaneVisibility = useCallback((index) => {
+    setHiddenPanes((prev) => {
+      const next = new Set(prev)
+      if (next.has(index)) {
+        next.delete(index)
+        return next
+      }
+      // Don't hide if it's the last visible pane
+      const visibleCount = panes.length - next.size
+      if (visibleCount <= 1) return prev
+      next.add(index)
+      return next
+    })
+  }, [panes])
+
   return (
     <div data-testid="pane-layout" className="flex flex-col w-full h-full">
       {/* Layout toolbar */}
       <div className="flex items-center px-2 py-1 bg-base02 border-b border-base01/30">
         {effectiveLayout === 'tabs' && (
           <div className="flex gap-1 mr-2" data-testid="tab-bar">
-            {panes.map(({ index, label }) => {
+            {visiblePanes.map(({ index, label }) => {
               const isActive = focusedPane === index
               return (
                 <button
@@ -69,6 +94,27 @@ export default function PaneLayout({ token, slug, panes = ALL_PANES }) {
             })}
           </div>
         )}
+        <div className="flex gap-1 mr-2" data-testid="visibility-toggles">
+          {panes.map(({ index, label }) => {
+            const isVisible = !hiddenPanes.has(index)
+            const isLastVisible = isVisible && visiblePanes.length <= 1
+            return (
+              <button
+                key={index}
+                data-testid={`visibility-${index}`}
+                onClick={() => togglePaneVisibility(index)}
+                disabled={isLastVisible}
+                className={`px-2 py-1 text-xs rounded transition-colors ${
+                  isVisible
+                    ? 'text-base1 bg-base03 border border-blue/50'
+                    : 'text-base01 bg-base02 border border-base01/30 hover:text-base0'
+                } ${isLastVisible ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {label}
+              </button>
+            )
+          })}
+        </div>
         {!isMobile && (
           <button
             data-testid="layout-toggle"
@@ -83,7 +129,7 @@ export default function PaneLayout({ token, slug, panes = ALL_PANES }) {
       {/* Pane content */}
       {effectiveLayout === 'split' ? (
         <div className="flex flex-row flex-1 min-h-0">
-          {panes.map(({ index, label }) => {
+          {visiblePanes.map(({ index, label }) => {
             const isFocused = focusedPane === index
             return (
               <div
@@ -118,7 +164,7 @@ export default function PaneLayout({ token, slug, panes = ALL_PANES }) {
         </div>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col" data-testid="tabbed-content">
-          {panes.map(({ index, label }) => {
+          {visiblePanes.map(({ index, label }) => {
             const isActive = focusedPane === index
             return (
               <div
