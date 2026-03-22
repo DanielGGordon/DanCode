@@ -10,7 +10,7 @@ DanCode/
 │   │   └── main.jsx            # Entry point
 │   ├── index.html              # HTML shell
 │   ├── vite.config.js          # Vite config (proxy, Tailwind plugin)
-│   ├── package.json
+│   ├── package.json            # Includes vitest test scripts
 │   └── README.md
 ├── docs/
 │   └── PRD.md                  # Product requirements document
