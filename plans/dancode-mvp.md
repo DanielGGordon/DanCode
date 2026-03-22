@@ -80,7 +80,7 @@ Add token-based authentication. On first run, generate a random token and save i
 - [x] Token is logged to server console on first generation so the user can copy it
 - [x] Frontend shows a login screen (token input + submit button) when no valid token is in localStorage
 - [x] On successful auth, token is stored in localStorage and user sees the terminal view
-- [ ] Invalid token shows an error message, does not grant access
+- [x] Invalid token shows an error message, does not grant access
 - [ ] Socket.io connections include token in handshake auth — server middleware rejects invalid tokens
 - [ ] REST endpoints return 401 for missing/invalid tokens
 - [ ] Unit tests: token generation, token validation middleware, rejection of invalid tokens
