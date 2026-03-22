@@ -47,18 +47,26 @@ describe('PaneLayout', () => {
     expect(terminalInstances[2]).toMatchObject({ token: 'tok', slug: 'myproj', pane: 2 })
   })
 
-  it('displays CLI, Claude, and Ralph labels', () => {
+  it('displays CLI, Claude, and Ralph labels in split mode', () => {
     const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
     expect(getByTestId('pane-0').textContent).toContain('CLI')
     expect(getByTestId('pane-1').textContent).toContain('Claude')
     expect(getByTestId('pane-2').textContent).toContain('Ralph')
   })
 
-  it('uses flex-row layout for side-by-side display', () => {
+  it('defaults to split layout mode', () => {
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    // Toggle button should say "Tabs" (offering switch to tabs)
+    expect(getByTestId('layout-toggle').textContent).toBe('Tabs')
+    // Tab bar should not be present in split mode
+    expect(queryByTestId('tab-bar')).toBeNull()
+  })
+
+  it('uses flex-row for split panes container', () => {
     const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
-    const layout = getByTestId('pane-layout')
-    expect(layout.className).toContain('flex')
-    expect(layout.className).toContain('flex-row')
+    // The split panes are inside a nested flex-row div
+    const pane0 = getByTestId('pane-0')
+    expect(pane0.parentElement.className).toContain('flex-row')
   })
 
   it('gives each pane equal width via flex-1 (33/33/33 split)', () => {
@@ -160,5 +168,102 @@ describe('PaneLayout', () => {
     // And pane 0 label should no longer be highlighted
     const pane0Label = getByTestId('pane-0').querySelector('div')
     expect(pane0Label.className).toContain('text-base01')
+  })
+})
+
+describe('PaneLayout toggle (split ↔ tabs)', () => {
+  it('renders a layout toggle button', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    expect(getByTestId('layout-toggle')).toBeDefined()
+  })
+
+  it('switches to tabbed mode when toggle is clicked', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    fireEvent.click(getByTestId('layout-toggle'))
+
+    // Button should now say "Split"
+    expect(getByTestId('layout-toggle').textContent).toBe('Split')
+    // Tab bar should appear
+    expect(getByTestId('tab-bar')).toBeDefined()
+    // Tabbed content container should be present
+    expect(getByTestId('tabbed-content')).toBeDefined()
+  })
+
+  it('switches back to split mode when toggle is clicked again', () => {
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    fireEvent.click(getByTestId('layout-toggle')) // → tabs
+    fireEvent.click(getByTestId('layout-toggle')) // → split
+
+    expect(getByTestId('layout-toggle').textContent).toBe('Tabs')
+    expect(queryByTestId('tab-bar')).toBeNull()
+    expect(queryByTestId('tabbed-content')).toBeNull()
+  })
+
+  it('shows tab buttons for each pane in tabbed mode', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    fireEvent.click(getByTestId('layout-toggle'))
+
+    expect(getByTestId('tab-0').textContent).toBe('CLI')
+    expect(getByTestId('tab-1').textContent).toBe('Claude')
+    expect(getByTestId('tab-2').textContent).toBe('Ralph')
+  })
+
+  it('shows only the focused pane in tabbed mode (others are hidden)', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    fireEvent.click(getByTestId('layout-toggle'))
+
+    // Pane 0 is focused by default — should be visible
+    expect(getByTestId('pane-0').className).not.toContain('hidden')
+    // Other panes should be hidden
+    expect(getByTestId('pane-1').className).toContain('hidden')
+    expect(getByTestId('pane-2').className).toContain('hidden')
+  })
+
+  it('switches visible pane when a tab is clicked', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    fireEvent.click(getByTestId('layout-toggle'))
+
+    fireEvent.click(getByTestId('tab-1'))
+
+    expect(getByTestId('pane-1').className).not.toContain('hidden')
+    expect(getByTestId('pane-0').className).toContain('hidden')
+    expect(getByTestId('pane-2').className).toContain('hidden')
+  })
+
+  it('highlights the active tab button', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    fireEvent.click(getByTestId('layout-toggle'))
+
+    // Tab 0 should be highlighted (active)
+    expect(getByTestId('tab-0').className).toContain('text-base1')
+    expect(getByTestId('tab-1').className).toContain('text-base01')
+
+    // Click tab 2
+    fireEvent.click(getByTestId('tab-2'))
+    expect(getByTestId('tab-2').className).toContain('text-base1')
+    expect(getByTestId('tab-0').className).toContain('text-base01')
+  })
+
+  it('preserves focused pane when switching layout modes', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Focus pane 2 in split mode
+    fireEvent.click(getByTestId('pane-2'))
+
+    // Switch to tabs — pane 2 should still be focused
+    fireEvent.click(getByTestId('layout-toggle'))
+    expect(getByTestId('pane-2').className).not.toContain('hidden')
+    expect(getByTestId('pane-0').className).toContain('hidden')
+    expect(getByTestId('tab-2').className).toContain('text-base1')
+  })
+
+  it('renders all Terminal instances in tabbed mode (hidden panes still mounted)', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    terminalInstances.length = 0
+
+    fireEvent.click(getByTestId('layout-toggle'))
+
+    // All three terminals should be rendered (even hidden ones)
+    expect(terminalInstances).toHaveLength(3)
   })
 })
