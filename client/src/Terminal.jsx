@@ -79,20 +79,11 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
         // Skip when container is hidden (display: none) to avoid
         // sending invalid dimensions to the tmux pane
         if (container.offsetWidth === 0 && container.offsetHeight === 0) return
-        if (!socket) {
-          // Container just became visible — establish the initial connection
-          connect()
-          return
-        }
         fitAddon.fit()
         socket.emit('resize', { cols: term.cols, rows: term.rows })
       }
 
-      // Only connect immediately if the container is visible;
-      // otherwise wait for the ResizeObserver to detect visibility
-      if (container.offsetWidth > 0 || container.offsetHeight > 0) {
-        connect()
-      }
+      connect()
 
       resizeObserver = new ResizeObserver(handleResize)
       resizeObserver.observe(container)
