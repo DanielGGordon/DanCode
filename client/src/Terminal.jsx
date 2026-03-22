@@ -12,6 +12,10 @@ export default function Terminal() {
     const container = containerRef.current
     if (!container) return
 
+    let disposed = false
+    let socket = null
+    let resizeObserver = null
+
     const term = new XTerm({
       cursorBlink: true,
       fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', Menlo, monospace",
@@ -47,29 +51,37 @@ export default function Terminal() {
 
     termRef.current = term
 
-    const socket = io('/terminal', {
-      query: { cols: term.cols, rows: term.rows },
-    })
+    // Defer socket connection so StrictMode cleanup can cancel it
+    // before a backend pty/tmux session is spawned.
+    const connectTimer = setTimeout(() => {
+      if (disposed) return
 
-    socket.on('output', (data) => {
-      term.write(data)
-    })
+      socket = io('/terminal', {
+        query: { cols: term.cols, rows: term.rows },
+      })
 
-    term.onData((data) => {
-      socket.emit('input', data)
-    })
+      socket.on('output', (data) => {
+        term.write(data)
+      })
 
-    const handleResize = () => {
-      fitAddon.fit()
-      socket.emit('resize', { cols: term.cols, rows: term.rows })
-    }
+      term.onData((data) => {
+        socket.emit('input', data)
+      })
 
-    const resizeObserver = new ResizeObserver(handleResize)
-    resizeObserver.observe(container)
+      const handleResize = () => {
+        fitAddon.fit()
+        socket.emit('resize', { cols: term.cols, rows: term.rows })
+      }
+
+      resizeObserver = new ResizeObserver(handleResize)
+      resizeObserver.observe(container)
+    }, 0)
 
     return () => {
-      resizeObserver.disconnect()
-      socket.disconnect()
+      disposed = true
+      clearTimeout(connectTimer)
+      resizeObserver?.disconnect()
+      socket?.disconnect()
       term.dispose()
       termRef.current = null
     }

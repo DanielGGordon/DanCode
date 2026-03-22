@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup } from '@testing-library/react'
 import Terminal from './Terminal.jsx'
 
@@ -51,8 +51,13 @@ globalThis.ResizeObserver = class {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers()
   vi.clearAllMocks()
   cleanup()
+})
+
+afterEach(() => {
+  vi.useRealTimers()
 })
 
 describe('Terminal', () => {
@@ -69,6 +74,7 @@ describe('Terminal', () => {
   it('connects to /terminal socket.io namespace', async () => {
     const { io } = await import('socket.io-client')
     render(<Terminal />)
+    vi.runAllTimers()
     expect(io).toHaveBeenCalledWith('/terminal', expect.objectContaining({
       query: { cols: 80, rows: 24 },
     }))
@@ -76,16 +82,19 @@ describe('Terminal', () => {
 
   it('listens for output events on socket', () => {
     render(<Terminal />)
+    vi.runAllTimers()
     expect(mockSocketOn).toHaveBeenCalledWith('output', expect.any(Function))
   })
 
   it('registers onData handler for terminal input', () => {
     render(<Terminal />)
+    vi.runAllTimers()
     expect(mockOnData).toHaveBeenCalledWith(expect.any(Function))
   })
 
   it('writes socket output data to the terminal', () => {
     render(<Terminal />)
+    vi.runAllTimers()
     const outputHandler = mockSocketOn.mock.calls.find(([event]) => event === 'output')?.[1]
     expect(outputHandler).toBeDefined()
     outputHandler('hello')
@@ -94,6 +103,7 @@ describe('Terminal', () => {
 
   it('sends terminal input to the socket', () => {
     render(<Terminal />)
+    vi.runAllTimers()
     const inputHandler = mockOnData.mock.calls[0]?.[0]
     expect(inputHandler).toBeDefined()
     inputHandler('ls\r')
@@ -102,8 +112,19 @@ describe('Terminal', () => {
 
   it('cleans up on unmount', () => {
     const { unmount } = render(<Terminal />)
+    vi.runAllTimers()
     unmount()
     expect(mockSocketDisconnect).toHaveBeenCalled()
     expect(mockDispose).toHaveBeenCalled()
+  })
+
+  it('does not connect socket if unmounted before timer fires', async () => {
+    const { io } = await import('socket.io-client')
+    io.mockClear()
+    const { unmount } = render(<Terminal />)
+    unmount()
+    vi.runAllTimers()
+    // io should not have been called since unmount cancelled the timer
+    expect(io).not.toHaveBeenCalled()
   })
 })
