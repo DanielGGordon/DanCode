@@ -125,7 +125,7 @@ Display multiple xterm.js terminals for the active project's tmux panes. Desktop
 
 - [x] Desktop (>768px): two panes display side by side in a 50/50 split by default
 - [x] If a 3rd pane is enabled: panes display in a 33/33/33 split
-- [ ] Each pane has a label showing its type (CLI, Claude, Ralph)
+- [x] Each pane has a label showing its type (CLI, Claude, Ralph)
 - [ ] Users can click a pane to focus it for keyboard input
 - [ ] Toggle button switches between split view and tabbed view on desktop
 - [ ] Mobile (<768px): automatically uses tabbed mode with tab buttons to switch panes
