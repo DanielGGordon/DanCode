@@ -5,8 +5,8 @@ DanCode/
 ├── client/                     # React + Vite + Tailwind frontend
 │   ├── public/                 # Static assets
 │   ├── src/
-│   │   ├── App.jsx             # Root React component (auth gate, project form toggle, terminal view, command palette, sidebar, header project name)
-│   │   ├── App.test.jsx        # App unit tests (login/terminal/new-project/command-palette/sidebar/header-project-name conditional rendering)
+│   │   ├── App.jsx             # Root React component (auth gate, project form toggle, terminal view, command palette, sidebar, header project dropdown)
+│   │   ├── App.test.jsx        # App unit tests (login/terminal/new-project/command-palette/sidebar/header-dropdown conditional rendering)
 │   │   ├── CommandPalette.jsx  # Command palette overlay with fuzzy search for project switching (Ctrl+K)
 │   │   ├── CommandPalette.test.jsx # CommandPalette unit tests (fuzzy match, filtering, open/close, selection)
 │   │   ├── LoginScreen.jsx     # Token input form with submit button

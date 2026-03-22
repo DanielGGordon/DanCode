@@ -17,7 +17,7 @@ vi.mock('./NewProjectForm.jsx', () => ({
   default: ({ onCreated, onCancel }) => (
     <div data-testid="new-project-form">
       <button data-testid="mock-cancel" onClick={onCancel}>Cancel</button>
-      <button data-testid="mock-create" onClick={() => onCreated({ slug: 'test' })}>Create</button>
+      <button data-testid="mock-create" onClick={() => onCreated({ slug: 'test', name: 'Test Project' })}>Create</button>
     </div>
   ),
 }))
@@ -519,6 +519,134 @@ describe('App', () => {
     })
 
     expect(queryByTestId('header-project-name')).toBeNull()
+  })
+
+  it('opens dropdown when clicking header project name', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (url === '/api/projects') {
+        return { ok: true, status: 200, json: () => Promise.resolve([
+          { slug: 'sidebar-project', name: 'My Project', path: '/tmp' },
+          { slug: 'other-proj', name: 'Other Project', path: '/tmp2' },
+        ]) }
+      }
+      return { ok: true, status: 200, json: () => Promise.resolve({}) }
+    })
+    const { getByTestId, queryByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    // Select a project so header name appears
+    fireEvent.click(getByTestId('mock-sidebar-select'))
+    await waitFor(() => {
+      expect(getByTestId('header-project-name')).toBeDefined()
+    })
+
+    // Dropdown not visible yet
+    expect(queryByTestId('header-dropdown')).toBeNull()
+
+    // Click project name to open dropdown
+    fireEvent.click(getByTestId('header-project-name'))
+    expect(getByTestId('header-dropdown')).toBeDefined()
+
+    fetchSpy.mockRestore()
+  })
+
+  it('dropdown lists all projects', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (url === '/api/projects') {
+        return { ok: true, status: 200, json: () => Promise.resolve([
+          { slug: 'sidebar-project', name: 'My Project', path: '/tmp' },
+          { slug: 'other-proj', name: 'Other Project', path: '/tmp2' },
+        ]) }
+      }
+      return { ok: true, status: 200, json: () => Promise.resolve({}) }
+    })
+    const { getByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    fireEvent.click(getByTestId('mock-sidebar-select'))
+    await waitFor(() => {
+      expect(getByTestId('header-project-name')).toBeDefined()
+    })
+
+    fireEvent.click(getByTestId('header-project-name'))
+
+    // Both projects listed
+    expect(getByTestId('dropdown-item-sidebar-project')).toBeDefined()
+    expect(getByTestId('dropdown-item-other-proj')).toBeDefined()
+
+    fetchSpy.mockRestore()
+  })
+
+  it('switches project when selecting from dropdown', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (url === '/api/projects') {
+        return { ok: true, status: 200, json: () => Promise.resolve([
+          { slug: 'sidebar-project', name: 'My Project', path: '/tmp' },
+          { slug: 'other-proj', name: 'Other Project', path: '/tmp2' },
+        ]) }
+      }
+      return { ok: true, status: 200, json: () => Promise.resolve({}) }
+    })
+    const { getByTestId, queryByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    fireEvent.click(getByTestId('mock-sidebar-select'))
+    await waitFor(() => {
+      expect(getByTestId('header-project-name')).toBeDefined()
+    })
+
+    fireEvent.click(getByTestId('header-project-name'))
+    fireEvent.click(getByTestId('dropdown-item-other-proj'))
+
+    // Dropdown closes and project switches
+    expect(queryByTestId('header-dropdown')).toBeNull()
+    expect(getByTestId('pane-layout').dataset.slug).toBe('other-proj')
+
+    fetchSpy.mockRestore()
+  })
+
+  it('closes dropdown on second click of project name', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (url === '/api/projects') {
+        return { ok: true, status: 200, json: () => Promise.resolve([
+          { slug: 'sidebar-project', name: 'My Project', path: '/tmp' },
+        ]) }
+      }
+      return { ok: true, status: 200, json: () => Promise.resolve({}) }
+    })
+    const { getByTestId, queryByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    fireEvent.click(getByTestId('mock-sidebar-select'))
+    await waitFor(() => {
+      expect(getByTestId('header-project-name')).toBeDefined()
+    })
+
+    // Open
+    fireEvent.click(getByTestId('header-project-name'))
+    expect(getByTestId('header-dropdown')).toBeDefined()
+
+    // Close via toggle
+    fireEvent.click(getByTestId('header-project-name'))
+    expect(queryByTestId('header-dropdown')).toBeNull()
+
+    fetchSpy.mockRestore()
   })
 
   it('sidebar and command palette coexist — both switch projects in the same session', async () => {
