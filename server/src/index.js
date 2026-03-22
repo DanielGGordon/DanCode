@@ -4,6 +4,7 @@ import { Server } from 'socket.io';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { ensureSession } from './tmux.js';
+import { setupTerminalNamespace } from './terminal.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -78,6 +79,7 @@ export function startServer(port = PORT) {
         reject(new Error(`Failed to ensure tmux session "${TMUX_SESSION}": ${err.message}`));
         return;
       }
+      setupTerminalNamespace(io, TMUX_SESSION);
       resolve(httpServer);
     });
   });

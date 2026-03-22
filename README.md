@@ -8,7 +8,7 @@ Built for Raspberry Pi 5, accessed via Tailscale.
 
 - **Backend:** Node.js + Express + Socket.io
 - **Frontend:** React + Vite + Tailwind CSS
-- **Terminal:** xterm.js + node-pty + tmux (planned)
+- **Terminal:** xterm.js + node-pty + tmux
 - **Theme:** Solarized Dark (#002b36)
 - **Testing:** Vitest + Playwright + Midscene.js
 

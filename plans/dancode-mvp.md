@@ -55,7 +55,7 @@ The thinnest possible end-to-end slice: a single xterm.js terminal in the browse
 ### Acceptance criteria
 
 - [x] Backend creates a tmux session (`dancode-test`) on startup if it doesn't exist
-- [ ] Socket.io `/terminal` namespace accepts connections and spawns node-pty attached to `tmux attach -t dancode-test`
+- [x] Socket.io `/terminal` namespace accepts connections and spawns node-pty attached to `tmux attach -t dancode-test`
 - [ ] Frontend renders a single xterm.js instance that fills the viewport
 - [ ] User can type commands in the browser terminal and see output (e.g., `ls`, `echo hello`)
 - [ ] xterm.js uses Solarized Dark color scheme

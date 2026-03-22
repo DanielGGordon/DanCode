@@ -20,6 +20,7 @@ DanCode/
 ├── server/                     # Express + Socket.io backend
 │   ├── src/
 │   │   ├── index.js            # Server entry point (Express, Socket.io, placeholder page)
+│   │   ├── terminal.js         # Socket.io /terminal namespace (node-pty → tmux attach)
 │   │   └── tmux.js             # Tmux session management (ensure, create, check)
 │   ├── tests/
 │   │   ├── e2e/
@@ -27,6 +28,7 @@ DanCode/
 │   │   │   ├── placeholder.spec.js  # Playwright E2E test
 │   │   │   └── visual.spec.js  # Midscene AI visual assertion test (DOM-based on Pi 5)
 │   │   ├── server.test.js      # Server unit tests
+│   │   ├── terminal.test.js    # Socket.io /terminal namespace lifecycle tests
 │   │   └── tmux.test.js        # Tmux session management tests
 │   ├── .env                    # Midscene.js config (git-ignored): Ollama endpoint, model settings
 │   ├── package.json
