@@ -95,6 +95,7 @@ export default function Terminal({ token, slug }) {
     <div
       ref={containerRef}
       data-testid="terminal"
+      data-slug={slug || ''}
       className="w-full h-full"
     />
   )
