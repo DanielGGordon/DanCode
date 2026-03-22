@@ -4,7 +4,7 @@ Express + Socket.io backend for DanCode.
 
 ## What it does
 
-Serves the DanCode web application and manages WebSocket connections for real-time terminal communication. On startup, ensures a tmux session (`dancode-test`) exists for terminal connectivity. Currently serves a Solarized Dark placeholder page.
+Serves the DanCode web application and manages WebSocket connections for real-time terminal communication. On startup, ensures an auth token exists at `~/.dancode/auth-token` (generating one on first run) and ensures a tmux session (`dancode-test`) exists for terminal connectivity. Currently serves a Solarized Dark placeholder page.
 
 ## Public interface
 
@@ -18,6 +18,13 @@ Serves the DanCode web application and manages WebSocket connections for real-ti
 - `httpServer` — Node.js HTTP server
 - `io` — Socket.io server instance
 - `startServer(port?)` — Starts the server on the given port (default: 3000). Creates the tmux session on listen. Returns a promise that resolves with the HTTP server.
+
+## Exports (src/auth.js)
+
+- `generateToken()` — Generate a cryptographically random 64-character hex token.
+- `getTokenPath()` — Returns the path to `~/.dancode/auth-token`.
+- `ensureAuthToken(tokenPath?)` — If the token file doesn't exist, generates a new token, writes it to disk (mode 0600), and logs it to the console. Returns `{ token, created }`.
+- `readAuthToken(tokenPath?)` — Reads and returns the token from disk.
 
 ## Exports (src/tmux.js)
 

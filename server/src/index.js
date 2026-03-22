@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { ensureSession } from './tmux.js';
 import { setupTerminalNamespace } from './terminal.js';
+import { ensureAuthToken } from './auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -71,6 +72,8 @@ const TMUX_SESSION = process.env.DANCODE_TMUX_SESSION || 'dancode-test';
 let terminalNamespaceRegistered = false;
 
 export async function startServer(port = PORT) {
+  await ensureAuthToken();
+
   try {
     await ensureSession(TMUX_SESSION);
   } catch (err) {

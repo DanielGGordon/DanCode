@@ -22,6 +22,7 @@ DanCode/
 │   └── dancode-future-phases.md
 ├── server/                     # Express + Socket.io backend
 │   ├── src/
+│   │   ├── auth.js             # Auth token generation and file management (~/.dancode/auth-token)
 │   │   ├── index.js            # Server entry point (Express, Socket.io, placeholder page)
 │   │   ├── terminal.js         # Socket.io /terminal namespace (node-pty → tmux attach)
 │   │   └── tmux.js             # Tmux session management (ensure, create, check)
@@ -32,6 +33,7 @@ DanCode/
 │   │   │   ├── terminal.spec.js     # Playwright E2E test (xterm.js terminal visibility)
 │   │   │   ├── terminal-visual.spec.js  # Visual assertion: Solarized Dark theme + fills viewport (screenshot pixel analysis)
 │   │   │   └── visual.spec.js  # Midscene AI visual assertion test (DOM-based on Pi 5)
+│   │   ├── auth.test.js        # Auth token generation and management tests
 │   │   ├── server.test.js      # Server unit tests
 │   │   ├── terminal.test.js    # Socket.io /terminal namespace lifecycle tests
 │   │   └── tmux.test.js        # Tmux session management tests
