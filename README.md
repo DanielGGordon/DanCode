@@ -33,5 +33,4 @@ npm run dev          # Start server + client concurrently
 npm run dev          # Server (watch) + Client (HMR) concurrently
 npm run build        # Production build (client)
 npm test             # Run unit tests (server)
-npm run test:e2e     # Run Playwright E2E tests
 ```
