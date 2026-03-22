@@ -1,14 +1,15 @@
 import Terminal from './Terminal.jsx'
 
-const DEFAULT_PANES = [
+export const ALL_PANES = [
   { index: 0, label: 'CLI' },
   { index: 1, label: 'Claude' },
+  { index: 2, label: 'Ralph' },
 ]
 
-export default function PaneLayout({ token, slug }) {
+export default function PaneLayout({ token, slug, panes = ALL_PANES }) {
   return (
     <div data-testid="pane-layout" className="flex flex-row w-full h-full">
-      {DEFAULT_PANES.map(({ index, label }) => (
+      {panes.map(({ index, label }) => (
         <div
           key={index}
           data-testid={`pane-${index}`}
