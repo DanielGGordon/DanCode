@@ -68,18 +68,23 @@ export { app, httpServer, io };
 
 const TMUX_SESSION = process.env.DANCODE_TMUX_SESSION || 'dancode-test';
 
-export function startServer(port = PORT) {
-  return new Promise((resolve, reject) => {
-    httpServer.listen(port, async () => {
+let terminalNamespaceRegistered = false;
+
+export async function startServer(port = PORT) {
+  try {
+    await ensureSession(TMUX_SESSION);
+  } catch (err) {
+    throw new Error(`Failed to ensure tmux session "${TMUX_SESSION}": ${err.message}`);
+  }
+
+  if (!terminalNamespaceRegistered) {
+    setupTerminalNamespace(io, TMUX_SESSION);
+    terminalNamespaceRegistered = true;
+  }
+
+  return new Promise((resolve) => {
+    httpServer.listen(port, () => {
       console.log(`DanCode server listening on http://localhost:${port}`);
-      try {
-        await ensureSession(TMUX_SESSION);
-      } catch (err) {
-        httpServer.close();
-        reject(new Error(`Failed to ensure tmux session "${TMUX_SESSION}": ${err.message}`));
-        return;
-      }
-      setupTerminalNamespace(io, TMUX_SESSION);
       resolve(httpServer);
     });
   });

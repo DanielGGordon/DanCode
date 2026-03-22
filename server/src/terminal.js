@@ -36,7 +36,9 @@ export function setupTerminalNamespace(io, sessionName) {
       ptyProcess.write(data);
     });
 
-    socket.on('resize', ({ cols, rows }) => {
+    socket.on('resize', (payload) => {
+      if (payload == null || typeof payload !== 'object') return;
+      const { cols, rows } = payload;
       try {
         ptyProcess.resize(cols, rows);
       } catch {
