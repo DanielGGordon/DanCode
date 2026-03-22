@@ -140,6 +140,9 @@ export async function listProjects(projectsDir = getProjectsDir()) {
  * Get a single project by slug. Returns null if not found.
  */
 export async function getProject(slug, projectsDir = getProjectsDir()) {
+  if (!isValidSlug(slug)) {
+    throw new Error('Invalid project slug');
+  }
   const configPath = getProjectConfigPath(slug, projectsDir);
   if (!existsSync(configPath)) {
     return null;
@@ -149,9 +152,20 @@ export async function getProject(slug, projectsDir = getProjectsDir()) {
 }
 
 /**
+ * Returns true if `slug` is a valid slugified name (lowercase alphanumeric + hyphens,
+ * no leading/trailing hyphens, no path separators).
+ */
+export function isValidSlug(slug) {
+  return typeof slug === 'string' && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug);
+}
+
+/**
  * Delete a project config by slug. Returns true if deleted, false if not found.
  */
 export async function deleteProject(slug, projectsDir = getProjectsDir()) {
+  if (!isValidSlug(slug)) {
+    throw new Error('Invalid project slug');
+  }
   const configPath = getProjectConfigPath(slug, projectsDir);
   if (!existsSync(configPath)) {
     return false;

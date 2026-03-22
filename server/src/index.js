@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { ensureSession, createProjectSession } from './tmux.js';
 import { setupTerminalNamespace } from './terminal.js';
 import { ensureAuthToken, validateToken } from './auth.js';
-import { validateProjectInput, createProject, listProjects, deleteProject, getProjectsDir, slugify } from './projects.js';
+import { validateProjectInput, createProject, listProjects, deleteProject, getProjectsDir, slugify, isValidSlug } from './projects.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -111,6 +111,9 @@ app.get('/api/projects', async (req, res) => {
 
 app.delete('/api/projects/:slug', async (req, res) => {
   const { slug } = req.params;
+  if (!isValidSlug(slug)) {
+    return res.status(400).json({ error: 'Invalid project slug' });
+  }
   try {
     const deleted = await deleteProject(slug, projectsDir);
     if (!deleted) {

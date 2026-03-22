@@ -13,6 +13,7 @@ import {
   listProjects,
   getProject,
   deleteProject,
+  isValidSlug,
 } from '../src/projects.js';
 
 describe('slugify', () => {
@@ -231,6 +232,37 @@ describe('project config CRUD', () => {
     it('returns false for non-existent project', async () => {
       const result = await deleteProject('nonexistent', tempDir);
       expect(result).toBe(false);
+    });
+
+    it('rejects path-traversal slugs', async () => {
+      await expect(deleteProject('../etc', tempDir)).rejects.toThrow('Invalid project slug');
+      await expect(deleteProject('..%2Fauth', tempDir)).rejects.toThrow('Invalid project slug');
+      await expect(deleteProject('foo/bar', tempDir)).rejects.toThrow('Invalid project slug');
+    });
+  });
+
+  describe('isValidSlug', () => {
+    it('accepts valid slugs', () => {
+      expect(isValidSlug('my-project')).toBe(true);
+      expect(isValidSlug('test')).toBe(true);
+      expect(isValidSlug('project-42')).toBe(true);
+    });
+
+    it('rejects path traversal attempts', () => {
+      expect(isValidSlug('../etc')).toBe(false);
+      expect(isValidSlug('foo/bar')).toBe(false);
+      expect(isValidSlug('..%2Fauth')).toBe(false);
+    });
+
+    it('rejects empty or non-string values', () => {
+      expect(isValidSlug('')).toBe(false);
+      expect(isValidSlug(null)).toBe(false);
+      expect(isValidSlug(undefined)).toBe(false);
+    });
+
+    it('rejects slugs with leading or trailing hyphens', () => {
+      expect(isValidSlug('-leading')).toBe(false);
+      expect(isValidSlug('trailing-')).toBe(false);
     });
   });
 });
