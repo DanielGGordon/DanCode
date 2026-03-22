@@ -246,4 +246,53 @@ describe('DanCode server', () => {
       expect(res.status).toBe(401);
     });
   });
+
+  describe('GET /api/projects', () => {
+    const authHeaders = () => ({
+      Authorization: `Bearer ${storedToken}`,
+    });
+
+    it('returns a list of configured projects', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
+        headers: authHeaders(),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(Array.isArray(body)).toBe(true);
+      // Previous tests created 'Integration Test', 'Dir Creator', 'Unique Name'
+      expect(body.length).toBeGreaterThanOrEqual(3);
+      const slugs = body.map((p) => p.slug);
+      expect(slugs).toContain('integration-test');
+      expect(slugs).toContain('dir-creator');
+      expect(slugs).toContain('unique-name');
+    });
+
+    it('returns projects sorted alphabetically by name', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
+        headers: authHeaders(),
+      });
+      const body = await res.json();
+      const names = body.map((p) => p.name);
+      const sorted = [...names].sort((a, b) => a.localeCompare(b));
+      expect(names).toEqual(sorted);
+    });
+
+    it('returns projects with expected fields', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
+        headers: authHeaders(),
+      });
+      const body = await res.json();
+      for (const project of body) {
+        expect(project).toHaveProperty('name');
+        expect(project).toHaveProperty('slug');
+        expect(project).toHaveProperty('path');
+        expect(project).toHaveProperty('createdAt');
+      }
+    });
+
+    it('returns 401 without auth token', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`);
+      expect(res.status).toBe(401);
+    });
+  });
 });

@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { ensureSession, createProjectSession } from './tmux.js';
 import { setupTerminalNamespace } from './terminal.js';
 import { ensureAuthToken, validateToken } from './auth.js';
-import { validateProjectInput, createProject, deleteProject, getProjectsDir, slugify } from './projects.js';
+import { validateProjectInput, createProject, listProjects, deleteProject, getProjectsDir, slugify } from './projects.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -98,6 +98,15 @@ app.post('/api/auth/validate', (req, res) => {
     return res.status(401).json({ error: 'Invalid token' });
   }
   res.json({ valid: true });
+});
+
+app.get('/api/projects', async (req, res) => {
+  try {
+    const projects = await listProjects(projectsDir);
+    res.json(projects);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to list projects' });
+  }
 });
 
 app.post('/api/projects', async (req, res) => {
