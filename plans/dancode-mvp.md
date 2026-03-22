@@ -62,7 +62,7 @@ The thinnest possible end-to-end slice: a single xterm.js terminal in the browse
 - [x] Page background, font, and spacing match the polished/modern design intent (subtle borders, not raw/unstyled)
 - [x] Unit test: Socket.io connection lifecycle (connect, receive data, disconnect)
 - [x] E2E test: Playwright opens page, xterm.js element is visible
-- [ ] Visual test: `aiAssert("a terminal with a dark solarized color scheme fills the browser window")`
+- [x] Visual test: `aiAssert("a terminal with a dark solarized color scheme fills the browser window")`
 
 ---
 

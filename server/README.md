@@ -48,9 +48,10 @@ npm test
 npm run test:e2e
 ```
 
-E2E tests use Playwright for browser automation. AI-powered visual assertions are available via Midscene.js, which connects to a local Ollama instance for inference.
+E2E tests use Playwright for browser automation. Visual assertions use two approaches:
 
-**Midscene fixture:** Import `test` and `expect` from `tests/e2e/fixture.js` instead of `@playwright/test` to get access to `aiAssert`, `aiQuery`, and other AI methods.
+- **Midscene.js** (`tests/e2e/fixture.js`): DOM-based AI assertions via local Ollama (phi3.5). Import `test`/`expect` from `fixture.js` for `aiAssert`, `aiQuery`, etc.
+- **Screenshot pixel analysis** (`terminal-visual.spec.js`): Programmatic color verification for canvas-rendered content (xterm.js). Used because Pi 5 ARM64 lacks a working local vision model (moondream crashes, qwen2.5vl needs 10GB+).
 
 **Configuration:** Midscene environment variables are in `server/.env` (git-ignored). See `.env` for the Ollama endpoint, model name, and model family settings.
 

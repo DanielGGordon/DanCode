@@ -12,12 +12,12 @@ export default defineConfig({
     {
       name: 'backend',
       use: { baseURL: 'http://localhost:3001' },
-      testMatch: /placeholder\.spec|visual\.spec/,
+      testMatch: /placeholder\.spec|(?:^|\/)visual\.spec/,
     },
     {
       name: 'frontend',
       use: { baseURL: 'http://localhost:5174' },
-      testMatch: /terminal\.spec/,
+      testMatch: /terminal(?:-visual)?\.spec/,
     },
   ],
   webServer: [
