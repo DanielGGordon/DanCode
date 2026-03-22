@@ -132,6 +132,119 @@ describe('CommandPalette', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 
+  it('highlights first item by default', () => {
+    const { getByTestId } = render(
+      <CommandPalette open={true} onClose={vi.fn()} projects={PROJECTS} onSelect={vi.fn()} />
+    )
+    const first = getByTestId('command-palette-item-dancode')
+    expect(first.className).toContain('bg-blue/20')
+  })
+
+  it('moves highlight down with ArrowDown', () => {
+    const { getByTestId } = render(
+      <CommandPalette open={true} onClose={vi.fn()} projects={PROJECTS} onSelect={vi.fn()} />
+    )
+    const input = getByTestId('command-palette-input')
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    const second = getByTestId('command-palette-item-my-blog')
+    expect(second.className).toContain('bg-blue/20')
+    // First item should no longer be highlighted
+    const first = getByTestId('command-palette-item-dancode')
+    expect(first.className).not.toContain('bg-blue/20')
+  })
+
+  it('moves highlight up with ArrowUp', () => {
+    const { getByTestId } = render(
+      <CommandPalette open={true} onClose={vi.fn()} projects={PROJECTS} onSelect={vi.fn()} />
+    )
+    const input = getByTestId('command-palette-input')
+    // Move down first, then up
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    const first = getByTestId('command-palette-item-dancode')
+    expect(first.className).toContain('bg-blue/20')
+  })
+
+  it('does not move highlight past the end of the list', () => {
+    const { getByTestId } = render(
+      <CommandPalette open={true} onClose={vi.fn()} projects={PROJECTS} onSelect={vi.fn()} />
+    )
+    const input = getByTestId('command-palette-input')
+    // Press ArrowDown more times than there are items
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    const last = getByTestId('command-palette-item-api-server')
+    expect(last.className).toContain('bg-blue/20')
+  })
+
+  it('does not move highlight before the start of the list', () => {
+    const { getByTestId } = render(
+      <CommandPalette open={true} onClose={vi.fn()} projects={PROJECTS} onSelect={vi.fn()} />
+    )
+    const input = getByTestId('command-palette-input')
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    const first = getByTestId('command-palette-item-dancode')
+    expect(first.className).toContain('bg-blue/20')
+  })
+
+  it('selects highlighted item on Enter', () => {
+    const onSelect = vi.fn()
+    const { getByTestId } = render(
+      <CommandPalette open={true} onClose={vi.fn()} projects={PROJECTS} onSelect={onSelect} />
+    )
+    const input = getByTestId('command-palette-input')
+    // Move to second item and press Enter
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSelect).toHaveBeenCalledWith('my-blog')
+  })
+
+  it('selects first item on Enter without navigating', () => {
+    const onSelect = vi.fn()
+    const { getByTestId } = render(
+      <CommandPalette open={true} onClose={vi.fn()} projects={PROJECTS} onSelect={onSelect} />
+    )
+    const input = getByTestId('command-palette-input')
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSelect).toHaveBeenCalledWith('dancode')
+  })
+
+  it('does not call onSelect on Enter when list is empty', () => {
+    const onSelect = vi.fn()
+    const { getByTestId } = render(
+      <CommandPalette open={true} onClose={vi.fn()} projects={[]} onSelect={onSelect} />
+    )
+    const input = getByTestId('command-palette-input')
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('resets highlight when search query changes', () => {
+    const { getByTestId } = render(
+      <CommandPalette open={true} onClose={vi.fn()} projects={PROJECTS} onSelect={vi.fn()} />
+    )
+    const input = getByTestId('command-palette-input')
+    // Move highlight down
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    // Type a query — highlight should reset to 0
+    fireEvent.change(input, { target: { value: 'a' } })
+    // Filter matches DanCode and API Server — first match should be highlighted
+    const dancode = getByTestId('command-palette-item-dancode')
+    expect(dancode.className).toContain('bg-blue/20')
+  })
+
+  it('updates highlight on mouse enter', () => {
+    const { getByTestId } = render(
+      <CommandPalette open={true} onClose={vi.fn()} projects={PROJECTS} onSelect={vi.fn()} />
+    )
+    const second = getByTestId('command-palette-item-my-blog')
+    fireEvent.mouseEnter(second)
+    expect(second.className).toContain('bg-blue/20')
+  })
+
   it('resets query when reopened', () => {
     const { getByTestId, rerender } = render(
       <CommandPalette open={true} onClose={vi.fn()} projects={PROJECTS} onSelect={vi.fn()} />

@@ -13,19 +13,51 @@ export function fuzzyMatch(query, text) {
 
 export default function CommandPalette({ open, onClose, projects, currentSlug, onSelect }) {
   const [query, setQuery] = useState('')
+  const [highlightIndex, setHighlightIndex] = useState(0)
   const inputRef = useRef(null)
+  const listRef = useRef(null)
 
   useEffect(() => {
     if (open) {
       setQuery('')
+      setHighlightIndex(0)
       // Focus input on next tick so the element is rendered
       setTimeout(() => inputRef.current?.focus(), 0)
     }
   }, [open])
 
+  const filtered = open ? (projects || []).filter((p) => fuzzyMatch(query, p.name)) : []
+
+  // Reset highlight when filtered list changes
+  useEffect(() => {
+    setHighlightIndex(0)
+  }, [query])
+
+  // Scroll highlighted item into view
+  useEffect(() => {
+    if (!listRef.current) return
+    const items = listRef.current.querySelectorAll('[data-palette-item]')
+    if (items[highlightIndex]) {
+      items[highlightIndex].scrollIntoView?.({ block: 'nearest' })
+    }
+  }, [highlightIndex])
+
   if (!open) return null
 
-  const filtered = (projects || []).filter((p) => fuzzyMatch(query, p.name))
+  function handleKeyDown(e) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setHighlightIndex((i) => (i + 1 < filtered.length ? i + 1 : i))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setHighlightIndex((i) => (i > 0 ? i - 1 : i))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (filtered.length > 0 && highlightIndex < filtered.length) {
+        onSelect(filtered[highlightIndex].slug)
+      }
+    }
+  }
 
   return (
     <div
@@ -45,11 +77,12 @@ export default function CommandPalette({ open, onClose, projects, currentSlug, o
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
             placeholder="Search projects…"
             className="w-full px-3 py-2 text-sm text-base1 bg-base03 border border-base01/30 rounded placeholder-base01 outline-none focus:border-blue/50"
           />
         </div>
-        <ul data-testid="command-palette-list" className="max-h-64 overflow-y-auto py-1">
+        <ul ref={listRef} data-testid="command-palette-list" className="max-h-64 overflow-y-auto py-1">
           {filtered.length === 0 && projects?.length === 0 && (
             <li data-testid="command-palette-empty" className="px-4 py-3 text-sm text-base01">
               No projects yet. Create one with the + New Project button.
@@ -60,16 +93,20 @@ export default function CommandPalette({ open, onClose, projects, currentSlug, o
               No matching projects
             </li>
           )}
-          {filtered.map((p) => (
+          {filtered.map((p, index) => (
             <li
               key={p.slug}
               data-testid={`command-palette-item-${p.slug}`}
+              data-palette-item
               className={`px-4 py-2 text-sm cursor-pointer transition-colors ${
-                p.slug === currentSlug
-                  ? 'text-blue bg-base03/50'
-                  : 'text-base0 hover:bg-base03/30'
+                index === highlightIndex
+                  ? 'bg-blue/20 text-base1'
+                  : p.slug === currentSlug
+                    ? 'text-blue bg-base03/50'
+                    : 'text-base0 hover:bg-base03/30'
               }`}
               onClick={() => onSelect(p.slug)}
+              onMouseEnter={() => setHighlightIndex(index)}
             >
               {p.name}
               {p.slug === currentSlug && (
