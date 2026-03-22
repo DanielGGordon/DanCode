@@ -40,7 +40,7 @@ export default function CommandPalette({ open, onClose, projects, currentSlug, o
     if (items[highlightIndex]) {
       items[highlightIndex].scrollIntoView?.({ block: 'nearest' })
     }
-  }, [highlightIndex])
+  }, [highlightIndex, query])
 
   if (!open) return null
 
