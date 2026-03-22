@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
 import Terminal from './Terminal.jsx'
 import LoginScreen from './LoginScreen.jsx'
+import NewProjectForm from './NewProjectForm.jsx'
 
 const TOKEN_KEY = 'dancode-auth-token'
 
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY))
   const [validating, setValidating] = useState(() => !!localStorage.getItem(TOKEN_KEY))
+  const [showNewProject, setShowNewProject] = useState(false)
 
   useEffect(() => {
     if (!token) return
@@ -58,10 +60,21 @@ function App() {
     return <LoginScreen onLogin={handleLogin} />
   }
 
+  function handleProjectCreated(project) {
+    setShowNewProject(false)
+  }
+
   return (
     <div className="w-screen h-screen flex flex-col">
       <header className="flex items-center px-4 py-2 bg-base02 border-b border-base01/30">
         <h1 className="text-sm font-semibold text-base1 tracking-wide">DanCode</h1>
+        <button
+          onClick={() => setShowNewProject(true)}
+          data-testid="new-project-button"
+          className="ml-4 text-xs text-blue hover:text-blue/80 transition-colors"
+        >
+          + New Project
+        </button>
         <button
           onClick={handleLogout}
           data-testid="logout-button"
@@ -71,7 +84,15 @@ function App() {
         </button>
       </header>
       <main className="flex-1 min-h-0">
-        <Terminal token={token} />
+        {showNewProject ? (
+          <NewProjectForm
+            token={token}
+            onCreated={handleProjectCreated}
+            onCancel={() => setShowNewProject(false)}
+          />
+        ) : (
+          <Terminal token={token} />
+        )}
       </main>
     </div>
   )

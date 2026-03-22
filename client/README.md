@@ -14,8 +14,9 @@ The dev server proxies `/api` and `/socket.io` requests to the backend at `http:
 
 ## Public interface
 
-- `App` — Root component, checks localStorage for auth token; shows `LoginScreen` if absent, otherwise renders the Terminal view
+- `App` — Root component, checks localStorage for auth token; shows `LoginScreen` if absent, otherwise renders the header with "New Project" button, and either the `NewProjectForm` or `Terminal` view
 - `LoginScreen` — Token input form with submit button; calls `onLogin` callback with the entered token
+- `NewProjectForm` — Project creation form with name and directory path inputs (path pre-filled with `~/`); submits to `POST /api/projects` with Bearer token auth
 - `Terminal` — xterm.js terminal that connects to the backend Socket.io `/terminal` namespace, with Solarized Dark theme and automatic resize
 - `main.jsx` — Entry point, mounts React to `#root`
 

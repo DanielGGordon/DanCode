@@ -5,10 +5,12 @@ DanCode/
 ├── client/                     # React + Vite + Tailwind frontend
 │   ├── public/                 # Static assets
 │   ├── src/
-│   │   ├── App.jsx             # Root React component (auth gate: LoginScreen or Terminal)
-│   │   ├── App.test.jsx        # App unit tests (login/terminal conditional rendering)
+│   │   ├── App.jsx             # Root React component (auth gate, project form toggle, terminal view)
+│   │   ├── App.test.jsx        # App unit tests (login/terminal/new-project conditional rendering)
 │   │   ├── LoginScreen.jsx     # Token input form with submit button
 │   │   ├── LoginScreen.test.jsx # LoginScreen component unit tests
+│   │   ├── NewProjectForm.jsx  # New project creation form (name + path inputs, calls POST /api/projects)
+│   │   ├── NewProjectForm.test.jsx # NewProjectForm component unit tests
 │   │   ├── Terminal.jsx        # xterm.js terminal connected via Socket.io
 │   │   ├── Terminal.test.jsx   # Terminal component unit tests
 │   │   ├── index.css           # Tailwind + Solarized Dark theme

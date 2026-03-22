@@ -7,6 +7,16 @@ vi.mock('./Terminal.jsx', () => ({
   default: () => <div data-testid="terminal">Terminal</div>,
 }))
 
+// Mock NewProjectForm
+vi.mock('./NewProjectForm.jsx', () => ({
+  default: ({ onCreated, onCancel }) => (
+    <div data-testid="new-project-form">
+      <button data-testid="mock-cancel" onClick={onCancel}>Cancel</button>
+      <button data-testid="mock-create" onClick={() => onCreated({ slug: 'test' })}>Create</button>
+    </div>
+  ),
+}))
+
 // Mock localStorage
 const localStorageMock = (() => {
   let store = {}
@@ -107,5 +117,63 @@ describe('App', () => {
 
     // Token should be removed from localStorage
     expect(localStorageMock.removeItem).toHaveBeenCalledWith('dancode-auth-token')
+  })
+
+  it('shows New Project button when authenticated', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
+    const { getByTestId } = render(<App />)
+    await waitFor(() => {
+      expect(getByTestId('new-project-button')).toBeDefined()
+    })
+  })
+
+  it('opens new project form when New Project button is clicked', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
+    const { getByTestId, queryByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    fireEvent.click(getByTestId('new-project-button'))
+
+    expect(getByTestId('new-project-form')).toBeDefined()
+    expect(queryByTestId('terminal')).toBeNull()
+  })
+
+  it('closes new project form and returns to terminal on cancel', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
+    const { getByTestId, queryByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    fireEvent.click(getByTestId('new-project-button'))
+    expect(getByTestId('new-project-form')).toBeDefined()
+
+    fireEvent.click(getByTestId('mock-cancel'))
+    expect(queryByTestId('new-project-form')).toBeNull()
+    expect(getByTestId('terminal')).toBeDefined()
+  })
+
+  it('closes new project form after project is created', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
+    const { getByTestId, queryByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    fireEvent.click(getByTestId('new-project-button'))
+    expect(getByTestId('new-project-form')).toBeDefined()
+
+    fireEvent.click(getByTestId('mock-create'))
+    expect(queryByTestId('new-project-form')).toBeNull()
+    expect(getByTestId('terminal')).toBeDefined()
   })
 })
