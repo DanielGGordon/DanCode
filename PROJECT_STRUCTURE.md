@@ -51,6 +51,7 @@ DanCode/
 │   │   │   ├── layout-visual.spec.js # Midscene AI visual assertion test (two panes side by side with labels)
 │   │   │   ├── command-palette.spec.js  # Playwright E2E test (Ctrl+K opens palette, search, switch project, terminals update)
 │   │   │   ├── command-palette-visual.spec.js  # Midscene AI visual assertion test (palette overlay centered with search input and project list)
+│   │   │   ├── sidebar.spec.js          # Playwright E2E test (sidebar project switching: click project, terminals update)
 │   │   │   └── visual.spec.js  # Midscene AI visual assertion test (DOM-based on Pi 5)
 │   │   ├── auth.test.js        # Auth token generation and management tests
 │   │   ├── projects.test.js    # Project config CRUD, slug generation, validation tests
