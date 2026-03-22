@@ -6,10 +6,7 @@ export default defineConfig({
   retries: 0,
   use: {
     baseURL: 'http://localhost:3001',
-    channel: undefined,
-    launchOptions: {
-      executablePath: '/usr/bin/chromium',
-    },
+    channel: 'chromium',
   },
   projects: [
     {
