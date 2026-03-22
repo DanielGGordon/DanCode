@@ -7,6 +7,7 @@ import CommandPalette from './CommandPalette.jsx'
 import Sidebar from './Sidebar.jsx'
 
 const TOKEN_KEY = 'dancode-auth-token'
+const SIDEBAR_KEY = 'dancode-sidebar-collapsed'
 
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY))
@@ -16,7 +17,7 @@ function App() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [projects, setProjects] = useState([])
   const [tmuxStatus, setTmuxStatus] = useState(null)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === 'true')
 
   useEffect(() => {
     if (!token) return
@@ -180,7 +181,11 @@ function App() {
           onSelect={handleSidebarSelect}
           tmuxStatus={tmuxStatus}
           collapsed={sidebarCollapsed}
-          onToggle={() => setSidebarCollapsed((prev) => !prev)}
+          onToggle={() => setSidebarCollapsed((prev) => {
+            const next = !prev
+            localStorage.setItem(SIDEBAR_KEY, String(next))
+            return next
+          })}
         />
         <main className="flex-1 min-h-0 min-w-0">
           {showNewProject ? (

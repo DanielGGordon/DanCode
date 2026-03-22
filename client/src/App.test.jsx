@@ -417,6 +417,49 @@ describe('App', () => {
     expect(getByTestId('sidebar').dataset.collapsed).toBe('false')
   })
 
+  it('persists sidebar collapsed state to localStorage on toggle', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
+    const { getByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('sidebar')).toBeDefined()
+    })
+
+    // Collapse
+    fireEvent.click(getByTestId('mock-sidebar-toggle'))
+    expect(localStorageMock.setItem).toHaveBeenCalledWith('dancode-sidebar-collapsed', 'true')
+
+    // Expand
+    fireEvent.click(getByTestId('mock-sidebar-toggle'))
+    expect(localStorageMock.setItem).toHaveBeenCalledWith('dancode-sidebar-collapsed', 'false')
+  })
+
+  it('restores sidebar collapsed state from localStorage on mount', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    localStorageMock.setItem('dancode-sidebar-collapsed', 'true')
+    mockFetch(200, { valid: true })
+    const { getByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('sidebar')).toBeDefined()
+    })
+
+    expect(getByTestId('sidebar').dataset.collapsed).toBe('true')
+  })
+
+  it('defaults sidebar to expanded when no localStorage value', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
+    const { getByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('sidebar')).toBeDefined()
+    })
+
+    expect(getByTestId('sidebar').dataset.collapsed).toBe('false')
+  })
+
   it('hides new project form when switching projects via palette', async () => {
     localStorageMock.setItem('dancode-auth-token', 'test-token')
     mockFetch(200, { valid: true })
