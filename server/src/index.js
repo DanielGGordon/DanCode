@@ -109,6 +109,19 @@ app.get('/api/projects', async (req, res) => {
   }
 });
 
+app.delete('/api/projects/:slug', async (req, res) => {
+  const { slug } = req.params;
+  try {
+    const deleted = await deleteProject(slug, projectsDir);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    res.status(204).end();
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete project' });
+  }
+});
+
 app.post('/api/projects', async (req, res) => {
   const { name, path } = req.body || {};
 

@@ -247,6 +247,44 @@ describe('DanCode server', () => {
     });
   });
 
+  describe('DELETE /api/projects/:slug', () => {
+    const authHeaders = () => ({
+      Authorization: `Bearer ${storedToken}`,
+    });
+
+    it('deletes an existing project and returns 204', async () => {
+      // Seed a project config directly
+      const { mkdir } = await import('node:fs/promises');
+      await mkdir(projectsDir, { recursive: true });
+      const project = { name: 'Delete Me', slug: 'delete-me', path: '/tmp/del', createdAt: '2025-01-01T00:00:00.000Z' };
+      await writeFile(join(projectsDir, 'delete-me.json'), JSON.stringify(project, null, 2) + '\n');
+
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/delete-me`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+      expect(res.status).toBe(204);
+      expect(existsSync(join(projectsDir, 'delete-me.json'))).toBe(false);
+    });
+
+    it('returns 404 for non-existent project', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/nonexistent`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toContain('not found');
+    });
+
+    it('returns 401 without auth token', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/some-slug`, {
+        method: 'DELETE',
+      });
+      expect(res.status).toBe(401);
+    });
+  });
+
   describe('GET /api/projects', () => {
     const authHeaders = () => ({
       Authorization: `Bearer ${storedToken}`,
