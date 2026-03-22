@@ -77,7 +77,7 @@ Add token-based authentication. On first run, generate a random token and save i
 ### Acceptance criteria
 
 - [x] On first server start, if `~/.dancode/auth-token` does not exist, generate a cryptographically random token and write it to the file
-- [ ] Token is logged to server console on first generation so the user can copy it
+- [x] Token is logged to server console on first generation so the user can copy it
 - [ ] Frontend shows a login screen (token input + submit button) when no valid token is in localStorage
 - [ ] On successful auth, token is stored in localStorage and user sees the terminal view
 - [ ] Invalid token shows an error message, does not grant access
