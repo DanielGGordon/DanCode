@@ -134,7 +134,7 @@ Display multiple xterm.js terminals for the active project's tmux panes. Desktop
 - [x] Hidden panes remain running in tmux — only the UI display is affected
 - [x] Unit tests: layout state management, config persistence of layout preferences
 - [x] E2E test: verify split layout on desktop viewport, verify tabs on mobile viewport, toggle pane visibility
-- [ ] Visual test: `aiAssert("two terminal panes are displayed side by side with labels, on a dark solarized background")`
+- [x] Visual test: `aiAssert("two terminal panes are displayed side by side with labels, on a dark solarized background")`
 
 ---
 

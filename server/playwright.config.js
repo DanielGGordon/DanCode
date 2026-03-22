@@ -17,20 +17,20 @@ export default defineConfig({
     {
       name: 'frontend',
       use: { baseURL: 'http://localhost:5174' },
-      testMatch: /terminal(?:-visual)?\.spec|auth(?:-visual)?\.spec|new-project(?:-visual)?\.spec|layout\.spec/,
+      testMatch: /terminal(?:-visual)?\.spec|auth(?:-visual)?\.spec|new-project(?:-visual)?\.spec|layout(?:-visual)?\.spec/,
     },
   ],
   webServer: [
     {
       command: 'PORT=3001 node src/index.js',
       port: 3001,
-      reuseExistingServer: false,
+      reuseExistingServer: !process.env.CI,
     },
     {
       command: 'VITE_BACKEND_PORT=3001 npx vite --port 5174',
       cwd: '../client',
       port: 5174,
-      reuseExistingServer: false,
+      reuseExistingServer: !process.env.CI,
     },
   ],
 });
