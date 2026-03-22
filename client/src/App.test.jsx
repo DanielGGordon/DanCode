@@ -45,11 +45,25 @@ describe('App', () => {
     expect(queryByTestId('terminal')).toBeNull()
   })
 
-  it('shows terminal when token exists in localStorage', () => {
+  it('shows terminal when token exists in localStorage', async () => {
     localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
     const { getByTestId, queryByTestId } = render(<App />)
-    expect(getByTestId('terminal')).toBeDefined()
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
     expect(queryByTestId('token-input')).toBeNull()
+  })
+
+  it('returns to login screen when stored token is invalid', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'stale-token')
+    mockFetch(401, { valid: false })
+    const { getByTestId, queryByTestId } = render(<App />)
+    await waitFor(() => {
+      expect(getByTestId('token-input')).toBeDefined()
+    })
+    expect(queryByTestId('terminal')).toBeNull()
+    expect(localStorageMock.removeItem).toHaveBeenCalledWith('dancode-auth-token')
   })
 
   it('transitions from login to terminal after successful login', async () => {
@@ -73,12 +87,15 @@ describe('App', () => {
     expect(localStorageMock.setItem).toHaveBeenCalledWith('dancode-auth-token', 'my-token')
   })
 
-  it('returns to login screen after logout', () => {
+  it('returns to login screen after logout', async () => {
     localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
     const { getByTestId, queryByTestId } = render(<App />)
 
-    // Should show terminal with logout button
-    expect(getByTestId('terminal')).toBeDefined()
+    // Should show terminal with logout button after validation
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
     expect(getByTestId('logout-button')).toBeDefined()
 
     // Click logout
