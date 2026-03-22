@@ -179,7 +179,7 @@ A collapsible left sidebar listing all projects. Clicking a project switches to 
 - [x] Sidebar can be collapsed/expanded via a toggle button
 - [x] When collapsed, terminal panes expand to fill the full width
 - [x] Sidebar state (open/closed) is persisted to config
-- [ ] Sidebar coexists with command palette — both work simultaneously
+- [x] Sidebar coexists with command palette — both work simultaneously
 - [ ] E2E test: open sidebar, click a different project, terminals switch
 - [ ] Visual test: `aiAssert("a collapsible sidebar on the left lists project names, one is highlighted as active")`
 

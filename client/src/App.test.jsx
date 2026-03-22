@@ -481,4 +481,46 @@ describe('App', () => {
     expect(queryByTestId('new-project-form')).toBeNull()
     expect(getByTestId('pane-layout').dataset.slug).toBe('my-project')
   })
+
+  it('sidebar and command palette coexist — both switch projects in the same session', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
+    const { getByTestId, queryByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    // Both sidebar and command palette are available
+    expect(getByTestId('sidebar')).toBeDefined()
+    expect(queryByTestId('command-palette')).toBeNull() // palette closed by default
+
+    // Select a project via sidebar
+    fireEvent.click(getByTestId('mock-sidebar-select'))
+    expect(getByTestId('pane-layout').dataset.slug).toBe('sidebar-project')
+
+    // Sidebar still visible after selection
+    expect(getByTestId('sidebar')).toBeDefined()
+
+    // Open palette and switch to a different project
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    expect(getByTestId('command-palette')).toBeDefined()
+    expect(getByTestId('sidebar')).toBeDefined() // sidebar still rendered under palette
+    fireEvent.click(getByTestId('mock-palette-select'))
+
+    // Palette closes, project switched
+    expect(queryByTestId('command-palette')).toBeNull()
+    expect(getByTestId('pane-layout').dataset.slug).toBe('my-project')
+
+    // Switch back via sidebar
+    fireEvent.click(getByTestId('mock-sidebar-select-other'))
+    expect(getByTestId('pane-layout').dataset.slug).toBe('sidebar-other')
+
+    // Palette still works after sidebar usage
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    expect(getByTestId('command-palette')).toBeDefined()
+    fireEvent.click(getByTestId('mock-palette-select-other'))
+    expect(getByTestId('pane-layout').dataset.slug).toBe('other-project')
+    expect(queryByTestId('command-palette')).toBeNull()
+  })
 })
