@@ -31,7 +31,7 @@ Scaffold the full project structure and install all dependencies so that subsequ
 ### Acceptance criteria
 
 - [x] `server/` directory with Express + Socket.io skeleton (starts, listens on port 3000, serves a "DanCode" placeholder page)
-- [ ] `client/` directory with React + Vite + Tailwind scaffold (builds, dev server proxies to backend)
+- [x] `client/` directory with React + Vite + Tailwind scaffold (builds, dev server proxies to backend)
 - [ ] Solarized Dark color palette defined as Tailwind theme extension
 - [ ] `package.json` at root with scripts: `dev`, `build`, `test`, `test:e2e`
 - [ ] Vitest configured with a passing placeholder unit test
