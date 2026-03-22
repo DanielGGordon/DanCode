@@ -5,7 +5,10 @@ DanCode/
 ├── client/                     # React + Vite + Tailwind frontend
 │   ├── public/                 # Static assets
 │   ├── src/
-│   │   ├── App.jsx             # Root React component
+│   │   ├── App.jsx             # Root React component (renders Terminal)
+│   │   ├── App.test.jsx        # App unit tests
+│   │   ├── Terminal.jsx        # xterm.js terminal connected via Socket.io
+│   │   ├── Terminal.test.jsx   # Terminal component unit tests
 │   │   ├── index.css           # Tailwind + Solarized Dark theme
 │   │   └── main.jsx            # Entry point
 │   ├── index.html              # HTML shell

@@ -1,0 +1,85 @@
+import { useEffect, useRef } from 'react'
+import { Terminal as XTerm } from '@xterm/xterm'
+import { FitAddon } from '@xterm/addon-fit'
+import { io } from 'socket.io-client'
+import '@xterm/xterm/css/xterm.css'
+
+export default function Terminal() {
+  const containerRef = useRef(null)
+  const termRef = useRef(null)
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const term = new XTerm({
+      cursorBlink: true,
+      fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', Menlo, monospace",
+      fontSize: 14,
+      theme: {
+        background: '#002b36',
+        foreground: '#839496',
+        cursor: '#93a1a1',
+        selectionBackground: '#073642',
+        black: '#073642',
+        red: '#dc322f',
+        green: '#859900',
+        yellow: '#b58900',
+        blue: '#268bd2',
+        magenta: '#d33682',
+        cyan: '#2aa198',
+        white: '#eee8d5',
+        brightBlack: '#586e75',
+        brightRed: '#cb4b16',
+        brightGreen: '#586e75',
+        brightYellow: '#657b83',
+        brightBlue: '#839496',
+        brightMagenta: '#6c71c4',
+        brightCyan: '#93a1a1',
+        brightWhite: '#fdf6e3',
+      },
+    })
+
+    const fitAddon = new FitAddon()
+    term.loadAddon(fitAddon)
+    term.open(container)
+    fitAddon.fit()
+
+    termRef.current = term
+
+    const socket = io('/terminal', {
+      query: { cols: term.cols, rows: term.rows },
+    })
+
+    socket.on('output', (data) => {
+      term.write(data)
+    })
+
+    term.onData((data) => {
+      socket.emit('input', data)
+    })
+
+    const handleResize = () => {
+      fitAddon.fit()
+      socket.emit('resize', { cols: term.cols, rows: term.rows })
+    }
+
+    const resizeObserver = new ResizeObserver(handleResize)
+    resizeObserver.observe(container)
+
+    return () => {
+      resizeObserver.disconnect()
+      socket.disconnect()
+      term.dispose()
+      termRef.current = null
+    }
+  }, [])
+
+  return (
+    <div
+      ref={containerRef}
+      data-testid="terminal"
+      className="w-full h-full"
+    />
+  )
+}

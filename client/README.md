@@ -14,7 +14,8 @@ The dev server proxies `/api` and `/socket.io` requests to the backend at `http:
 
 ## Public interface
 
-- `App` — Root component, renders the DanCode UI
+- `App` — Root component, renders a full-viewport Terminal
+- `Terminal` — xterm.js terminal that connects to the backend Socket.io `/terminal` namespace, with Solarized Dark theme and automatic resize
 - `main.jsx` — Entry point, mounts React to `#root`
 
 ## Relation to other modules
