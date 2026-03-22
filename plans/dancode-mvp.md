@@ -174,7 +174,7 @@ A collapsible left sidebar listing all projects. Clicking a project switches to 
 
 - [x] A sidebar on the left edge of the screen lists all projects by name
 - [x] Clicking a project name switches to that project (same disconnect/reconnect logic as command palette)
-- [ ] Active project is visually highlighted in the sidebar
+- [x] Active project is visually highlighted in the sidebar
 - [ ] Each project shows a subtle status indicator (e.g., dot) for whether its tmux session is running
 - [ ] Sidebar can be collapsed/expanded via a toggle button
 - [ ] When collapsed, terminal panes expand to fill the full width
