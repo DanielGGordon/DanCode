@@ -19,13 +19,15 @@ DanCode/
 │   └── dancode-future-phases.md
 ├── server/                     # Express + Socket.io backend
 │   ├── src/
-│   │   └── index.js            # Server entry point (Express, Socket.io, placeholder page)
+│   │   ├── index.js            # Server entry point (Express, Socket.io, placeholder page)
+│   │   └── tmux.js             # Tmux session management (ensure, create, check)
 │   ├── tests/
 │   │   ├── e2e/
 │   │   │   ├── fixture.js      # Playwright + Midscene.js AI fixture (provides aiAssert, etc.)
 │   │   │   ├── placeholder.spec.js  # Playwright E2E test
 │   │   │   └── visual.spec.js  # Midscene AI visual assertion test (DOM-based on Pi 5)
-│   │   └── server.test.js      # Server unit tests
+│   │   ├── server.test.js      # Server unit tests
+│   │   └── tmux.test.js        # Tmux session management tests
 │   ├── .env                    # Midscene.js config (git-ignored): Ollama endpoint, model settings
 │   ├── package.json
 │   ├── playwright.config.js    # Playwright config (Midscene reporter, system Chromium, webServer on :3001)

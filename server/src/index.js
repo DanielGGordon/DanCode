@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import { Server } from 'socket.io';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { ensureSession } from './tmux.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -64,10 +65,17 @@ io.on('connection', (socket) => {
 
 export { app, httpServer, io };
 
+const TMUX_SESSION = process.env.DANCODE_TMUX_SESSION || 'dancode-test';
+
 export function startServer(port = PORT) {
   return new Promise((resolve) => {
-    httpServer.listen(port, () => {
+    httpServer.listen(port, async () => {
       console.log(`DanCode server listening on http://localhost:${port}`);
+      try {
+        await ensureSession(TMUX_SESSION);
+      } catch (err) {
+        console.error(`Failed to ensure tmux session "${TMUX_SESSION}":`, err.message);
+      }
       resolve(httpServer);
     });
   });
