@@ -172,7 +172,7 @@ A collapsible left sidebar listing all projects. Clicking a project switches to 
 
 ### Acceptance criteria
 
-- [ ] A sidebar on the left edge of the screen lists all projects by name
+- [x] A sidebar on the left edge of the screen lists all projects by name
 - [ ] Clicking a project name switches to that project (same disconnect/reconnect logic as command palette)
 - [ ] Active project is visually highlighted in the sidebar
 - [ ] Each project shows a subtle status indicator (e.g., dot) for whether its tmux session is running

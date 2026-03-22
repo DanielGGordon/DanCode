@@ -5,8 +5,8 @@ DanCode/
 ├── client/                     # React + Vite + Tailwind frontend
 │   ├── public/                 # Static assets
 │   ├── src/
-│   │   ├── App.jsx             # Root React component (auth gate, project form toggle, terminal view, command palette)
-│   │   ├── App.test.jsx        # App unit tests (login/terminal/new-project/command-palette conditional rendering)
+│   │   ├── App.jsx             # Root React component (auth gate, project form toggle, terminal view, command palette, sidebar)
+│   │   ├── App.test.jsx        # App unit tests (login/terminal/new-project/command-palette/sidebar conditional rendering)
 │   │   ├── CommandPalette.jsx  # Command palette overlay with fuzzy search for project switching (Ctrl+K)
 │   │   ├── CommandPalette.test.jsx # CommandPalette unit tests (fuzzy match, filtering, open/close, selection)
 │   │   ├── LoginScreen.jsx     # Token input form with submit button
@@ -15,6 +15,8 @@ DanCode/
 │   │   ├── NewProjectForm.test.jsx # NewProjectForm component unit tests
 │   │   ├── PaneLayout.jsx      # Multi-pane layout: split view (side-by-side) or tabbed view with toggle
 │   │   ├── PaneLayout.test.jsx # PaneLayout component unit tests
+│   │   ├── Sidebar.jsx         # Left sidebar listing all projects by name with active highlight
+│   │   ├── Sidebar.test.jsx    # Sidebar component unit tests
 │   │   ├── Terminal.jsx        # xterm.js terminal connected via Socket.io (supports per-pane connections)
 │   │   ├── Terminal.test.jsx   # Terminal component unit tests
 │   │   ├── index.css           # Tailwind + Solarized Dark theme

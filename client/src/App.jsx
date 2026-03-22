@@ -4,6 +4,7 @@ import PaneLayout from './PaneLayout.jsx'
 import LoginScreen from './LoginScreen.jsx'
 import NewProjectForm from './NewProjectForm.jsx'
 import CommandPalette from './CommandPalette.jsx'
+import Sidebar from './Sidebar.jsx'
 
 const TOKEN_KEY = 'dancode-auth-token'
 
@@ -143,19 +144,25 @@ function App() {
           Logout
         </button>
       </header>
-      <main className="flex-1 min-h-0">
-        {showNewProject ? (
-          <NewProjectForm
-            token={token}
-            onCreated={handleProjectCreated}
-            onCancel={() => setShowNewProject(false)}
-          />
-        ) : selectedSlug ? (
-          <PaneLayout key={selectedSlug} token={token} slug={selectedSlug} />
-        ) : (
-          <Terminal token={token} />
-        )}
-      </main>
+      <div className="flex flex-1 min-h-0">
+        <Sidebar
+          projects={projects}
+          currentSlug={selectedSlug}
+        />
+        <main className="flex-1 min-h-0">
+          {showNewProject ? (
+            <NewProjectForm
+              token={token}
+              onCreated={handleProjectCreated}
+              onCancel={() => setShowNewProject(false)}
+            />
+          ) : selectedSlug ? (
+            <PaneLayout key={selectedSlug} token={token} slug={selectedSlug} />
+          ) : (
+            <Terminal token={token} />
+          )}
+        </main>
+      </div>
     </div>
   )
 }

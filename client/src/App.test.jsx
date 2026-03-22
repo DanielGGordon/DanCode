@@ -22,6 +22,15 @@ vi.mock('./NewProjectForm.jsx', () => ({
   ),
 }))
 
+// Mock Sidebar
+vi.mock('./Sidebar.jsx', () => ({
+  default: ({ projects, currentSlug }) => (
+    <div data-testid="sidebar" data-current-slug={currentSlug || ''} data-project-count={projects?.length || 0}>
+      Sidebar
+    </div>
+  ),
+}))
+
 // Mock CommandPalette
 vi.mock('./CommandPalette.jsx', () => ({
   default: ({ open, onClose, onSelect }) => open ? (
@@ -310,6 +319,15 @@ describe('App', () => {
     // Should show pane layout for the new project
     expect(getByTestId('pane-layout').dataset.slug).toBe('other-project')
     expect(queryByTestId('command-palette')).toBeNull()
+  })
+
+  it('renders sidebar when authenticated', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
+    const { getByTestId } = render(<App />)
+    await waitFor(() => {
+      expect(getByTestId('sidebar')).toBeDefined()
+    })
   })
 
   it('hides new project form when switching projects via palette', async () => {
