@@ -111,14 +111,14 @@ app.post('/api/projects', async (req, res) => {
   }
 
   try {
-    const project = await createProject(name, path, projectsDir);
-
-    // Create the project directory if it doesn't exist
+    // Create the project directory first, before persisting config.
+    // This avoids leaving a broken config entry if mkdir fails.
     const resolvedPath = resolvePath(path.trim());
     if (!existsSync(resolvedPath)) {
       await mkdir(resolvedPath, { recursive: true });
     }
 
+    const project = await createProject(name, path, projectsDir);
     res.status(201).json(project);
   } catch (err) {
     if (err.message.includes('already exists')) {

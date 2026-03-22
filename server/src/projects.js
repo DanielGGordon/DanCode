@@ -46,9 +46,9 @@ export function validateProjectInput(name, path) {
     return { valid: false, error: 'Project name must contain at least one alphanumeric character' };
   }
 
-  // Path must be absolute
-  if (!path.startsWith('/') && !path.startsWith('~')) {
-    return { valid: false, error: 'Project path must be absolute (start with / or ~)' };
+  // Path must be absolute; only bare ~ and ~/ are supported (not ~user)
+  if (!path.startsWith('/') && path !== '~' && !path.startsWith('~/')) {
+    return { valid: false, error: 'Project path must be absolute (start with / or ~/)' };
   }
 
   return { valid: true };

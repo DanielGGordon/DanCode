@@ -101,6 +101,12 @@ describe('validateProjectInput', () => {
     expect(result.valid).toBe(false);
     expect(result.error).toContain('absolute');
   });
+
+  it('rejects ~user paths that resolvePath cannot expand', () => {
+    const result = validateProjectInput('Test', '~other/project');
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('absolute');
+  });
 });
 
 describe('project config CRUD', () => {
