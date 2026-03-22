@@ -56,7 +56,7 @@ export default function PaneLayout({ token, slug, panes = ALL_PANES }) {
       })
       .catch(() => {})
       .finally(() => {
-        if (!cancelled) loadedRef.current = true
+        if (!cancelled) setTimeout(() => { loadedRef.current = true }, 0)
       })
     return () => { cancelled = true }
   }, [slug, token])

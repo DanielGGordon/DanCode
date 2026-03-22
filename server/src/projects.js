@@ -173,7 +173,15 @@ export async function updateProject(slug, updates, projectsDir = getProjectsDir(
   }
   const content = await readFile(configPath, 'utf-8');
   const project = JSON.parse(content);
-  const updated = { ...project, ...updates };
+  const updated = { ...project };
+  for (const [key, value] of Object.entries(updates)) {
+    if (value && typeof value === 'object' && !Array.isArray(value) &&
+        project[key] && typeof project[key] === 'object' && !Array.isArray(project[key])) {
+      updated[key] = { ...project[key], ...value };
+    } else {
+      updated[key] = value;
+    }
+  }
   await writeFile(configPath, JSON.stringify(updated, null, 2) + '\n');
   return updated;
 }
