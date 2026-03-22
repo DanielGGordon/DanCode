@@ -100,7 +100,7 @@ Project management: a REST API for creating, listing, and deleting projects. A "
 ### Acceptance criteria
 
 - [x] `POST /api/projects` accepts `{ name, path }`, validates inputs, creates config in `~/.dancode/`
-- [ ] If the directory at `path` does not exist, create it
+- [x] If the directory at `path` does not exist, create it
 - [ ] Creates tmux session `dancode-<slug>` with two panes: pane 0 runs `cd <path>`, pane 1 runs `cd <path> && claude --dangerously-skip-permissions`
 - [ ] `GET /api/projects` returns list of all configured projects
 - [ ] `DELETE /api/projects/:slug` removes project config but does NOT kill the tmux session

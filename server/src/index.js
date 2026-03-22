@@ -6,9 +6,7 @@ import { dirname, join } from 'node:path';
 import { ensureSession } from './tmux.js';
 import { setupTerminalNamespace } from './terminal.js';
 import { ensureAuthToken, validateToken } from './auth.js';
-import { validateProjectInput, createProject, resolvePath, getProjectsDir } from './projects.js';
-import { mkdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { validateProjectInput, createProject, getProjectsDir } from './projects.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -111,13 +109,6 @@ app.post('/api/projects', async (req, res) => {
   }
 
   try {
-    // Create the project directory first, before persisting config.
-    // This avoids leaving a broken config entry if mkdir fails.
-    const resolvedPath = resolvePath(path.trim());
-    if (!existsSync(resolvedPath)) {
-      await mkdir(resolvedPath, { recursive: true });
-    }
-
     const project = await createProject(name, path, projectsDir);
     res.status(201).json(project);
   } catch (err) {

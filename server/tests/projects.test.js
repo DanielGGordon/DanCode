@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
@@ -153,6 +153,21 @@ describe('project config CRUD', () => {
     it('resolves ~ in path', async () => {
       const project = await createProject('Test', '~/projects/test', tempDir);
       expect(project.path).toBe(join(homedir(), 'projects/test'));
+    });
+
+    it('creates the project directory if it does not exist', async () => {
+      const projectDir = join(tempDir, 'new-project-dir');
+      expect(existsSync(projectDir)).toBe(false);
+      await createProject('Dir Test', projectDir, tempDir);
+      expect(existsSync(projectDir)).toBe(true);
+    });
+
+    it('succeeds if the project directory already exists', async () => {
+      const projectDir = join(tempDir, 'existing-dir');
+      await mkdir(projectDir, { recursive: true });
+      const project = await createProject('Existing Dir', projectDir, tempDir);
+      expect(project.path).toBe(projectDir);
+      expect(existsSync(projectDir)).toBe(true);
     });
 
     it('throws on duplicate project name', async () => {

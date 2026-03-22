@@ -70,6 +70,7 @@ export function resolvePath(p) {
 /**
  * Create a project config file. Returns the project object.
  * Throws if a project with the same slug already exists.
+ * Creates the project directory if it does not exist.
  */
 export async function createProject(name, path, projectsDir = getProjectsDir()) {
   const trimmedName = name.trim();
@@ -86,6 +87,12 @@ export async function createProject(name, path, projectsDir = getProjectsDir()) 
   const configPath = getProjectConfigPath(slug, projectsDir);
   if (existsSync(configPath)) {
     throw new Error(`A project with the name "${trimmedName}" already exists`);
+  }
+
+  // Create the project directory before persisting config.
+  // This avoids leaving a broken config entry if mkdir fails.
+  if (!existsSync(resolvedPath)) {
+    await mkdir(resolvedPath, { recursive: true });
   }
 
   const project = {
