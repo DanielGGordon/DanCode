@@ -46,6 +46,23 @@ describe('slugify', () => {
   });
 });
 
+describe('getProjectsDir', () => {
+  it('returns ~/.dancode/projects', () => {
+    expect(getProjectsDir()).toBe(join(homedir(), '.dancode', 'projects'));
+  });
+});
+
+describe('getProjectConfigPath', () => {
+  it('returns <dir>/<slug>.json', () => {
+    expect(getProjectConfigPath('my-project', '/tmp/projects')).toBe('/tmp/projects/my-project.json');
+  });
+
+  it('uses default projects dir when no dir is given', () => {
+    const expected = join(homedir(), '.dancode', 'projects', 'test.json');
+    expect(getProjectConfigPath('test')).toBe(expected);
+  });
+});
+
 describe('resolvePath', () => {
   it('expands ~ to home directory', () => {
     expect(resolvePath('~/projects')).toBe(join(homedir(), 'projects'));
@@ -177,6 +194,15 @@ describe('project config CRUD', () => {
         .rejects.toThrow('already exists');
     });
 
+    it('throws on invalid inputs', async () => {
+      await expect(createProject('', '/tmp/test', tempDir))
+        .rejects.toThrow('name is required');
+      await expect(createProject('Valid', 'relative', tempDir))
+        .rejects.toThrow('absolute');
+      await expect(createProject('!!!', '/tmp/test', tempDir))
+        .rejects.toThrow('alphanumeric');
+    });
+
     it('throws on duplicate slug (different casing)', async () => {
       await createProject('My Project', '/tmp/a', tempDir);
       await expect(createProject('MY PROJECT', '/tmp/b', tempDir))
@@ -193,6 +219,25 @@ describe('project config CRUD', () => {
     it('returns empty array when directory does not exist', async () => {
       const projects = await listProjects(join(tempDir, 'nonexistent'));
       expect(projects).toEqual([]);
+    });
+
+    it('skips non-JSON files in the projects directory', async () => {
+      await createProject('Only One', '/tmp/only', tempDir);
+      await writeFile(join(tempDir, 'README.txt'), 'not a project');
+      await writeFile(join(tempDir, '.hidden'), 'ignore me');
+
+      const projects = await listProjects(tempDir);
+      expect(projects).toHaveLength(1);
+      expect(projects[0].name).toBe('Only One');
+    });
+
+    it('skips malformed JSON config files', async () => {
+      await createProject('Valid', '/tmp/valid', tempDir);
+      await writeFile(join(tempDir, 'broken.json'), '{invalid json!!!');
+
+      const projects = await listProjects(tempDir);
+      expect(projects).toHaveLength(1);
+      expect(projects[0].name).toBe('Valid');
     });
 
     it('returns all projects sorted by name', async () => {
@@ -218,6 +263,11 @@ describe('project config CRUD', () => {
     it('returns null for non-existent project', async () => {
       const project = await getProject('nonexistent', tempDir);
       expect(project).toBeNull();
+    });
+
+    it('rejects path-traversal slugs', async () => {
+      await expect(getProject('../etc', tempDir)).rejects.toThrow('Invalid project slug');
+      await expect(getProject('foo/bar', tempDir)).rejects.toThrow('Invalid project slug');
     });
   });
 
