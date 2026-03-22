@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from 'vitest'
-import { render, cleanup } from '@testing-library/react'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { render, fireEvent, cleanup } from '@testing-library/react'
 import Sidebar from './Sidebar.jsx'
 
 afterEach(cleanup)
@@ -59,5 +59,33 @@ describe('Sidebar', () => {
     for (const p of PROJECTS) {
       expect(getByTestId(`sidebar-project-${p.slug}`).className).toContain('border-transparent')
     }
+  })
+
+  it('calls onSelect with the project slug when clicked', () => {
+    const onSelect = vi.fn()
+    const { getByTestId } = render(<Sidebar projects={PROJECTS} currentSlug={null} onSelect={onSelect} />)
+
+    fireEvent.click(getByTestId('sidebar-project-beta'))
+
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    expect(onSelect).toHaveBeenCalledWith('beta')
+  })
+
+  it('calls onSelect for each project clicked', () => {
+    const onSelect = vi.fn()
+    const { getByTestId } = render(<Sidebar projects={PROJECTS} currentSlug={null} onSelect={onSelect} />)
+
+    fireEvent.click(getByTestId('sidebar-project-alpha'))
+    fireEvent.click(getByTestId('sidebar-project-gamma'))
+
+    expect(onSelect).toHaveBeenCalledTimes(2)
+    expect(onSelect).toHaveBeenNthCalledWith(1, 'alpha')
+    expect(onSelect).toHaveBeenNthCalledWith(2, 'gamma')
+  })
+
+  it('does not crash when onSelect is not provided', () => {
+    const { getByTestId } = render(<Sidebar projects={PROJECTS} currentSlug={null} />)
+    // Should not throw
+    fireEvent.click(getByTestId('sidebar-project-alpha'))
   })
 })

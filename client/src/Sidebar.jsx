@@ -1,4 +1,4 @@
-export default function Sidebar({ projects, currentSlug }) {
+export default function Sidebar({ projects, currentSlug, onSelect }) {
   return (
     <aside
       data-testid="sidebar"
@@ -22,6 +22,7 @@ export default function Sidebar({ projects, currentSlug }) {
                 ? 'text-base1 bg-base03/70 border-l-2 border-blue'
                 : 'text-base0 hover:bg-base03/30 border-l-2 border-transparent'
             }`}
+            onClick={() => onSelect?.(p.slug)}
           >
             {p.name}
           </li>

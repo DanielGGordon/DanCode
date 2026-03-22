@@ -119,6 +119,11 @@ function App() {
     setShowNewProject(false)
   }
 
+  function handleSidebarSelect(slug) {
+    setSelectedSlug(slug)
+    setShowNewProject(false)
+  }
+
   return (
     <div className="w-screen h-screen flex flex-col">
       <CommandPalette
@@ -149,6 +154,7 @@ function App() {
         <Sidebar
           projects={projects}
           currentSlug={selectedSlug}
+          onSelect={handleSidebarSelect}
         />
         <main className="flex-1 min-h-0">
           {showNewProject ? (

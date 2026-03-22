@@ -24,9 +24,11 @@ vi.mock('./NewProjectForm.jsx', () => ({
 
 // Mock Sidebar
 vi.mock('./Sidebar.jsx', () => ({
-  default: ({ projects, currentSlug }) => (
+  default: ({ projects, currentSlug, onSelect }) => (
     <div data-testid="sidebar" data-current-slug={currentSlug || ''} data-project-count={projects?.length || 0}>
       Sidebar
+      <button data-testid="mock-sidebar-select" onClick={() => onSelect?.('sidebar-project')}>Select</button>
+      <button data-testid="mock-sidebar-select-other" onClick={() => onSelect?.('sidebar-other')}>Select Other</button>
     </div>
   ),
 }))
@@ -328,6 +330,55 @@ describe('App', () => {
     await waitFor(() => {
       expect(getByTestId('sidebar')).toBeDefined()
     })
+  })
+
+  it('switches project via sidebar click and shows pane layout', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
+    const { getByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    fireEvent.click(getByTestId('mock-sidebar-select'))
+
+    expect(getByTestId('pane-layout')).toBeDefined()
+    expect(getByTestId('pane-layout').dataset.slug).toBe('sidebar-project')
+  })
+
+  it('switches between projects via sidebar', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
+    const { getByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    fireEvent.click(getByTestId('mock-sidebar-select'))
+    expect(getByTestId('pane-layout').dataset.slug).toBe('sidebar-project')
+
+    fireEvent.click(getByTestId('mock-sidebar-select-other'))
+    expect(getByTestId('pane-layout').dataset.slug).toBe('sidebar-other')
+  })
+
+  it('hides new project form when switching projects via sidebar', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
+    const { getByTestId, queryByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    fireEvent.click(getByTestId('new-project-button'))
+    expect(getByTestId('new-project-form')).toBeDefined()
+
+    fireEvent.click(getByTestId('mock-sidebar-select'))
+
+    expect(queryByTestId('new-project-form')).toBeNull()
+    expect(getByTestId('pane-layout').dataset.slug).toBe('sidebar-project')
   })
 
   it('hides new project form when switching projects via palette', async () => {
