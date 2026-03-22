@@ -722,4 +722,79 @@ describe('App', () => {
     expect(getByTestId('pane-layout').dataset.slug).toBe('other-project')
     expect(queryByTestId('command-palette')).toBeNull()
   })
+
+  it('all three switching mechanisms (palette, sidebar, dropdown) coexist and work independently', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (url === '/api/projects') {
+        return { ok: true, status: 200, json: () => Promise.resolve([
+          { slug: 'sidebar-project', name: 'My Project', path: '/tmp' },
+          { slug: 'other-proj', name: 'Other Project', path: '/tmp2' },
+          { slug: 'sidebar-other', name: 'Sidebar Other', path: '/tmp3' },
+        ]) }
+      }
+      return { ok: true, status: 200, json: () => Promise.resolve({}) }
+    })
+    const { getByTestId, queryByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    // All three mechanisms are available from the start
+    expect(getByTestId('sidebar')).toBeDefined()
+    expect(queryByTestId('command-palette')).toBeNull() // palette closed by default
+    expect(queryByTestId('header-dropdown')).toBeNull() // dropdown closed by default
+
+    // 1. Switch via sidebar
+    fireEvent.click(getByTestId('mock-sidebar-select'))
+    expect(getByTestId('pane-layout').dataset.slug).toBe('sidebar-project')
+    expect(getByTestId('sidebar')).toBeDefined() // sidebar still visible
+
+    // 2. Switch via dropdown
+    await waitFor(() => {
+      expect(getByTestId('header-project-name')).toBeDefined()
+    })
+    fireEvent.click(getByTestId('header-project-name'))
+    expect(getByTestId('header-dropdown')).toBeDefined()
+    fireEvent.click(getByTestId('dropdown-item-other-proj'))
+    expect(queryByTestId('header-dropdown')).toBeNull() // dropdown closes
+    expect(getByTestId('pane-layout').dataset.slug).toBe('other-proj')
+    expect(getByTestId('sidebar')).toBeDefined() // sidebar still visible
+
+    // 3. Switch via command palette
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    expect(getByTestId('command-palette')).toBeDefined()
+    expect(getByTestId('sidebar')).toBeDefined() // sidebar still visible under palette
+    fireEvent.click(getByTestId('mock-palette-select'))
+    expect(queryByTestId('command-palette')).toBeNull() // palette closes
+    expect(getByTestId('pane-layout').dataset.slug).toBe('my-project')
+
+    // 4. Switch back via sidebar — still works after using other mechanisms
+    fireEvent.click(getByTestId('mock-sidebar-select-other'))
+    expect(getByTestId('pane-layout').dataset.slug).toBe('sidebar-other')
+
+    // 5. Switch via dropdown again — still works after palette usage
+    await waitFor(() => {
+      expect(getByTestId('header-project-name')).toBeDefined()
+    })
+    fireEvent.click(getByTestId('header-project-name'))
+    expect(getByTestId('header-dropdown')).toBeDefined()
+    fireEvent.click(getByTestId('dropdown-item-sidebar-project'))
+    expect(queryByTestId('header-dropdown')).toBeNull()
+    expect(getByTestId('pane-layout').dataset.slug).toBe('sidebar-project')
+
+    // 6. Dropdown closes when palette opens (no stale UI overlap)
+    fireEvent.click(getByTestId('header-project-name'))
+    expect(getByTestId('header-dropdown')).toBeDefined()
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    expect(getByTestId('command-palette')).toBeDefined()
+    // Select from palette — should close dropdown too
+    fireEvent.click(getByTestId('mock-palette-select-other'))
+    expect(queryByTestId('command-palette')).toBeNull()
+    expect(queryByTestId('header-dropdown')).toBeNull() // palette handler closes dropdown
+    expect(getByTestId('pane-layout').dataset.slug).toBe('other-project')
+
+    fetchSpy.mockRestore()
+  })
 })
