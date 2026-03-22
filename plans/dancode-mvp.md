@@ -132,7 +132,7 @@ Display multiple xterm.js terminals for the active project's tmux panes. Desktop
 - [x] Pane visibility toggles: buttons to show/hide individual panes (at least one must remain visible)
 - [x] Layout mode (split/tabs) and pane visibility are saved to the project config and restored on next visit
 - [x] Hidden panes remain running in tmux — only the UI display is affected
-- [ ] Unit tests: layout state management, config persistence of layout preferences
+- [x] Unit tests: layout state management, config persistence of layout preferences
 - [ ] E2E test: verify split layout on desktop viewport, verify tabs on mobile viewport, toggle pane visibility
 - [ ] Visual test: `aiAssert("two terminal panes are displayed side by side with labels, on a dark solarized background")`
 

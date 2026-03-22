@@ -535,8 +535,10 @@ describe('PaneLayout visibility toggles', () => {
 
 describe('PaneLayout config persistence', () => {
   let fetchMock
+  let originalFetch
 
   beforeEach(() => {
+    originalFetch = global.fetch
     fetchMock = vi.fn()
     global.fetch = fetchMock
     vi.useFakeTimers()
@@ -544,7 +546,7 @@ describe('PaneLayout config persistence', () => {
 
   afterEach(() => {
     vi.useRealTimers()
-    delete global.fetch
+    global.fetch = originalFetch
   })
 
   it('fetches saved layout from GET /api/projects/:slug on mount', async () => {
@@ -610,10 +612,13 @@ describe('PaneLayout config persistence', () => {
 
     const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
 
-    // Wait for load to complete
+    // Wait for load to complete (flush promise chain + setTimeout(0) in .finally)
     await act(async () => {
       await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
     })
+    act(() => { vi.advanceTimersByTime(0) })
 
     // Toggle to tabs
     fetchMock.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
@@ -643,9 +648,13 @@ describe('PaneLayout config persistence', () => {
 
     const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
 
+    // Wait for load to complete (flush promise chain + setTimeout(0) in .finally)
     await act(async () => {
       await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
     })
+    act(() => { vi.advanceTimersByTime(0) })
 
     fetchMock.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
     fireEvent.click(getByTestId('visibility-2'))
@@ -696,5 +705,324 @@ describe('PaneLayout config persistence', () => {
       expect(getByTestId('pane-layout')).toBeDefined()
     })
     expect(getByTestId('layout-toggle').textContent).toBe('Tabs')
+  })
+
+  it('does not fetch or save config when token is not provided', () => {
+    render(<PaneLayout token={undefined} slug="myproj" />)
+
+    act(() => { vi.advanceTimersByTime(500) })
+
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps defaults when API returns non-ok response (e.g. 404)', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 404 })
+
+    vi.useRealTimers()
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    await waitFor(() => {
+      expect(getByTestId('pane-layout')).toBeDefined()
+    })
+    // Should keep default split mode
+    expect(getByTestId('layout-toggle').textContent).toBe('Tabs')
+    // All panes should be visible
+    expect(getByTestId('pane-0').className).not.toContain('hidden')
+    expect(getByTestId('pane-1').className).not.toContain('hidden')
+    expect(getByTestId('pane-2').className).not.toContain('hidden')
+  })
+
+  it('ignores invalid layout mode in config and keeps default', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        name: 'Test', slug: 'myproj', path: '/tmp',
+        layout: { mode: 'invalid-mode', hiddenPanes: [] },
+      }),
+    })
+
+    vi.useRealTimers()
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    await waitFor(() => {
+      expect(getByTestId('pane-layout')).toBeDefined()
+    })
+    // Should stay in default split mode since 'invalid-mode' is rejected
+    expect(getByTestId('layout-toggle').textContent).toBe('Tabs')
+  })
+
+  it('ignores non-array hiddenPanes in config', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        name: 'Test', slug: 'myproj', path: '/tmp',
+        layout: { mode: 'split', hiddenPanes: 'not-an-array' },
+      }),
+    })
+
+    vi.useRealTimers()
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    await waitFor(() => {
+      expect(getByTestId('pane-layout')).toBeDefined()
+    })
+    // All panes should remain visible since hiddenPanes was invalid
+    expect(getByTestId('pane-0').className).not.toContain('hidden')
+    expect(getByTestId('pane-1').className).not.toContain('hidden')
+    expect(getByTestId('pane-2').className).not.toContain('hidden')
+  })
+
+  it('debounces multiple rapid changes into a single PATCH', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ name: 'Test', slug: 'myproj', path: '/tmp' }),
+    })
+
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Flush load
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    act(() => { vi.advanceTimersByTime(0) })
+    fetchMock.mockClear()
+
+    // Make several rapid changes
+    fetchMock.mockResolvedValue({ ok: true, json: () => Promise.resolve({}) })
+    fireEvent.click(getByTestId('layout-toggle'))     // → tabs
+    act(() => { vi.advanceTimersByTime(100) })         // only 100ms, not 300
+    fireEvent.click(getByTestId('visibility-2'))       // hide pane 2
+
+    // Advance past the debounce
+    act(() => { vi.advanceTimersByTime(300) })
+
+    // Should have only one PATCH call (the debounced final state)
+    const patchCalls = fetchMock.mock.calls.filter(
+      ([url, opts]) => opts?.method === 'PATCH'
+    )
+    expect(patchCalls).toHaveLength(1)
+    const body = JSON.parse(patchCalls[0][1].body)
+    expect(body.layout.mode).toBe('tabs')
+    expect(body.layout.hiddenPanes).toContain(2)
+  })
+
+  it('save payload always includes both mode and hiddenPanes', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ name: 'Test', slug: 'myproj', path: '/tmp' }),
+    })
+
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    act(() => { vi.advanceTimersByTime(0) })
+    fetchMock.mockClear()
+
+    // Only change layout mode (not visibility)
+    fetchMock.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+    fireEvent.click(getByTestId('layout-toggle'))
+
+    act(() => { vi.advanceTimersByTime(300) })
+
+    const patchCall = fetchMock.mock.calls.find(
+      ([url, opts]) => opts?.method === 'PATCH'
+    )
+    const body = JSON.parse(patchCall[1].body)
+    // Both fields should be present
+    expect(body.layout).toHaveProperty('mode')
+    expect(body.layout).toHaveProperty('hiddenPanes')
+    expect(body.layout.mode).toBe('tabs')
+    expect(body.layout.hiddenPanes).toEqual([])
+  })
+
+  it('does not send PATCH on unmount if debounce timer is pending', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ name: 'Test', slug: 'myproj', path: '/tmp' }),
+    })
+
+    const { getByTestId, unmount } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    act(() => { vi.advanceTimersByTime(0) })
+    fetchMock.mockClear()
+
+    // Make a change
+    fetchMock.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+    fireEvent.click(getByTestId('layout-toggle'))
+
+    // Unmount before debounce fires
+    unmount()
+
+    // Advance past debounce
+    act(() => { vi.advanceTimersByTime(300) })
+
+    // No PATCH should have been sent
+    const patchCalls = fetchMock.mock.calls.filter(
+      ([url, opts]) => opts?.method === 'PATCH'
+    )
+    expect(patchCalls).toHaveLength(0)
+  })
+})
+
+describe('PaneLayout layout state management', () => {
+  let originalFetch
+
+  beforeEach(() => {
+    // Mock fetch so the load effect doesn't blow up
+    originalFetch = global.fetch
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ name: 'Test', slug: 'myproj', path: '/tmp' }),
+    })
+  })
+
+  afterEach(() => {
+    global.fetch = originalFetch
+  })
+
+  it('multiple rapid layout toggles end in correct state', () => {
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Toggle 4 times (split → tabs → split → tabs → split)
+    fireEvent.click(getByTestId('layout-toggle'))
+    fireEvent.click(getByTestId('layout-toggle'))
+    fireEvent.click(getByTestId('layout-toggle'))
+    fireEvent.click(getByTestId('layout-toggle'))
+
+    // Even number of toggles → back to split
+    expect(getByTestId('layout-toggle').textContent).toBe('Tabs')
+    expect(queryByTestId('tab-bar')).toBeNull()
+  })
+
+  it('effectiveLayout is tabs on mobile even when layoutMode is split', () => {
+    mockViewport(1024)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Start in split mode on desktop
+    expect(queryByTestId('tab-bar')).toBeNull()
+
+    // Simulate resize to mobile — should force tabs regardless of layoutMode
+    const viewport = mockViewport(1024)
+    // Need to re-render, let's just test directly with mobile viewport
+    cleanup()
+    mockViewport(375)
+    const { getByTestId: mobileGet } = render(<PaneLayout token="tok" slug="myproj" />)
+    expect(mobileGet('tab-bar')).toBeDefined()
+  })
+
+  it('focus moves through visible panes as panes are hidden', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Focus pane 1
+    fireEvent.click(getByTestId('pane-1'))
+    let pane1Label = getByTestId('pane-1').querySelector('div')
+    expect(pane1Label.className).toContain('text-base1')
+
+    // Hide pane 1 — focus should move to pane 0
+    act(() => {
+      fireEvent.click(getByTestId('visibility-1'))
+    })
+    const pane0Label = getByTestId('pane-0').querySelector('div')
+    expect(pane0Label.className).toContain('text-base1')
+  })
+
+  it('hiding panes in split mode adjusts visible count (remaining panes fill space)', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // All 3 panes visible with flex-1
+    expect(getByTestId('pane-0').className).toContain('flex-1')
+    expect(getByTestId('pane-1').className).toContain('flex-1')
+    expect(getByTestId('pane-2').className).toContain('flex-1')
+
+    // Hide pane 2
+    fireEvent.click(getByTestId('visibility-2'))
+
+    // Remaining panes still have flex-1, taking more space
+    expect(getByTestId('pane-0').className).toContain('flex-1')
+    expect(getByTestId('pane-1').className).toContain('flex-1')
+    // Pane 2 is hidden but still in DOM
+    expect(getByTestId('pane-2').className).toContain('hidden')
+  })
+
+  it('layout mode state is preserved through visibility changes', () => {
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Switch to tabs
+    fireEvent.click(getByTestId('layout-toggle'))
+    expect(getByTestId('tab-bar')).toBeDefined()
+
+    // Hide and show a pane — should still be in tabs mode
+    fireEvent.click(getByTestId('visibility-2'))
+    fireEvent.click(getByTestId('visibility-2'))
+
+    expect(getByTestId('tab-bar')).toBeDefined()
+    expect(getByTestId('layout-toggle').textContent).toBe('Split')
+  })
+
+  it('tab bar updates when pane visibility changes in tabbed mode', () => {
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Switch to tabs
+    fireEvent.click(getByTestId('layout-toggle'))
+
+    // All 3 tabs visible
+    expect(getByTestId('tab-0')).toBeDefined()
+    expect(getByTestId('tab-1')).toBeDefined()
+    expect(getByTestId('tab-2')).toBeDefined()
+
+    // Hide pane 1
+    fireEvent.click(getByTestId('visibility-1'))
+
+    // Tab 1 should be gone
+    expect(queryByTestId('tab-1')).toBeNull()
+    expect(getByTestId('tab-0')).toBeDefined()
+    expect(getByTestId('tab-2')).toBeDefined()
+  })
+
+  it('focus switches when active tab is hidden in tabbed mode', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Switch to tabs, focus pane 1
+    fireEvent.click(getByTestId('layout-toggle'))
+    fireEvent.click(getByTestId('tab-1'))
+
+    // Pane 1 should be active
+    expect(getByTestId('pane-1').className).not.toContain('hidden')
+
+    // Hide pane 1 — should switch to first visible pane
+    act(() => {
+      fireEvent.click(getByTestId('visibility-1'))
+    })
+
+    expect(getByTestId('pane-0').className).not.toContain('hidden')
+  })
+
+  it('re-showing a hidden pane does not change current focus', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Hide pane 2
+    fireEvent.click(getByTestId('visibility-2'))
+
+    // Focus should still be on pane 0
+    const pane0Label = getByTestId('pane-0').querySelector('div')
+    expect(pane0Label.className).toContain('text-base1')
+
+    // Re-show pane 2
+    fireEvent.click(getByTestId('visibility-2'))
+
+    // Focus should still be on pane 0, not auto-jump to pane 2
+    const pane0LabelAfter = getByTestId('pane-0').querySelector('div')
+    expect(pane0LabelAfter.className).toContain('text-base1')
   })
 })
