@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Terminal from './Terminal.jsx'
 import PaneLayout from './PaneLayout.jsx'
 import LoginScreen from './LoginScreen.jsx'
 import NewProjectForm from './NewProjectForm.jsx'
+import CommandPalette from './CommandPalette.jsx'
 
 const TOKEN_KEY = 'dancode-auth-token'
 
@@ -11,6 +12,8 @@ function App() {
   const [validating, setValidating] = useState(() => !!localStorage.getItem(TOKEN_KEY))
   const [showNewProject, setShowNewProject] = useState(false)
   const [selectedSlug, setSelectedSlug] = useState(null)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [projects, setProjects] = useState([])
 
   useEffect(() => {
     if (!token) return
@@ -43,6 +46,42 @@ function App() {
     return () => { cancelled = true }
   }, [])
 
+  // Fetch projects when authenticated
+  const fetchProjects = useCallback(async () => {
+    if (!token) return
+    try {
+      const res = await fetch('/api/projects', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setProjects(data)
+      }
+    } catch {}
+  }, [token])
+
+  useEffect(() => {
+    fetchProjects()
+  }, [fetchProjects])
+
+  // Ctrl+K keyboard shortcut for command palette
+  useEffect(() => {
+    if (!token) return
+
+    function handleKeyDown(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault()
+        setPaletteOpen((prev) => !prev)
+      }
+      if (e.key === 'Escape' && paletteOpen) {
+        setPaletteOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [token, paletteOpen])
+
   function handleLogin(value) {
     localStorage.setItem(TOKEN_KEY, value)
     setToken(value)
@@ -67,10 +106,24 @@ function App() {
   function handleProjectCreated(project) {
     setShowNewProject(false)
     setSelectedSlug(project.slug)
+    fetchProjects()
+  }
+
+  function handlePaletteSelect(slug) {
+    setPaletteOpen(false)
+    setSelectedSlug(slug)
+    setShowNewProject(false)
   }
 
   return (
     <div className="w-screen h-screen flex flex-col">
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        projects={projects}
+        currentSlug={selectedSlug}
+        onSelect={handlePaletteSelect}
+      />
       <header className="flex items-center px-4 py-2 bg-base02 border-b border-base01/30">
         <h1 className="text-sm font-semibold text-base1 tracking-wide">DanCode</h1>
         <button

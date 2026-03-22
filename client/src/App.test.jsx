@@ -22,6 +22,16 @@ vi.mock('./NewProjectForm.jsx', () => ({
   ),
 }))
 
+// Mock CommandPalette
+vi.mock('./CommandPalette.jsx', () => ({
+  default: ({ open, onClose, onSelect }) => open ? (
+    <div data-testid="command-palette">
+      <button data-testid="mock-palette-close" onClick={onClose}>Close</button>
+      <button data-testid="mock-palette-select" onClick={() => onSelect('my-project')}>Select</button>
+    </div>
+  ) : null,
+}))
+
 // Mock localStorage
 const localStorageMock = (() => {
   let store = {}
@@ -208,5 +218,70 @@ describe('App', () => {
       expect(getByTestId('terminal')).toBeDefined()
     })
     expect(queryByTestId('new-project-form')).toBeNull()
+  })
+
+  it('opens command palette on Ctrl+K', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
+    const { getByTestId, queryByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    expect(queryByTestId('command-palette')).toBeNull()
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+
+    expect(getByTestId('command-palette')).toBeDefined()
+  })
+
+  it('closes command palette on second Ctrl+K', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
+    const { getByTestId, queryByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    expect(getByTestId('command-palette')).toBeDefined()
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    expect(queryByTestId('command-palette')).toBeNull()
+  })
+
+  it('closes command palette on Escape', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
+    const { getByTestId, queryByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    expect(getByTestId('command-palette')).toBeDefined()
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(queryByTestId('command-palette')).toBeNull()
+  })
+
+  it('switches project via command palette and shows pane layout', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
+    const { getByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    // Open palette and select a project
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.click(getByTestId('mock-palette-select'))
+
+    expect(getByTestId('pane-layout')).toBeDefined()
+    expect(getByTestId('pane-layout').dataset.slug).toBe('my-project')
   })
 })

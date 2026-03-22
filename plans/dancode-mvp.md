@@ -148,7 +148,7 @@ A command palette overlay triggered by `Ctrl+K`. Shows a fuzzy-searchable list o
 
 ### Acceptance criteria
 
-- [ ] `Ctrl+K` opens a centered overlay with a text input for fuzzy search
+- [x] `Ctrl+K` opens a centered overlay with a text input for fuzzy search
 - [ ] All projects are listed below the input, filtered in real-time as the user types
 - [ ] Arrow keys navigate the list, Enter selects the highlighted project
 - [ ] Escape or clicking outside closes the palette without switching
