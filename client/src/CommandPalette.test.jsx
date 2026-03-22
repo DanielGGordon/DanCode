@@ -18,6 +18,10 @@ describe('fuzzyMatch', () => {
     expect(fuzzyMatch('', 'anything')).toBe(true)
   })
 
+  it('matches empty query against empty text', () => {
+    expect(fuzzyMatch('', '')).toBe(true)
+  })
+
   it('matches exact text', () => {
     expect(fuzzyMatch('DanCode', 'DanCode')).toBe(true)
   })
@@ -38,6 +42,40 @@ describe('fuzzyMatch', () => {
 
   it('does not match when characters are missing', () => {
     expect(fuzzyMatch('xyz', 'DanCode')).toBe(false)
+  })
+
+  it('matches a prefix substring', () => {
+    expect(fuzzyMatch('Dan', 'DanCode')).toBe(true)
+    expect(fuzzyMatch('API', 'API Server')).toBe(true)
+  })
+
+  it('matches a single character', () => {
+    expect(fuzzyMatch('d', 'DanCode')).toBe(true)
+    expect(fuzzyMatch('z', 'DanCode')).toBe(false)
+  })
+
+  it('does not match when query is longer than text', () => {
+    expect(fuzzyMatch('DanCodeExtra', 'DanCode')).toBe(false)
+  })
+
+  it('matches text containing spaces', () => {
+    expect(fuzzyMatch('my', 'My Blog')).toBe(true)
+    expect(fuzzyMatch('mb', 'My Blog')).toBe(true)
+    expect(fuzzyMatch('blog', 'My Blog')).toBe(true)
+  })
+
+  it('matches query with spaces against text with spaces', () => {
+    expect(fuzzyMatch('my b', 'My Blog')).toBe(true)
+    expect(fuzzyMatch('api s', 'API Server')).toBe(true)
+  })
+
+  it('handles repeated characters correctly', () => {
+    expect(fuzzyMatch('oo', 'foobar')).toBe(true)
+    expect(fuzzyMatch('ooo', 'foobar')).toBe(false)
+  })
+
+  it('does not match non-empty query against empty text', () => {
+    expect(fuzzyMatch('a', '')).toBe(false)
   })
 })
 
@@ -278,5 +316,153 @@ describe('CommandPalette', () => {
       <CommandPalette open={true} onClose={vi.fn()} projects={PROJECTS} onSelect={vi.fn()} />
     )
     expect(getByTestId('command-palette-input').value).toBe('')
+  })
+})
+
+describe('CommandPalette — filtering logic', () => {
+  it('progressively narrows results as query gets longer', () => {
+    const projects = [
+      { slug: 'dancode', name: 'DanCode' },
+      { slug: 'dashboard', name: 'Dashboard' },
+      { slug: 'my-blog', name: 'My Blog' },
+    ]
+    const { getByTestId, queryByTestId } = render(
+      <CommandPalette open={true} onClose={vi.fn()} projects={projects} onSelect={vi.fn()} />
+    )
+    const input = getByTestId('command-palette-input')
+
+    // 'd' matches DanCode and Dashboard
+    fireEvent.change(input, { target: { value: 'd' } })
+    expect(getByTestId('command-palette-item-dancode')).toBeDefined()
+    expect(getByTestId('command-palette-item-dashboard')).toBeDefined()
+    expect(queryByTestId('command-palette-item-my-blog')).toBeNull()
+
+    // 'dan' narrows to DanCode only
+    fireEvent.change(input, { target: { value: 'dan' } })
+    expect(getByTestId('command-palette-item-dancode')).toBeDefined()
+    expect(queryByTestId('command-palette-item-dashboard')).toBeNull()
+  })
+
+  it('restores full list when query is cleared', () => {
+    const { getByTestId } = render(
+      <CommandPalette open={true} onClose={vi.fn()} projects={PROJECTS} onSelect={vi.fn()} />
+    )
+    const input = getByTestId('command-palette-input')
+
+    fireEvent.change(input, { target: { value: 'blog' } })
+    fireEvent.change(input, { target: { value: '' } })
+
+    expect(getByTestId('command-palette-item-dancode')).toBeDefined()
+    expect(getByTestId('command-palette-item-my-blog')).toBeDefined()
+    expect(getByTestId('command-palette-item-api-server')).toBeDefined()
+  })
+
+  it('selects correct project after filtering narrows the list', () => {
+    const onSelect = vi.fn()
+    const { getByTestId } = render(
+      <CommandPalette open={true} onClose={vi.fn()} projects={PROJECTS} onSelect={onSelect} />
+    )
+    const input = getByTestId('command-palette-input')
+
+    // Filter to only 'API Server', then press Enter
+    fireEvent.change(input, { target: { value: 'api' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSelect).toHaveBeenCalledWith('api-server')
+  })
+
+  it('handles null projects gracefully', () => {
+    const { getByTestId } = render(
+      <CommandPalette open={true} onClose={vi.fn()} projects={null} onSelect={vi.fn()} />
+    )
+    expect(getByTestId('command-palette-list')).toBeDefined()
+  })
+})
+
+describe('CommandPalette — project list ordering', () => {
+  it('displays projects in the order they are provided', () => {
+    const { getByTestId } = render(
+      <CommandPalette open={true} onClose={vi.fn()} projects={PROJECTS} onSelect={vi.fn()} />
+    )
+    const list = getByTestId('command-palette-list')
+    const items = list.querySelectorAll('[data-palette-item]')
+    expect(items).toHaveLength(3)
+    expect(items[0].textContent).toContain('DanCode')
+    expect(items[1].textContent).toContain('My Blog')
+    expect(items[2].textContent).toContain('API Server')
+  })
+
+  it('preserves relative order after filtering', () => {
+    const projects = [
+      { slug: 'zebra', name: 'Zebra Tools' },
+      { slug: 'beta', name: 'Beta Blog' },
+      { slug: 'gamma', name: 'Gamma Grid' },
+      { slug: 'delta', name: 'Delta Blog' },
+    ]
+    const { getByTestId } = render(
+      <CommandPalette open={true} onClose={vi.fn()} projects={projects} onSelect={vi.fn()} />
+    )
+    // 'blog' matches Beta Blog and Delta Blog — order should be Beta then Delta
+    fireEvent.change(getByTestId('command-palette-input'), { target: { value: 'blog' } })
+    const list = getByTestId('command-palette-list')
+    const items = list.querySelectorAll('[data-palette-item]')
+    expect(items).toHaveLength(2)
+    expect(items[0].textContent).toContain('Beta Blog')
+    expect(items[1].textContent).toContain('Delta Blog')
+  })
+
+  it('does not reorder current project to the top', () => {
+    const projects = [
+      { slug: 'first', name: 'First' },
+      { slug: 'second', name: 'Second' },
+      { slug: 'third', name: 'Third' },
+    ]
+    const { getByTestId } = render(
+      <CommandPalette
+        open={true}
+        onClose={vi.fn()}
+        projects={projects}
+        currentSlug="third"
+        onSelect={vi.fn()}
+      />
+    )
+    const list = getByTestId('command-palette-list')
+    const items = list.querySelectorAll('[data-palette-item]')
+    expect(items[0].textContent).toContain('First')
+    expect(items[1].textContent).toContain('Second')
+    expect(items[2].textContent).toContain('Third')
+    expect(items[2].textContent).toContain('current')
+  })
+
+  it('restores original order after clearing search', () => {
+    const { getByTestId } = render(
+      <CommandPalette open={true} onClose={vi.fn()} projects={PROJECTS} onSelect={vi.fn()} />
+    )
+    const input = getByTestId('command-palette-input')
+
+    // Filter then clear
+    fireEvent.change(input, { target: { value: 'blog' } })
+    fireEvent.change(input, { target: { value: '' } })
+
+    const list = getByTestId('command-palette-list')
+    const items = list.querySelectorAll('[data-palette-item]')
+    expect(items).toHaveLength(3)
+    expect(items[0].textContent).toContain('DanCode')
+    expect(items[1].textContent).toContain('My Blog')
+    expect(items[2].textContent).toContain('API Server')
+  })
+
+  it('displays a single project correctly', () => {
+    const { getByTestId } = render(
+      <CommandPalette
+        open={true}
+        onClose={vi.fn()}
+        projects={[{ slug: 'solo', name: 'Solo Project' }]}
+        onSelect={vi.fn()}
+      />
+    )
+    const list = getByTestId('command-palette-list')
+    const items = list.querySelectorAll('[data-palette-item]')
+    expect(items).toHaveLength(1)
+    expect(items[0].textContent).toContain('Solo Project')
   })
 })
