@@ -108,7 +108,7 @@ Project management: a REST API for creating, listing, and deleting projects. A "
 - [x] Submitting the form creates the project and switches to its terminal view (showing both panes)
 - [x] Duplicate project names are rejected with a clear error message
 - [x] Unit tests: config CRUD operations, tmux session creation, directory creation, slug generation
-- [ ] E2E test: click New Project, fill form, submit, see terminal panes for new project
+- [x] E2E test: click New Project, fill form, submit, see terminal panes for new project
 - [ ] Visual test: `aiAssert("a new project form is displayed with name and path input fields on a dark background")`
 
 ---

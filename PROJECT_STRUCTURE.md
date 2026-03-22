@@ -39,6 +39,7 @@ DanCode/
 │   │   │   ├── auth-visual.spec.js   # Midscene AI visual assertion test (login form on dark background)
 │   │   │   ├── terminal.spec.js     # Playwright E2E test (xterm.js terminal visibility)
 │   │   │   ├── terminal-visual.spec.js  # Visual assertion: Solarized Dark theme + fills viewport (screenshot pixel analysis)
+│   │   │   ├── new-project.spec.js    # Playwright E2E test (new project creation flow: form → submit → terminal panes)
 │   │   │   └── visual.spec.js  # Midscene AI visual assertion test (DOM-based on Pi 5)
 │   │   ├── auth.test.js        # Auth token generation and management tests
 │   │   ├── projects.test.js    # Project config CRUD, slug generation, validation tests
