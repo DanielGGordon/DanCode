@@ -1,95 +1,148 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { Server } from 'socket.io';
 import { io as ioClient } from 'socket.io-client';
-import { startServer, httpServer } from '../src/index.js';
+import { createServer } from 'node:http';
 
-const TEST_PORT = 3098;
-const URL = `http://localhost:${TEST_PORT}/terminal`;
+let mockPty;
+
+vi.mock('node-pty', () => ({
+  default: {
+    spawn: vi.fn(() => {
+      mockPty = {
+        onData: vi.fn(),
+        onExit: vi.fn(),
+        write: vi.fn(),
+        resize: vi.fn(),
+        kill: vi.fn(),
+      };
+      return mockPty;
+    }),
+  },
+}));
+
+import { setupTerminalNamespace } from '../src/terminal.js';
+import pty from 'node-pty';
 
 describe('Socket.io /terminal namespace', () => {
-  let server;
+  let httpServer, io, port, clientSocket;
 
-  beforeAll(async () => {
-    server = await startServer(TEST_PORT);
-  });
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockPty = null;
 
-  afterAll(async () => {
-    if (server) {
-      await new Promise((resolve) => server.close(resolve));
-    }
-  });
+    httpServer = createServer();
+    io = new Server(httpServer);
 
-  it('accepts a connection and emits output data', async () => {
-    const socket = ioClient(URL, { forceNew: true });
-
-    const data = await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        socket.disconnect();
-        reject(new Error('Timed out waiting for terminal output'));
-      }, 5000);
-
-      socket.on('output', (chunk) => {
-        clearTimeout(timeout);
-        resolve(chunk);
-      });
-
-      socket.on('connect_error', (err) => {
-        clearTimeout(timeout);
-        reject(err);
-      });
-    });
-
-    expect(typeof data).toBe('string');
-    expect(data.length).toBeGreaterThan(0);
-    socket.disconnect();
-  });
-
-  it('receives input and produces output', async () => {
-    const socket = ioClient(URL, { forceNew: true });
-
-    // Wait for initial connection output
     await new Promise((resolve) => {
-      socket.once('output', resolve);
-    });
-
-    // Send a command and wait for its output
-    const output = await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        socket.disconnect();
-        reject(new Error('Timed out waiting for echo output'));
-      }, 5000);
-
-      let buffer = '';
-      socket.on('output', (chunk) => {
-        buffer += chunk;
-        if (buffer.includes('DANCODE_TEST_MARKER')) {
-          clearTimeout(timeout);
-          resolve(buffer);
-        }
-      });
-
-      socket.emit('input', 'echo DANCODE_TEST_MARKER\n');
-    });
-
-    expect(output).toContain('DANCODE_TEST_MARKER');
-    socket.disconnect();
-  });
-
-  it('handles disconnect cleanly', async () => {
-    const socket = ioClient(URL, { forceNew: true });
-
-    // Wait for connection
-    await new Promise((resolve) => {
-      socket.on('connect', resolve);
-    });
-
-    // Disconnect and verify no errors
-    await new Promise((resolve) => {
-      socket.on('disconnect', () => {
+      httpServer.listen(0, () => {
+        port = httpServer.address().port;
         resolve();
       });
-      socket.disconnect();
     });
 
-    expect(socket.connected).toBe(false);
+    setupTerminalNamespace(io, 'test-session');
+  });
+
+  afterEach(async () => {
+    if (clientSocket?.connected) {
+      clientSocket.disconnect();
+    }
+    clientSocket = undefined;
+    io.close();
+    await new Promise((resolve) => httpServer.close(resolve));
+  });
+
+  function connect(query = {}) {
+    clientSocket = ioClient(`http://localhost:${port}/terminal`, {
+      forceNew: true,
+      query,
+    });
+    return clientSocket;
+  }
+
+  async function connectAndWaitForPty(query = {}) {
+    const socket = connect(query);
+    await new Promise((resolve) => socket.on('connect', resolve));
+    await vi.waitFor(() => expect(mockPty).not.toBeNull());
+    return socket;
+  }
+
+  it('spawns a pty process when a client connects', async () => {
+    await connectAndWaitForPty();
+
+    expect(pty.spawn).toHaveBeenCalledWith(
+      'tmux',
+      ['attach', '-t', 'test-session'],
+      expect.objectContaining({ name: 'xterm-256color', cols: 80, rows: 24 }),
+    );
+  });
+
+  it('passes custom cols/rows from handshake query', async () => {
+    await connectAndWaitForPty({ cols: '120', rows: '40' });
+
+    expect(pty.spawn).toHaveBeenCalledWith(
+      'tmux',
+      ['attach', '-t', 'test-session'],
+      expect.objectContaining({ cols: 120, rows: 40 }),
+    );
+  });
+
+  it('forwards pty data to the client as output events', async () => {
+    await connectAndWaitForPty();
+
+    const dataCallback = mockPty.onData.mock.calls[0][0];
+    const outputPromise = new Promise((resolve) => clientSocket.on('output', resolve));
+
+    dataCallback('hello from pty');
+
+    expect(await outputPromise).toBe('hello from pty');
+  });
+
+  it('writes client input to the pty', async () => {
+    await connectAndWaitForPty();
+
+    clientSocket.emit('input', 'ls -la\n');
+
+    await vi.waitFor(() => expect(mockPty.write).toHaveBeenCalledWith('ls -la\n'));
+  });
+
+  it('resizes the pty on resize events', async () => {
+    await connectAndWaitForPty();
+
+    clientSocket.emit('resize', { cols: 100, rows: 50 });
+
+    await vi.waitFor(() => expect(mockPty.resize).toHaveBeenCalledWith(100, 50));
+  });
+
+  it('ignores invalid resize payloads', async () => {
+    await connectAndWaitForPty();
+
+    clientSocket.emit('resize', null);
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(mockPty.resize).not.toHaveBeenCalled();
+  });
+
+  it('kills the pty when client disconnects', async () => {
+    await connectAndWaitForPty();
+
+    await new Promise((resolve) => {
+      clientSocket.on('disconnect', resolve);
+      clientSocket.disconnect();
+    });
+
+    await vi.waitFor(() => expect(mockPty.kill).toHaveBeenCalled());
+  });
+
+  it('disconnects the client when pty exits', async () => {
+    await connectAndWaitForPty();
+
+    const exitCallback = mockPty.onExit.mock.calls[0][0];
+    const disconnectPromise = new Promise((resolve) => clientSocket.on('disconnect', resolve));
+
+    exitCallback({ exitCode: 0 });
+
+    await disconnectPromise;
+    expect(clientSocket.connected).toBe(false);
   });
 });
