@@ -106,7 +106,7 @@ Project management: a REST API for creating, listing, and deleting projects. A "
 - [x] `DELETE /api/projects/:slug` removes project config but does NOT kill the tmux session
 - [x] "New Project" button in the UI opens a form with project name and directory path (pre-filled with `~/`)
 - [x] Submitting the form creates the project and switches to its terminal view (showing both panes)
-- [ ] Duplicate project names are rejected with a clear error message
+- [x] Duplicate project names are rejected with a clear error message
 - [ ] Unit tests: config CRUD operations, tmux session creation, directory creation, slug generation
 - [ ] E2E test: click New Project, fill form, submit, see terminal panes for new project
 - [ ] Visual test: `aiAssert("a new project form is displayed with name and path input fields on a dark background")`
