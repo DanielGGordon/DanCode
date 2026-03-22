@@ -158,7 +158,7 @@ A command palette overlay triggered by `Ctrl+K`. Shows a fuzzy-searchable list o
 - [x] If no projects exist, the palette shows a message prompting the user to create one
 - [x] Unit tests: fuzzy search filtering logic, project list ordering
 - [x] E2E test: Ctrl+K opens palette, type project name, enter switches, terminals update
-- [ ] Visual test: `aiAssert("a command palette overlay is centered on the screen with a search input and a list of projects")`
+- [x] Visual test: `aiAssert("a command palette overlay is centered on the screen with a search input and a list of projects")`
 
 ---
 
