@@ -21,8 +21,12 @@ DanCode/
 │   ├── src/
 │   │   └── index.js            # Server entry point (Express, Socket.io, placeholder page)
 │   ├── tests/
+│   │   ├── e2e/
+│   │   │   └── placeholder.spec.js  # Playwright E2E test
 │   │   └── server.test.js      # Server unit tests
 │   ├── package.json
+│   ├── playwright.config.js    # Playwright config (system Chromium, webServer on :3001)
+│   ├── vitest.config.js        # Vitest config (excludes e2e tests)
 │   └── README.md
 ├── package.json                # Root workspace config + top-level scripts
 ├── PROJECT_STRUCTURE.md        # This file

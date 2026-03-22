@@ -31,5 +31,6 @@ This is the backend entry point. In later phases it will:
 ```bash
 npm start        # Start server on port 3000
 npm run dev      # Start with file watching
-npm test         # Run tests
+npm test         # Run unit tests (Vitest)
+npm run test:e2e # Run E2E tests (Playwright, uses system Chromium)
 ```

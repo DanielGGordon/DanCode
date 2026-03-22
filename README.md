@@ -32,5 +32,6 @@ npm run dev          # Start server + client concurrently
 ```bash
 npm run dev          # Server (watch) + Client (HMR) concurrently
 npm run build        # Production build (client)
-npm test             # Run unit tests (server)
+npm test             # Run unit tests (Vitest)
+npm run test:e2e     # Run E2E tests (Playwright)
 ```
