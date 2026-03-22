@@ -48,8 +48,10 @@ vi.mock('socket.io-client', () => ({
   })),
 }))
 
-// Mock ResizeObserver
+// Mock ResizeObserver — capture callback so tests can trigger resize events
+let resizeObserverCallback = null
 globalThis.ResizeObserver = class {
+  constructor(cb) { resizeObserverCallback = cb }
   observe() {}
   disconnect() {}
 }
@@ -176,5 +178,37 @@ describe('Terminal', () => {
     expect(handler).toBeDefined()
     handler()
     expect(onFocusCb).toHaveBeenCalled()
+  })
+
+  it('does not emit resize when container is hidden (zero dimensions)', () => {
+    const { getByTestId } = render(<Terminal token="test-token" />)
+    vi.runAllTimers()
+
+    // Simulate container hidden (display: none → offsetWidth/Height = 0)
+    const container = getByTestId('terminal')
+    Object.defineProperty(container, 'offsetWidth', { value: 0, configurable: true })
+    Object.defineProperty(container, 'offsetHeight', { value: 0, configurable: true })
+
+    mockSocketEmit.mockClear()
+    // Trigger the ResizeObserver callback
+    resizeObserverCallback()
+
+    // Should NOT have emitted a resize event
+    expect(mockSocketEmit).not.toHaveBeenCalledWith('resize', expect.anything())
+  })
+
+  it('emits resize when container is visible (non-zero dimensions)', () => {
+    const { getByTestId } = render(<Terminal token="test-token" />)
+    vi.runAllTimers()
+
+    // Simulate visible container
+    const container = getByTestId('terminal')
+    Object.defineProperty(container, 'offsetWidth', { value: 800, configurable: true })
+    Object.defineProperty(container, 'offsetHeight', { value: 600, configurable: true })
+
+    mockSocketEmit.mockClear()
+    resizeObserverCallback()
+
+    expect(mockSocketEmit).toHaveBeenCalledWith('resize', { cols: 80, rows: 24 })
   })
 })

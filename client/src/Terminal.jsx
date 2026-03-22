@@ -74,6 +74,9 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
       })
 
       const handleResize = () => {
+        // Skip resize when container is hidden (display: none) to avoid
+        // sending invalid dimensions to the tmux pane
+        if (container.offsetWidth === 0 && container.offsetHeight === 0) return
         fitAddon.fit()
         socket.emit('resize', { cols: term.cols, rows: term.rows })
       }

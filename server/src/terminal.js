@@ -83,6 +83,7 @@ export function setupTerminalNamespace(io, defaultSession, getAuthToken) {
     socket.on('resize', (payload) => {
       if (payload == null || typeof payload !== 'object') return;
       const { cols, rows } = payload;
+      if (!Number.isInteger(cols) || !Number.isInteger(rows) || cols < 1 || rows < 1) return;
       try {
         ptyProcess.resize(cols, rows);
       } catch {

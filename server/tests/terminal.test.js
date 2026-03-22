@@ -148,6 +148,27 @@ describe('Socket.io /terminal namespace', () => {
     expect(mockPty.resize).not.toHaveBeenCalled();
   });
 
+  it('ignores resize with zero or negative dimensions', async () => {
+    await connectAndWaitForPty();
+
+    clientSocket.emit('resize', { cols: 0, rows: 0 });
+    clientSocket.emit('resize', { cols: -1, rows: 24 });
+    clientSocket.emit('resize', { cols: 80, rows: 0 });
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(mockPty.resize).not.toHaveBeenCalled();
+  });
+
+  it('ignores resize with non-integer dimensions', async () => {
+    await connectAndWaitForPty();
+
+    clientSocket.emit('resize', { cols: 80.5, rows: 24 });
+    clientSocket.emit('resize', { cols: 'abc', rows: 24 });
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(mockPty.resize).not.toHaveBeenCalled();
+  });
+
   it('kills the pty when client disconnects', async () => {
     await connectAndWaitForPty();
 
