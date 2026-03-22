@@ -71,8 +71,8 @@ const TMUX_SESSION = process.env.DANCODE_TMUX_SESSION || 'dancode-test';
 
 let terminalNamespaceRegistered = false;
 
-export async function startServer(port = PORT) {
-  await ensureAuthToken();
+export async function startServer(port = PORT, { tokenPath } = {}) {
+  await ensureAuthToken(tokenPath);
 
   try {
     await ensureSession(TMUX_SESSION);
