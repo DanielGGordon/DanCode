@@ -5,8 +5,10 @@ DanCode/
 ├── client/                     # React + Vite + Tailwind frontend
 │   ├── public/                 # Static assets
 │   ├── src/
-│   │   ├── App.jsx             # Root React component (renders Terminal)
-│   │   ├── App.test.jsx        # App unit tests
+│   │   ├── App.jsx             # Root React component (auth gate: LoginScreen or Terminal)
+│   │   ├── App.test.jsx        # App unit tests (login/terminal conditional rendering)
+│   │   ├── LoginScreen.jsx     # Token input form with submit button
+│   │   ├── LoginScreen.test.jsx # LoginScreen component unit tests
 │   │   ├── Terminal.jsx        # xterm.js terminal connected via Socket.io
 │   │   ├── Terminal.test.jsx   # Terminal component unit tests
 │   │   ├── index.css           # Tailwind + Solarized Dark theme

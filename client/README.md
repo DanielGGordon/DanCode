@@ -14,7 +14,8 @@ The dev server proxies `/api` and `/socket.io` requests to the backend at `http:
 
 ## Public interface
 
-- `App` — Root component, renders a full-viewport Terminal
+- `App` — Root component, checks localStorage for auth token; shows `LoginScreen` if absent, otherwise renders the Terminal view
+- `LoginScreen` — Token input form with submit button; calls `onLogin` callback with the entered token
 - `Terminal` — xterm.js terminal that connects to the backend Socket.io `/terminal` namespace, with Solarized Dark theme and automatic resize
 - `main.jsx` — Entry point, mounts React to `#root`
 
