@@ -45,8 +45,8 @@ async function createProject(page, name) {
   await pathInput.fill(projectPath);
   await page.getByTestId('new-project-submit').click();
 
-  // Wait for PaneLayout to appear with the new project
-  await expect(page.getByTestId('pane-layout')).toBeVisible({ timeout: 15000 });
+  // Wait for a terminal with this project's slug to appear
+  await expect(page.locator(`[data-testid="terminal"][data-slug="${slug}"]`).first()).toBeVisible({ timeout: 15000 });
 
   return { slug, projectPath };
 }
