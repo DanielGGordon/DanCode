@@ -23,15 +23,15 @@ See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the full file tree.
 ## Getting Started
 
 ```bash
-cd server && npm install && npm start   # Backend on http://localhost:3000
-cd client && npm install && npm run dev # Frontend on http://localhost:5173
+npm install          # Install all workspace dependencies
+npm run dev          # Start server + client concurrently
 ```
 
 ## Development
 
 ```bash
-cd server && npm run dev    # Backend with file watching
-cd client && npm run dev    # Frontend with HMR (proxies to backend)
-cd server && npm test       # Run unit tests
-cd client && npm run build  # Production build
+npm run dev          # Server (watch) + Client (HMR) concurrently
+npm run build        # Production build (client)
+npm test             # Run unit tests (server)
+npm run test:e2e     # Run Playwright E2E tests
 ```

@@ -24,6 +24,7 @@ DanCode/
 │   │   └── server.test.js      # Server unit tests
 │   ├── package.json
 │   └── README.md
+├── package.json                # Root workspace config + top-level scripts
 ├── PROJECT_STRUCTURE.md        # This file
 └── README.md                   # Project overview
 ```

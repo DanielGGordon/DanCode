@@ -33,7 +33,7 @@ Scaffold the full project structure and install all dependencies so that subsequ
 - [x] `server/` directory with Express + Socket.io skeleton (starts, listens on port 3000, serves a "DanCode" placeholder page)
 - [x] `client/` directory with React + Vite + Tailwind scaffold (builds, dev server proxies to backend)
 - [x] Solarized Dark color palette defined as Tailwind theme extension
-- [ ] `package.json` at root with scripts: `dev`, `build`, `test`, `test:e2e`
+- [x] `package.json` at root with scripts: `dev`, `build`, `test`, `test:e2e`
 - [ ] Vitest configured with a passing placeholder unit test
 - [ ] Playwright configured with a passing placeholder E2E test (opens browser, sees placeholder page)
 - [ ] Ollama installed and running as a service (`curl http://localhost:11434/api/tags` returns 200)
