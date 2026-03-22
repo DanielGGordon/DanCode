@@ -61,4 +61,23 @@ describe('App', () => {
     // Token should be stored in localStorage
     expect(localStorageMock.setItem).toHaveBeenCalledWith('dancode-auth-token', 'my-token')
   })
+
+  it('returns to login screen after logout', () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    const { getByTestId, queryByTestId } = render(<App />)
+
+    // Should show terminal with logout button
+    expect(getByTestId('terminal')).toBeDefined()
+    expect(getByTestId('logout-button')).toBeDefined()
+
+    // Click logout
+    fireEvent.click(getByTestId('logout-button'))
+
+    // Should return to login screen
+    expect(getByTestId('token-input')).toBeDefined()
+    expect(queryByTestId('terminal')).toBeNull()
+
+    // Token should be removed from localStorage
+    expect(localStorageMock.removeItem).toHaveBeenCalledWith('dancode-auth-token')
+  })
 })
