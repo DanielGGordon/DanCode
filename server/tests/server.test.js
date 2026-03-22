@@ -225,6 +225,18 @@ describe('DanCode server', () => {
       expect(body.error).toContain('already exists');
     });
 
+    it('returns 400 when project name would collide with reserved session', async () => {
+      // Default DANCODE_TMUX_SESSION is 'dancode-test', so slug 'test' is reserved
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ name: 'Test', path: '/tmp/reserved-test' }),
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain('reserved');
+    });
+
     it('returns 401 without auth token', async () => {
       const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
         method: 'POST',

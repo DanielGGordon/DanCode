@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { ensureSession, createProjectSession } from './tmux.js';
 import { setupTerminalNamespace } from './terminal.js';
 import { ensureAuthToken, validateToken } from './auth.js';
-import { validateProjectInput, createProject, getProjectsDir } from './projects.js';
+import { validateProjectInput, createProject, deleteProject, getProjectsDir, slugify } from './projects.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -108,6 +108,12 @@ app.post('/api/projects', async (req, res) => {
     return res.status(400).json({ error: validation.error });
   }
 
+  // Reject slugs that would collide with the server's bootstrap tmux session
+  const slug = slugify(name.trim());
+  if (`dancode-${slug}` === TMUX_SESSION) {
+    return res.status(400).json({ error: `Project name conflicts with a reserved session name` });
+  }
+
   try {
     const project = await createProject(name, path, projectsDir);
 
@@ -115,7 +121,9 @@ app.post('/api/projects', async (req, res) => {
     try {
       await createProjectSession(project.slug, project.path);
     } catch (tmuxErr) {
-      console.error(`Failed to create tmux session for "${project.slug}":`, tmuxErr.message);
+      // Roll back: remove the persisted project config
+      await deleteProject(project.slug, projectsDir);
+      return res.status(500).json({ error: `Failed to create tmux session: ${tmuxErr.message}` });
     }
 
     res.status(201).json(project);
