@@ -7,7 +7,8 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
-const PROJECT_NAME = `Visual Palette ${Date.now()}`;
+const PROJECT_A = `Visual Palette A ${Date.now()}`;
+const PROJECT_B = `Visual Palette B ${Date.now()}`;
 
 function slugify(name) {
   return name
@@ -50,33 +51,35 @@ async function createProject(page, name) {
 }
 
 test.describe('Command palette visual', () => {
-  let slug;
   let token;
-  let projectPath;
+  const created = [];
 
   test.afterEach(async ({ request }) => {
-    if (!token || !slug) return;
-
-    try {
-      await request.delete(`/api/projects/${slug}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-    } catch { /* best-effort */ }
-    try {
-      await execFileAsync('tmux', ['kill-session', '-t', `dancode-${slug}`]);
-    } catch { /* session may not exist */ }
-    if (projectPath) {
+    for (const { slug, projectPath } of created) {
       try {
-        await rm(projectPath, { recursive: true, force: true });
+        await request.delete(`/api/projects/${slug}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
       } catch { /* best-effort */ }
+      try {
+        await execFileAsync('tmux', ['kill-session', '-t', `dancode-${slug}`]);
+      } catch { /* session may not exist */ }
+      if (projectPath) {
+        try {
+          await rm(projectPath, { recursive: true, force: true });
+        } catch { /* best-effort */ }
+      }
     }
   });
 
   test('command palette passes visual assertion', async ({ page, aiAssert }) => {
     token = await login(page);
 
-    // Create a project so the palette has items to display
-    ({ slug, projectPath } = await createProject(page, PROJECT_NAME));
+    // Create two projects so the palette shows a list
+    const a = await createProject(page, PROJECT_A);
+    created.push(a);
+    const b = await createProject(page, PROJECT_B);
+    created.push(b);
 
     // Defocus terminal so Ctrl+K is not captured by xterm
     await page.locator('header').click();
@@ -86,7 +89,7 @@ test.describe('Command palette visual', () => {
     await expect(page.getByTestId('command-palette')).toBeVisible();
     await expect(page.getByTestId('command-palette-input')).toBeVisible();
 
-    await aiAssert('a command palette overlay is centered on the screen with a search input and a list of projects', undefined, {
+    await aiAssert('a command palette overlay is displayed near the top of the screen with a search input and a list of projects', undefined, {
       domIncluded: true,
       screenshotIncluded: true,
     });
