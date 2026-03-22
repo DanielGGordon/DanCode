@@ -22,10 +22,12 @@ DanCode/
 │   │   └── index.js            # Server entry point (Express, Socket.io, placeholder page)
 │   ├── tests/
 │   │   ├── e2e/
+│   │   │   ├── fixture.js      # Playwright + Midscene.js AI fixture (provides aiAssert, etc.)
 │   │   │   └── placeholder.spec.js  # Playwright E2E test
 │   │   └── server.test.js      # Server unit tests
+│   ├── .env                    # Midscene.js config (git-ignored): Ollama endpoint, model settings
 │   ├── package.json
-│   ├── playwright.config.js    # Playwright config (system Chromium, webServer on :3001)
+│   ├── playwright.config.js    # Playwright config (Midscene reporter, system Chromium, webServer on :3001)
 │   ├── vitest.config.js        # Vitest config (excludes e2e tests)
 │   └── README.md
 ├── package.json                # Root workspace config + top-level scripts

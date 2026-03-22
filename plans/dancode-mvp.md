@@ -38,7 +38,7 @@ Scaffold the full project structure and install all dependencies so that subsequ
 - [x] Playwright configured with a passing placeholder E2E test (opens browser, sees placeholder page)
 - [x] Ollama installed and running as a service (`curl http://localhost:11434/api/tags` returns 200)
 - [x] Phi-3.5-Vision model pulled (`ollama pull phi3.5:3.8b-mini-instruct-q4_K_M`)
-- [ ] Midscene.js installed and configured to use local Ollama endpoint
+- [x] Midscene.js installed and configured to use local Ollama endpoint
 - [ ] One passing Midscene visual assertion: `aiAssert("a dark-themed page with the text DanCode is displayed")`
 - [ ] `~/.dancode/` directory created
 

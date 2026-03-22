@@ -26,11 +26,27 @@ This is the backend entry point. In later phases it will:
 - Expose REST API routes for project CRUD and auth
 - Manage tmux session lifecycles
 
+## Testing
+
+### Unit tests (Vitest)
+```bash
+npm test
+```
+
+### E2E tests (Playwright + Midscene.js)
+```bash
+npm run test:e2e
+```
+
+E2E tests use Playwright for browser automation. AI-powered visual assertions are available via Midscene.js, which connects to a local Ollama instance for inference.
+
+**Midscene fixture:** Import `test` and `expect` from `tests/e2e/fixture.js` instead of `@playwright/test` to get access to `aiAssert`, `aiQuery`, and other AI methods.
+
+**Configuration:** Midscene environment variables are in `server/.env` (git-ignored). See `.env` for the Ollama endpoint, model name, and model family settings.
+
 ## Running
 
 ```bash
 npm start        # Start server on port 3000
 npm run dev      # Start with file watching
-npm test         # Run unit tests (Vitest)
-npm run test:e2e # Run E2E tests (Playwright, uses system Chromium)
 ```
