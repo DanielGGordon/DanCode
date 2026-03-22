@@ -101,18 +101,14 @@ export async function createProjectSession(slug, projectPath) {
 export async function createConnectionSession(targetSession, windowIndex, connId) {
   const connSession = `${targetSession}-conn-${connId}`;
 
-  // Create a grouped session sharing windows with the target
+  // Batch all three operations into a single tmux invocation to minimise
+  // process-spawn overhead (saves ~2 fork/exec cycles per pane, significant
+  // on lower-powered hardware like Raspberry Pi).
   await execFileAsync('tmux', [
     'new-session', '-d', '-t', targetSession, '-s', connSession,
-  ]);
-
-  // Hide the status bar so xterm.js shows only terminal content
-  await execFileAsync('tmux', [
+    ';',
     'set', '-t', connSession, 'status', 'off',
-  ]);
-
-  // Select the requested window
-  await execFileAsync('tmux', [
+    ';',
     'select-window', '-t', `${connSession}:${windowIndex}`,
   ]);
 

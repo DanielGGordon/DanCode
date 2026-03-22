@@ -64,6 +64,7 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
         socket = io('/terminal', {
           query,
           auth: { token },
+          transports: ['websocket'],
         })
 
         socket.on('output', (data) => {
