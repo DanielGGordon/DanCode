@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -48,4 +48,20 @@ export async function ensureAuthToken(tokenPath = getTokenPath()) {
 export async function readAuthToken(tokenPath = getTokenPath()) {
   const contents = await readFile(tokenPath, 'utf-8');
   return contents.trim();
+}
+
+/**
+ * Timing-safe comparison of two token strings.
+ * Returns false if either value is not a string or lengths differ.
+ */
+export function validateToken(provided, expected) {
+  if (typeof provided !== 'string' || typeof expected !== 'string') {
+    return false;
+  }
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) {
+    return false;
+  }
+  return timingSafeEqual(a, b);
 }

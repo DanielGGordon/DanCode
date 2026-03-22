@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { ensureSession } from './tmux.js';
 import { setupTerminalNamespace } from './terminal.js';
-import { ensureAuthToken } from './auth.js';
+import { ensureAuthToken, validateToken } from './auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -15,6 +15,10 @@ const PORT = process.env.PORT || 3000;
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer);
+
+let authToken = null;
+
+app.use(express.json());
 
 const placeholderHTML = `<!DOCTYPE html>
 <html lang="en">
@@ -61,6 +65,14 @@ app.get('/', (req, res) => {
   res.type('html').send(placeholderHTML);
 });
 
+app.post('/api/auth/validate', (req, res) => {
+  const { token } = req.body || {};
+  if (!authToken || !validateToken(token, authToken)) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+  res.json({ valid: true });
+});
+
 io.on('connection', (socket) => {
   socket.on('disconnect', () => {});
 });
@@ -72,7 +84,8 @@ const TMUX_SESSION = process.env.DANCODE_TMUX_SESSION || 'dancode-test';
 let terminalNamespaceRegistered = false;
 
 export async function startServer(port = PORT, { tokenPath } = {}) {
-  await ensureAuthToken(tokenPath);
+  const { token } = await ensureAuthToken(tokenPath);
+  authToken = token;
 
   try {
     await ensureSession(TMUX_SESSION);

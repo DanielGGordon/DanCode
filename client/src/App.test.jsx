@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, fireEvent, cleanup } from '@testing-library/react'
+import { render, fireEvent, cleanup, waitFor } from '@testing-library/react'
 import App from './App.jsx'
 
 // Mock Terminal to avoid xterm.js side effects
@@ -18,6 +18,14 @@ const localStorageMock = (() => {
   }
 })()
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock })
+
+function mockFetch(status, body = {}) {
+  return vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+    ok: status >= 200 && status < 300,
+    status,
+    json: () => Promise.resolve(body),
+  })
+}
 
 beforeEach(() => {
   localStorageMock.clear()
@@ -44,7 +52,8 @@ describe('App', () => {
     expect(queryByTestId('token-input')).toBeNull()
   })
 
-  it('transitions from login to terminal after successful login', () => {
+  it('transitions from login to terminal after successful login', async () => {
+    mockFetch(200, { valid: true })
     const { getByTestId, queryByTestId } = render(<App />)
 
     // Should show login
@@ -54,8 +63,10 @@ describe('App', () => {
     fireEvent.change(getByTestId('token-input'), { target: { value: 'my-token' } })
     fireEvent.click(getByTestId('login-submit'))
 
-    // Should now show terminal
-    expect(getByTestId('terminal')).toBeDefined()
+    // Should now show terminal after async validation
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
     expect(queryByTestId('token-input')).toBeNull()
 
     // Token should be stored in localStorage

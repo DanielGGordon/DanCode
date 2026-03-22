@@ -3,7 +3,7 @@ import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { generateToken, ensureAuthToken, readAuthToken } from '../src/auth.js';
+import { generateToken, ensureAuthToken, readAuthToken, validateToken } from '../src/auth.js';
 
 describe('auth token', () => {
   let tempDir;
@@ -83,6 +83,31 @@ describe('auth token', () => {
       expect(existsSync(nestedPath)).toBe(true);
 
       consoleSpy.mockRestore();
+    });
+  });
+
+  describe('validateToken', () => {
+    it('returns true for matching tokens', () => {
+      expect(validateToken('abc123', 'abc123')).toBe(true);
+    });
+
+    it('returns false for non-matching tokens', () => {
+      expect(validateToken('abc123', 'xyz789')).toBe(false);
+    });
+
+    it('returns false for different-length tokens', () => {
+      expect(validateToken('short', 'muchlongertoken')).toBe(false);
+    });
+
+    it('returns false for non-string provided', () => {
+      expect(validateToken(null, 'abc123')).toBe(false);
+      expect(validateToken(undefined, 'abc123')).toBe(false);
+      expect(validateToken(123, 'abc123')).toBe(false);
+    });
+
+    it('returns false for non-string expected', () => {
+      expect(validateToken('abc123', null)).toBe(false);
+      expect(validateToken('abc123', undefined)).toBe(false);
     });
   });
 

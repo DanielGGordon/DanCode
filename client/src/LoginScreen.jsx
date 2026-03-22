@@ -4,7 +4,7 @@ export default function LoginScreen({ onLogin }) {
   const [token, setToken] = useState('')
   const [error, setError] = useState('')
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
     const trimmed = token.trim()
     if (!trimmed) {
@@ -12,7 +12,21 @@ export default function LoginScreen({ onLogin }) {
       return
     }
     setError('')
-    onLogin(trimmed)
+
+    try {
+      const res = await fetch('/api/auth/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: trimmed }),
+      })
+      if (res.ok) {
+        onLogin(trimmed)
+      } else {
+        setError('Invalid token')
+      }
+    } catch {
+      setError('Unable to reach server')
+    }
   }
 
   return (
