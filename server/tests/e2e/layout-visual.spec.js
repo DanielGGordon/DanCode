@@ -29,10 +29,32 @@ function slugify(name) {
  *   3. The background is Solarized Dark (#002b36)
  *   4. The panes are positioned side by side (non-overlapping, similar widths)
  */
-test('visual: two terminal panes displayed side by side with labels on dark solarized background', async ({ page }) => {
-  let slug, token, projectPath;
+test.describe('Layout visual', () => {
+  let slug;
+  let token;
+  let projectPath;
 
-  try {
+  test.afterEach(async ({ request }) => {
+    if (slug && token) {
+      try {
+        await request.delete(`/api/projects/${slug}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch { /* best-effort */ }
+
+      try {
+        await execFileAsync('tmux', ['kill-session', '-t', `dancode-${slug}`]);
+      } catch { /* session may not exist */ }
+    }
+
+    if (projectPath) {
+      try {
+        await rm(projectPath, { recursive: true, force: true });
+      } catch { /* best-effort */ }
+    }
+  });
+
+  test('visual: two terminal panes displayed side by side with labels on dark solarized background', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
 
     // Login
@@ -82,8 +104,8 @@ test('visual: two terminal panes displayed side by side with labels on dark sola
         : true;
 
       return {
-        pane0: { left: rects[0].left, right: rects[0].right, width: rects[0].width, top: rects[0].top },
-        pane1: { left: rects[1].left, right: rects[1].right, width: rects[1].width, top: rects[1].top },
+        pane0: { left: rects[0].left, right: rects[0].right, width: rects[0].width, top: rects[0].top, bottom: rects[0].bottom },
+        pane1: { left: rects[1].left, right: rects[1].right, width: rects[1].width, top: rects[1].top, bottom: rects[1].bottom },
         pane2Hidden,
         viewportWidth: window.innerWidth,
       };
@@ -119,10 +141,16 @@ test('visual: two terminal panes displayed side by side with labels on dark sola
     expect(labels.pane1Label).toBe('Claude');
 
     // 3. Verify Solarized Dark background (#002b36) via screenshot pixel analysis
+    //    Sample from the center of each pane's terminal area (not the toolbar)
     const screenshot = await page.screenshot({ type: 'png' });
     const base64 = screenshot.toString('base64');
 
-    const bgColor = await page.evaluate(async (imgBase64) => {
+    const pane0Center = {
+      x: Math.round((layout.pane0.left + layout.pane0.right) / 2),
+      y: Math.round((layout.pane0.top + layout.pane0.bottom) / 2),
+    };
+
+    const bgColor = await page.evaluate(async ({ imgBase64, sampleX, sampleY }) => {
       const img = new Image();
       img.src = `data:image/png;base64,${imgBase64}`;
       await new Promise((resolve) => { img.onload = resolve; });
@@ -133,36 +161,18 @@ test('visual: two terminal panes displayed side by side with labels on dark sola
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0);
 
-      // Sample from top-left area (toolbar/header background)
-      const [r, g, b] = ctx.getImageData(10, 10, 1, 1).data;
+      // Sample from the center of pane-0's terminal surface
+      const [r, g, b] = ctx.getImageData(sampleX, sampleY, 1, 1).data;
       return { r, g, b };
-    }, base64);
+    }, { imgBase64: base64, sampleX: pane0Center.x, sampleY: pane0Center.y });
 
     // Solarized Dark base03 = #002b36 = RGB(0, 43, 54)
-    // base02 = #073642 = RGB(7, 54, 66) (used for toolbar)
+    // base02 = #073642 = RGB(7, 54, 66) (used for highlights)
     // Allow ±10 tolerance for either shade
     expect(bgColor.r).toBeLessThanOrEqual(17);
     expect(bgColor.g).toBeGreaterThanOrEqual(33);
     expect(bgColor.g).toBeLessThanOrEqual(64);
     expect(bgColor.b).toBeGreaterThanOrEqual(44);
     expect(bgColor.b).toBeLessThanOrEqual(76);
-  } finally {
-    if (slug && token) {
-      try {
-        await page.request.delete(`/api/projects/${slug}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      } catch { /* best-effort */ }
-
-      try {
-        await execFileAsync('tmux', ['kill-session', '-t', `dancode-${slug}`]);
-      } catch { /* session may not exist */ }
-    }
-
-    if (projectPath) {
-      try {
-        await rm(projectPath, { recursive: true, force: true });
-      } catch { /* best-effort */ }
-    }
-  }
+  });
 });
