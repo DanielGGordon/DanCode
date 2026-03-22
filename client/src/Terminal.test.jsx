@@ -60,6 +60,10 @@ beforeEach(() => {
   vi.useFakeTimers()
   vi.clearAllMocks()
   cleanup()
+  // jsdom elements have zero dimensions by default; set non-zero so terminals
+  // treat containers as visible and connect normally in most tests.
+  Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { value: 800, configurable: true })
+  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { value: 600, configurable: true })
 })
 
 afterEach(() => {
@@ -210,5 +214,41 @@ describe('Terminal', () => {
     resizeObserverCallback()
 
     expect(mockSocketEmit).toHaveBeenCalledWith('resize', { cols: 80, rows: 24 })
+  })
+
+  it('defers socket connection when container is hidden at mount', async () => {
+    const { io } = await import('socket.io-client')
+    const { getByTestId } = render(<Terminal token="test-token" />)
+
+    // Make container hidden before the deferred connect fires
+    const container = getByTestId('terminal')
+    Object.defineProperty(container, 'offsetWidth', { value: 0, configurable: true })
+    Object.defineProperty(container, 'offsetHeight', { value: 0, configurable: true })
+
+    vi.runAllTimers()
+    expect(io).not.toHaveBeenCalled()
+  })
+
+  it('connects when a hidden container becomes visible via ResizeObserver', async () => {
+    const { io } = await import('socket.io-client')
+    const { getByTestId } = render(<Terminal token="test-token" />)
+
+    // Start hidden
+    const container = getByTestId('terminal')
+    Object.defineProperty(container, 'offsetWidth', { value: 0, configurable: true })
+    Object.defineProperty(container, 'offsetHeight', { value: 0, configurable: true })
+
+    vi.runAllTimers()
+    expect(io).not.toHaveBeenCalled()
+
+    // Container becomes visible
+    Object.defineProperty(container, 'offsetWidth', { value: 800, configurable: true })
+    Object.defineProperty(container, 'offsetHeight', { value: 600, configurable: true })
+    resizeObserverCallback()
+
+    expect(io).toHaveBeenCalledWith('/terminal', expect.objectContaining({
+      query: { cols: 80, rows: 24 },
+      auth: { token: 'test-token' },
+    }))
   })
 })

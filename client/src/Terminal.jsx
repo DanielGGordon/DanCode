@@ -47,7 +47,6 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     term.open(container)
-    fitAddon.fit()
 
     termRef.current = term
 
@@ -56,29 +55,43 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
     const connectTimer = setTimeout(() => {
       if (disposed) return
 
-      const query = { cols: term.cols, rows: term.rows };
-      if (slug) query.slug = slug;
-      if (pane != null) query.pane = pane;
+      const connect = () => {
+        fitAddon.fit()
+        const query = { cols: term.cols, rows: term.rows };
+        if (slug) query.slug = slug;
+        if (pane != null) query.pane = pane;
 
-      socket = io('/terminal', {
-        query,
-        auth: { token },
-      })
+        socket = io('/terminal', {
+          query,
+          auth: { token },
+        })
 
-      socket.on('output', (data) => {
-        term.write(data)
-      })
+        socket.on('output', (data) => {
+          term.write(data)
+        })
 
-      term.onData((data) => {
-        socket.emit('input', data)
-      })
+        term.onData((data) => {
+          socket.emit('input', data)
+        })
+      }
 
       const handleResize = () => {
-        // Skip resize when container is hidden (display: none) to avoid
+        // Skip when container is hidden (display: none) to avoid
         // sending invalid dimensions to the tmux pane
         if (container.offsetWidth === 0 && container.offsetHeight === 0) return
+        if (!socket) {
+          // Container just became visible — establish the initial connection
+          connect()
+          return
+        }
         fitAddon.fit()
         socket.emit('resize', { cols: term.cols, rows: term.rows })
+      }
+
+      // Only connect immediately if the container is visible;
+      // otherwise wait for the ResizeObserver to detect visibility
+      if (container.offsetWidth > 0 || container.offsetHeight > 0) {
+        connect()
       }
 
       resizeObserver = new ResizeObserver(handleResize)
