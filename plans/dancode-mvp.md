@@ -40,7 +40,7 @@ Scaffold the full project structure and install all dependencies so that subsequ
 - [x] Phi-3.5-Vision model pulled (`ollama pull phi3.5:3.8b-mini-instruct-q4_K_M`)
 - [x] Midscene.js installed and configured to use local Ollama endpoint
 - [x] One passing Midscene visual assertion: `aiAssert("a dark-themed page with the text DanCode is displayed")`
-- [ ] `~/.dancode/` directory created
+- [x] `~/.dancode/` directory created
 
 ---
 
