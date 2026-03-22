@@ -17,7 +17,7 @@ export default defineConfig({
     {
       name: 'frontend',
       use: { baseURL: 'http://localhost:5174' },
-      testMatch: /terminal(?:-visual)?\.spec|auth\.spec/,
+      testMatch: /terminal(?:-visual)?\.spec|auth(?:-visual)?\.spec/,
     },
   ],
   webServer: [

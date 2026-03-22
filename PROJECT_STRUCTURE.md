@@ -33,6 +33,7 @@ DanCode/
 │   │   │   ├── fixture.js      # Playwright + Midscene.js AI fixture (provides aiAssert, etc.)
 │   │   │   ├── placeholder.spec.js  # Playwright E2E test (server placeholder page)
 │   │   │   ├── auth.spec.js          # Playwright E2E test (login flow: login screen → enter token → terminal appears)
+│   │   │   ├── auth-visual.spec.js   # Midscene AI visual assertion test (login form on dark background)
 │   │   │   ├── terminal.spec.js     # Playwright E2E test (xterm.js terminal visibility)
 │   │   │   ├── terminal-visual.spec.js  # Visual assertion: Solarized Dark theme + fills viewport (screenshot pixel analysis)
 │   │   │   └── visual.spec.js  # Midscene AI visual assertion test (DOM-based on Pi 5)
