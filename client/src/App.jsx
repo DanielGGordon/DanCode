@@ -96,6 +96,7 @@ function App() {
     setToken(null)
     setShowNewProject(false)
     setSelectedSlug(null)
+    setProjects([])
   }
 
   if (validating) {
