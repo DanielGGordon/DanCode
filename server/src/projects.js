@@ -47,7 +47,8 @@ export function validateProjectInput(name, path) {
   }
 
   // Path must be absolute; only bare ~ and ~/ are supported (not ~user)
-  if (!path.startsWith('/') && path !== '~' && !path.startsWith('~/')) {
+  const trimmedPath = path.trim();
+  if (!trimmedPath.startsWith('/') && trimmedPath !== '~' && !trimmedPath.startsWith('~/')) {
     return { valid: false, error: 'Project path must be absolute (start with / or ~/)' };
   }
 
@@ -73,6 +74,11 @@ export function resolvePath(p) {
  * Creates the project directory if it does not exist.
  */
 export async function createProject(name, path, projectsDir = getProjectsDir()) {
+  const validation = validateProjectInput(name, path);
+  if (!validation.valid) {
+    throw new Error(validation.error);
+  }
+
   const trimmedName = name.trim();
   const trimmedPath = path.trim();
   const slug = slugify(trimmedName);
