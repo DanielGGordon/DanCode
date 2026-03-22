@@ -70,6 +70,8 @@ function App() {
 
     function handleKeyDown(e) {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        const tag = document.activeElement?.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return
         e.preventDefault()
         setPaletteOpen((prev) => !prev)
       }
