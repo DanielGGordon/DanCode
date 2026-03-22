@@ -8,6 +8,8 @@ const mockDispose = vi.fn()
 const mockLoadAddon = vi.fn()
 const mockOnData = vi.fn()
 const mockOpen = vi.fn()
+const mockFocus = vi.fn()
+const mockOnFocus = vi.fn(() => ({ dispose: vi.fn() }))
 let mockCols = 80
 let mockRows = 24
 
@@ -19,6 +21,8 @@ vi.mock('@xterm/xterm', () => ({
       this.loadAddon = mockLoadAddon
       this.onData = mockOnData
       this.open = mockOpen
+      this.focus = mockFocus
+      this.onFocus = mockOnFocus
     }
     get cols() { return mockCols }
     get rows() { return mockRows }
@@ -146,5 +150,31 @@ describe('Terminal', () => {
     expect(io).toHaveBeenCalledWith('/terminal', expect.objectContaining({
       query: { cols: 80, rows: 24, slug: 'myproj' },
     }))
+  })
+
+  it('focuses the terminal when focused prop is true', () => {
+    render(<Terminal token="test-token" focused={true} />)
+    expect(mockFocus).toHaveBeenCalled()
+  })
+
+  it('does not focus the terminal when focused prop is false', () => {
+    render(<Terminal token="test-token" focused={false} />)
+    expect(mockFocus).not.toHaveBeenCalled()
+  })
+
+  it('registers onFocus listener on the xterm instance', () => {
+    const onFocus = vi.fn()
+    render(<Terminal token="test-token" onFocus={onFocus} />)
+    expect(mockOnFocus).toHaveBeenCalledWith(expect.any(Function))
+  })
+
+  it('calls onFocus callback when xterm fires focus event', () => {
+    const onFocusCb = vi.fn()
+    render(<Terminal token="test-token" onFocus={onFocusCb} />)
+    // Get the handler registered with term.onFocus and call it
+    const handler = mockOnFocus.mock.calls[0]?.[0]
+    expect(handler).toBeDefined()
+    handler()
+    expect(onFocusCb).toHaveBeenCalled()
   })
 })

@@ -1,10 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { io } from 'socket.io-client'
 import '@xterm/xterm/css/xterm.css'
 
-export default function Terminal({ token, slug, pane }) {
+export default function Terminal({ token, slug, pane, focused, onFocus }) {
   const containerRef = useRef(null)
   const termRef = useRef(null)
 
@@ -91,6 +91,21 @@ export default function Terminal({ token, slug, pane }) {
       termRef.current = null
     }
   }, [])
+
+  // Focus the xterm instance when the focused prop becomes true
+  useEffect(() => {
+    if (focused && termRef.current) {
+      termRef.current.focus()
+    }
+  }, [focused])
+
+  // Notify parent when xterm receives native focus (e.g. direct click on terminal canvas)
+  useEffect(() => {
+    const term = termRef.current
+    if (!term || !onFocus) return
+    const disposable = term.onFocus(() => onFocus())
+    return () => disposable.dispose()
+  })
 
   return (
     <div

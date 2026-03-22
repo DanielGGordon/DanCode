@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, cleanup } from '@testing-library/react'
+import { render, cleanup, fireEvent, act } from '@testing-library/react'
 import PaneLayout, { ALL_PANES } from './PaneLayout.jsx'
 
 // Mock Terminal to capture props without xterm.js side effects
@@ -12,6 +12,7 @@ vi.mock('./Terminal.jsx', () => ({
         data-testid="terminal"
         data-slug={props.slug || ''}
         data-pane={props.pane != null ? props.pane : ''}
+        data-focused={props.focused ? 'true' : 'false'}
       >
         Terminal
       </div>
@@ -90,5 +91,74 @@ describe('PaneLayout', () => {
     )
     expect(getByTestId('pane-0').className).toContain('flex-1')
     expect(getByTestId('pane-1').className).toContain('flex-1')
+  })
+
+  it('focuses the first pane by default', () => {
+    render(<PaneLayout token="tok" slug="myproj" />)
+    expect(terminalInstances[0].focused).toBe(true)
+    expect(terminalInstances[1].focused).toBe(false)
+    expect(terminalInstances[2].focused).toBe(false)
+  })
+
+  it('passes onFocus callback to each Terminal', () => {
+    render(<PaneLayout token="tok" slug="myproj" />)
+    terminalInstances.forEach((inst) => {
+      expect(typeof inst.onFocus).toBe('function')
+    })
+  })
+
+  it('switches focus when a pane is clicked', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    // Clear captured instances from initial render
+    terminalInstances.length = 0
+
+    fireEvent.click(getByTestId('pane-1'))
+
+    // After re-render, pane 1 should be focused
+    const pane1Terminal = terminalInstances.find((inst) => inst.pane === 1)
+    const pane0Terminal = terminalInstances.find((inst) => inst.pane === 0)
+    expect(pane1Terminal.focused).toBe(true)
+    expect(pane0Terminal.focused).toBe(false)
+  })
+
+  it('highlights focused pane label with brighter text', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    // Pane 0 is focused by default — its label should have text-base1
+    const pane0Label = getByTestId('pane-0').querySelector('div')
+    expect(pane0Label.className).toContain('text-base1')
+
+    // Pane 1 is not focused — its label should have text-base01
+    const pane1Label = getByTestId('pane-1').querySelector('div')
+    expect(pane1Label.className).toContain('text-base01')
+  })
+
+  it('updates visual highlight when focus changes via click', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    fireEvent.click(getByTestId('pane-2'))
+
+    const pane2Label = getByTestId('pane-2').querySelector('div')
+    expect(pane2Label.className).toContain('text-base1')
+
+    const pane0Label = getByTestId('pane-0').querySelector('div')
+    expect(pane0Label.className).toContain('text-base01')
+  })
+
+  it('updates focus when Terminal fires onFocus callback', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Simulate xterm native focus on pane 2
+    const pane2Inst = terminalInstances.find((inst) => inst.pane === 2)
+    act(() => {
+      pane2Inst.onFocus()
+    })
+
+    // After re-render, pane 2 label should be highlighted
+    const pane2Label = getByTestId('pane-2').querySelector('div')
+    expect(pane2Label.className).toContain('text-base1')
+
+    // And pane 0 label should no longer be highlighted
+    const pane0Label = getByTestId('pane-0').querySelector('div')
+    expect(pane0Label.className).toContain('text-base01')
   })
 })
