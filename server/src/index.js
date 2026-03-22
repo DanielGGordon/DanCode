@@ -20,6 +20,31 @@ let authToken = null;
 
 app.use(express.json());
 
+/**
+ * Express middleware that requires a valid Bearer token on API routes.
+ * Skips /api/auth/validate (the login endpoint).
+ */
+function requireAuth(req, res, next) {
+  // Skip the login/validate endpoint
+  if (req.path === '/auth/validate') {
+    return next();
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Missing or invalid authorization header' });
+  }
+
+  const token = authHeader.slice(7);
+  if (!authToken || !validateToken(token, authToken)) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+
+  next();
+}
+
+app.use('/api', requireAuth);
+
 const placeholderHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>

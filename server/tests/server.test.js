@@ -84,4 +84,45 @@ describe('DanCode server', () => {
       expect(res.status).toBe(401);
     });
   });
+
+  describe('REST auth middleware', () => {
+    it('returns 401 for API routes with no Authorization header', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/some-endpoint`);
+      expect(res.status).toBe(401);
+      const body = await res.json();
+      expect(body.error).toBe('Missing or invalid authorization header');
+    });
+
+    it('returns 401 for API routes with malformed Authorization header', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/some-endpoint`, {
+        headers: { Authorization: 'Token abc123' },
+      });
+      expect(res.status).toBe(401);
+      const body = await res.json();
+      expect(body.error).toBe('Missing or invalid authorization header');
+    });
+
+    it('returns 401 for API routes with invalid Bearer token', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/some-endpoint`, {
+        headers: { Authorization: 'Bearer wrong-token' },
+      });
+      expect(res.status).toBe(401);
+      const body = await res.json();
+      expect(body.error).toBe('Invalid token');
+    });
+
+    it('allows /api/auth/validate without Bearer token', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/auth/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: storedToken }),
+      });
+      expect(res.status).toBe(200);
+    });
+
+    it('does not require auth for non-API routes', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/`);
+      expect(res.status).toBe(200);
+    });
+  });
 });
