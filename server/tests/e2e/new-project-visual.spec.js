@@ -25,6 +25,6 @@ test('new project form passes visual assertion', async ({ page, aiAssert }) => {
 
   await aiAssert('a new project form is displayed with name and path input fields on a dark background', undefined, {
     domIncluded: true,
-    screenshotIncluded: false,
+    screenshotIncluded: true,
   });
 });
