@@ -51,6 +51,9 @@ export default function CommandPalette({ open, onClose, projects, currentSlug, o
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
       setHighlightIndex((i) => (i > 0 ? i - 1 : i))
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      onClose()
     } else if (e.key === 'Enter') {
       e.preventDefault()
       if (filtered.length > 0 && highlightIndex < filtered.length) {

@@ -123,6 +123,24 @@ describe('CommandPalette', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
+  it('calls onClose when Escape is pressed in the input', () => {
+    const onClose = vi.fn()
+    const { getByTestId } = render(
+      <CommandPalette open={true} onClose={onClose} projects={PROJECTS} onSelect={vi.fn()} />
+    )
+    fireEvent.keyDown(getByTestId('command-palette-input'), { key: 'Escape' })
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('does not call onSelect when Escape is pressed', () => {
+    const onSelect = vi.fn()
+    const { getByTestId } = render(
+      <CommandPalette open={true} onClose={vi.fn()} projects={PROJECTS} onSelect={onSelect} />
+    )
+    fireEvent.keyDown(getByTestId('command-palette-input'), { key: 'Escape' })
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
   it('does not call onClose when palette body is clicked', () => {
     const onClose = vi.fn()
     const { getByTestId } = render(
