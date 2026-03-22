@@ -6,6 +6,9 @@ import { dirname, join } from 'node:path';
 import { ensureSession } from './tmux.js';
 import { setupTerminalNamespace } from './terminal.js';
 import { ensureAuthToken, validateToken } from './auth.js';
+import { validateProjectInput, createProject, resolvePath, getProjectsDir } from './projects.js';
+import { mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -17,6 +20,7 @@ const httpServer = createServer(app);
 const io = new Server(httpServer);
 
 let authToken = null;
+let projectsDir = null;
 
 app.use(express.json());
 
@@ -98,6 +102,32 @@ app.post('/api/auth/validate', (req, res) => {
   res.json({ valid: true });
 });
 
+app.post('/api/projects', async (req, res) => {
+  const { name, path } = req.body || {};
+
+  const validation = validateProjectInput(name, path);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.error });
+  }
+
+  try {
+    const project = await createProject(name, path, projectsDir);
+
+    // Create the project directory if it doesn't exist
+    const resolvedPath = resolvePath(path.trim());
+    if (!existsSync(resolvedPath)) {
+      await mkdir(resolvedPath, { recursive: true });
+    }
+
+    res.status(201).json(project);
+  } catch (err) {
+    if (err.message.includes('already exists')) {
+      return res.status(409).json({ error: err.message });
+    }
+    res.status(500).json({ error: 'Failed to create project' });
+  }
+});
+
 io.on('connection', (socket) => {
   socket.on('disconnect', () => {});
 });
@@ -108,9 +138,10 @@ const TMUX_SESSION = process.env.DANCODE_TMUX_SESSION || 'dancode-test';
 
 let terminalNamespaceRegistered = false;
 
-export async function startServer(port = PORT, { tokenPath } = {}) {
+export async function startServer(port = PORT, { tokenPath, projectsDir: projDir } = {}) {
   const { token } = await ensureAuthToken(tokenPath);
   authToken = token;
+  projectsDir = projDir || getProjectsDir();
 
   try {
     await ensureSession(TMUX_SESSION);

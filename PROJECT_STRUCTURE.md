@@ -25,7 +25,8 @@ DanCode/
 ├── server/                     # Express + Socket.io backend
 │   ├── src/
 │   │   ├── auth.js             # Auth token generation and file management (~/.dancode/auth-token)
-│   │   ├── index.js            # Server entry point (Express, Socket.io, placeholder page)
+│   │   ├── index.js            # Server entry point (Express, Socket.io, REST API routes)
+│   │   ├── projects.js         # Project config CRUD (create, list, get, delete) in ~/.dancode/projects/
 │   │   ├── terminal.js         # Socket.io /terminal namespace (node-pty → tmux attach)
 │   │   └── tmux.js             # Tmux session management (ensure, create, check)
 │   ├── tests/
@@ -38,7 +39,8 @@ DanCode/
 │   │   │   ├── terminal-visual.spec.js  # Visual assertion: Solarized Dark theme + fills viewport (screenshot pixel analysis)
 │   │   │   └── visual.spec.js  # Midscene AI visual assertion test (DOM-based on Pi 5)
 │   │   ├── auth.test.js        # Auth token generation and management tests
-│   │   ├── server.test.js      # Server unit tests
+│   │   ├── projects.test.js    # Project config CRUD, slug generation, validation tests
+│   │   ├── server.test.js      # Server unit tests (routes, auth middleware, project API)
 │   │   ├── terminal.test.js    # Socket.io /terminal namespace lifecycle tests
 │   │   └── tmux.test.js        # Tmux session management tests
 │   ├── .env                    # Midscene.js config (git-ignored): Ollama endpoint, model settings

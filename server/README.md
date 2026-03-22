@@ -9,6 +9,7 @@ Serves the DanCode web application and manages WebSocket connections for real-ti
 ## Public interface
 
 - **`GET /`** — Serves the DanCode placeholder page (will be replaced by the React build in production)
+- **`POST /api/projects`** — Create a new project. Accepts `{ name, path }`, validates inputs, writes config to `~/.dancode/projects/<slug>.json`, creates the project directory if needed. Returns 201 with the project object, 400 for validation errors, 409 for duplicates.
 - **Socket.io** — Listens for WebSocket connections on the default namespace
 - **Socket.io `/terminal`** — Accepts connections and spawns a node-pty process attached to `tmux attach -t <session>`. Emits `output` events with terminal data; accepts `input` (keystrokes) and `resize` ({ cols, rows }) events.
 
@@ -26,6 +27,18 @@ Serves the DanCode web application and manages WebSocket connections for real-ti
 - `ensureAuthToken(tokenPath?)` — If the token file doesn't exist, generates a new token, writes it to disk (mode 0600), and logs it to the console. Returns `{ token, created }`.
 - `readAuthToken(tokenPath?)` — Reads and returns the token from disk.
 
+## Exports (src/projects.js)
+
+- `slugify(name)` — Convert a project name to a URL-safe slug (lowercase, hyphens).
+- `getProjectsDir()` — Returns the path to `~/.dancode/projects/`.
+- `getProjectConfigPath(slug, projectsDir?)` — Returns path to a project's config file.
+- `validateProjectInput(name, path)` — Validate project creation inputs. Returns `{ valid, error? }`.
+- `resolvePath(path)` — Resolve a path, expanding `~` to the home directory.
+- `createProject(name, path, projectsDir?)` — Create a project config file. Throws on duplicate. Returns project object.
+- `listProjects(projectsDir?)` — List all configured projects, sorted by name.
+- `getProject(slug, projectsDir?)` — Get a project by slug. Returns null if not found.
+- `deleteProject(slug, projectsDir?)` — Delete a project config. Returns boolean.
+
 ## Exports (src/tmux.js)
 
 - `sessionExists(name)` — Check whether a tmux session exists. Returns `Promise<boolean>`.
@@ -38,10 +51,9 @@ Serves the DanCode web application and manages WebSocket connections for real-ti
 
 ## How it relates to the project
 
-This is the backend entry point. In later phases it will:
+This is the backend entry point. It exposes REST API routes for project CRUD and auth, and manages terminal WebSocket connections. In later phases it will:
 - Serve the React production build from `client/dist/`
-- Expose REST API routes for project CRUD and auth
-- Manage tmux session lifecycles
+- Manage tmux session lifecycles per project
 
 ## Testing
 
