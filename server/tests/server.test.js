@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll, beforeAll } from 'vitest';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -252,6 +252,30 @@ describe('DanCode server', () => {
       Authorization: `Bearer ${storedToken}`,
     });
 
+    // Seed test data directly into the projects dir so this block is self-contained
+    const seededProjects = [
+      { name: 'Alpha Project', slug: 'alpha-project', path: '/tmp/alpha', createdAt: '2025-01-01T00:00:00.000Z' },
+      { name: 'Beta Project', slug: 'beta-project', path: '/tmp/beta', createdAt: '2025-01-02T00:00:00.000Z' },
+      { name: 'Gamma Project', slug: 'gamma-project', path: '/tmp/gamma', createdAt: '2025-01-03T00:00:00.000Z' },
+    ];
+
+    beforeAll(async () => {
+      // Clear any configs left by earlier tests
+      const { readdir, rm: rmFile } = await import('node:fs/promises');
+      const files = await readdir(projectsDir).catch(() => []);
+      for (const f of files) {
+        await rmFile(join(projectsDir, f));
+      }
+      // Write known fixtures
+      const { mkdir } = await import('node:fs/promises');
+      await mkdir(projectsDir, { recursive: true });
+      for (const p of seededProjects) {
+        await writeFile(join(projectsDir, `${p.slug}.json`), JSON.stringify(p, null, 2) + '\n');
+      }
+      // Also write a malformed config to verify tolerance
+      await writeFile(join(projectsDir, 'broken.json'), '{invalid json!!!');
+    });
+
     it('returns a list of configured projects', async () => {
       const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
         headers: authHeaders(),
@@ -259,12 +283,11 @@ describe('DanCode server', () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(Array.isArray(body)).toBe(true);
-      // Previous tests created 'Integration Test', 'Dir Creator', 'Unique Name'
-      expect(body.length).toBeGreaterThanOrEqual(3);
+      expect(body.length).toBe(3);
       const slugs = body.map((p) => p.slug);
-      expect(slugs).toContain('integration-test');
-      expect(slugs).toContain('dir-creator');
-      expect(slugs).toContain('unique-name');
+      expect(slugs).toContain('alpha-project');
+      expect(slugs).toContain('beta-project');
+      expect(slugs).toContain('gamma-project');
     });
 
     it('returns projects sorted alphabetically by name', async () => {
@@ -288,6 +311,17 @@ describe('DanCode server', () => {
         expect(project).toHaveProperty('path');
         expect(project).toHaveProperty('createdAt');
       }
+    });
+
+    it('skips malformed config files instead of failing', async () => {
+      // broken.json was written in beforeAll — endpoint should still succeed
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
+        headers: authHeaders(),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      // Only the 3 valid projects should appear
+      expect(body.length).toBe(3);
     });
 
     it('returns 401 without auth token', async () => {

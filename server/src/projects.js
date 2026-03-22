@@ -125,8 +125,12 @@ export async function listProjects(projectsDir = getProjectsDir()) {
 
   for (const file of files) {
     if (!file.endsWith('.json')) continue;
-    const content = await readFile(join(projectsDir, file), 'utf-8');
-    projects.push(JSON.parse(content));
+    try {
+      const content = await readFile(join(projectsDir, file), 'utf-8');
+      projects.push(JSON.parse(content));
+    } catch {
+      // Skip malformed or unreadable config files
+    }
   }
 
   return projects.sort((a, b) => a.name.localeCompare(b.name));
