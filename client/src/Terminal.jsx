@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { io } from 'socket.io-client'
 import '@xterm/xterm/css/xterm.css'
 
-export default function Terminal() {
+export default function Terminal({ token }) {
   const containerRef = useRef(null)
   const termRef = useRef(null)
 
@@ -58,6 +58,7 @@ export default function Terminal() {
 
       socket = io('/terminal', {
         query: { cols: term.cols, rows: term.rows },
+        auth: { token },
       })
 
       socket.on('output', (data) => {

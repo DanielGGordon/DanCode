@@ -23,6 +23,8 @@ vi.mock('node-pty', () => ({
 import { setupTerminalNamespace } from '../src/terminal.js';
 import pty from 'node-pty';
 
+const TEST_TOKEN = 'a'.repeat(64);
+
 describe('Socket.io /terminal namespace', () => {
   let httpServer, io, port, clientSocket;
 
@@ -40,7 +42,7 @@ describe('Socket.io /terminal namespace', () => {
       });
     });
 
-    setupTerminalNamespace(io, 'test-session');
+    setupTerminalNamespace(io, 'test-session', TEST_TOKEN);
   });
 
   afterEach(async () => {
@@ -52,10 +54,11 @@ describe('Socket.io /terminal namespace', () => {
     await new Promise((resolve) => httpServer.close(resolve));
   });
 
-  function connect(query = {}) {
+  function connect(query = {}, auth = { token: TEST_TOKEN }) {
     clientSocket = ioClient(`http://localhost:${port}/terminal`, {
       forceNew: true,
       query,
+      auth,
     });
     return clientSocket;
   }
@@ -66,6 +69,20 @@ describe('Socket.io /terminal namespace', () => {
     await vi.waitFor(() => expect(mockPty).not.toBeNull());
     return socket;
   }
+
+  it('rejects socket connections with no auth token', async () => {
+    const socket = connect({}, {});
+    const error = await new Promise((resolve) => socket.on('connect_error', resolve));
+    expect(error.message).toBe('Authentication failed');
+    expect(mockPty).toBeNull();
+  });
+
+  it('rejects socket connections with an invalid auth token', async () => {
+    const socket = connect({}, { token: 'wrong-token' });
+    const error = await new Promise((resolve) => socket.on('connect_error', resolve));
+    expect(error.message).toBe('Authentication failed');
+    expect(mockPty).toBeNull();
+  });
 
   it('spawns a pty process when a client connects', async () => {
     await connectAndWaitForPty();

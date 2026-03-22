@@ -1,4 +1,5 @@
 import pty from 'node-pty';
+import { validateToken } from './auth.js';
 
 /**
  * Set up the Socket.io /terminal namespace.
@@ -7,10 +8,19 @@ import pty from 'node-pty';
  *
  * @param {import('socket.io').Server} io - Socket.io server instance
  * @param {string} sessionName - tmux session to attach to
+ * @param {string} authToken - expected auth token
  * @returns {import('socket.io').Namespace} the /terminal namespace
  */
-export function setupTerminalNamespace(io, sessionName) {
+export function setupTerminalNamespace(io, sessionName, authToken) {
   const ns = io.of('/terminal');
+
+  ns.use((socket, next) => {
+    const token = socket.handshake.auth?.token;
+    if (!authToken || !validateToken(token, authToken)) {
+      return next(new Error('Authentication failed'));
+    }
+    next();
+  });
 
   ns.on('connection', (socket) => {
     const cols = socket.handshake.query.cols
