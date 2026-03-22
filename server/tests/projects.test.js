@@ -12,6 +12,7 @@ import {
   createProject,
   listProjects,
   getProject,
+  updateProject,
   deleteProject,
   isValidSlug,
 } from '../src/projects.js';
@@ -288,6 +289,41 @@ describe('project config CRUD', () => {
       await expect(deleteProject('../etc', tempDir)).rejects.toThrow('Invalid project slug');
       await expect(deleteProject('..%2Fauth', tempDir)).rejects.toThrow('Invalid project slug');
       await expect(deleteProject('foo/bar', tempDir)).rejects.toThrow('Invalid project slug');
+    });
+  });
+
+  describe('updateProject', () => {
+    it('merges updates into existing config and returns updated object', async () => {
+      await createProject('Updatable', '/tmp/upd', tempDir);
+      const updated = await updateProject('updatable', { layout: { mode: 'tabs', hiddenPanes: [2] } }, tempDir);
+      expect(updated.name).toBe('Updatable');
+      expect(updated.layout).toEqual({ mode: 'tabs', hiddenPanes: [2] });
+    });
+
+    it('persists updates to disk', async () => {
+      await createProject('Persist', '/tmp/persist', tempDir);
+      await updateProject('persist', { layout: { mode: 'split', hiddenPanes: [1] } }, tempDir);
+      const content = JSON.parse(await readFile(getProjectConfigPath('persist', tempDir), 'utf-8'));
+      expect(content.layout).toEqual({ mode: 'split', hiddenPanes: [1] });
+    });
+
+    it('returns null for non-existent project', async () => {
+      const result = await updateProject('nonexistent', { layout: {} }, tempDir);
+      expect(result).toBeNull();
+    });
+
+    it('rejects path-traversal slugs', async () => {
+      await expect(updateProject('../etc', {}, tempDir)).rejects.toThrow('Invalid project slug');
+    });
+
+    it('preserves existing fields when adding new ones', async () => {
+      await createProject('Keep Fields', '/tmp/keep', tempDir);
+      const updated = await updateProject('keep-fields', { layout: { mode: 'tabs' } }, tempDir);
+      expect(updated.name).toBe('Keep Fields');
+      expect(updated.slug).toBe('keep-fields');
+      expect(updated.path).toBe('/tmp/keep');
+      expect(updated.createdAt).toBeDefined();
+      expect(updated.layout).toEqual({ mode: 'tabs' });
     });
   });
 

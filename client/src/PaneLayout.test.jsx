@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, cleanup, fireEvent, act } from '@testing-library/react'
+import { render, cleanup, fireEvent, act, waitFor } from '@testing-library/react'
 import PaneLayout, { ALL_PANES, MOBILE_BREAKPOINT } from './PaneLayout.jsx'
 
 // Mock Terminal to capture props without xterm.js side effects
@@ -530,5 +530,171 @@ describe('PaneLayout visibility toggles', () => {
     // Last visible pane toggle should have opacity-50 class
     expect(getByTestId('visibility-0').className).toContain('opacity-50')
     expect(getByTestId('visibility-0').className).toContain('cursor-not-allowed')
+  })
+})
+
+describe('PaneLayout config persistence', () => {
+  let fetchMock
+
+  beforeEach(() => {
+    fetchMock = vi.fn()
+    global.fetch = fetchMock
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    delete global.fetch
+  })
+
+  it('fetches saved layout from GET /api/projects/:slug on mount', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        name: 'Test', slug: 'myproj', path: '/tmp',
+        layout: { mode: 'tabs', hiddenPanes: [2] },
+      }),
+    })
+
+    vi.useRealTimers()
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/projects/myproj', {
+        headers: { Authorization: 'Bearer tok' },
+      })
+    })
+  })
+
+  it('restores saved layout mode from config', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        name: 'Test', slug: 'myproj', path: '/tmp',
+        layout: { mode: 'tabs', hiddenPanes: [] },
+      }),
+    })
+
+    vi.useRealTimers()
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // After loading, should be in tabs mode
+    await waitFor(() => {
+      expect(getByTestId('layout-toggle').textContent).toBe('Split')
+    })
+  })
+
+  it('restores hidden panes from config', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        name: 'Test', slug: 'myproj', path: '/tmp',
+        layout: { mode: 'split', hiddenPanes: [1] },
+      }),
+    })
+
+    vi.useRealTimers()
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    await waitFor(() => {
+      expect(getByTestId('pane-1').className).toContain('hidden')
+    })
+  })
+
+  it('saves layout mode change via PATCH', async () => {
+    // Initial load returns no layout
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ name: 'Test', slug: 'myproj', path: '/tmp' }),
+    })
+
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Wait for load to complete
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    // Toggle to tabs
+    fetchMock.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+    fireEvent.click(getByTestId('layout-toggle'))
+
+    // Advance the debounce timer
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
+
+    // Should have sent a PATCH with tabs mode
+    const patchCall = fetchMock.mock.calls.find(
+      ([url, opts]) => opts?.method === 'PATCH'
+    )
+    expect(patchCall).toBeDefined()
+    const [url, opts] = patchCall
+    expect(url).toBe('/api/projects/myproj')
+    const body = JSON.parse(opts.body)
+    expect(body.layout.mode).toBe('tabs')
+  })
+
+  it('saves hidden pane change via PATCH', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ name: 'Test', slug: 'myproj', path: '/tmp' }),
+    })
+
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    fetchMock.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+    fireEvent.click(getByTestId('visibility-2'))
+
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
+
+    const patchCall = fetchMock.mock.calls.find(
+      ([url, opts]) => opts?.method === 'PATCH'
+    )
+    expect(patchCall).toBeDefined()
+    const body = JSON.parse(patchCall[1].body)
+    expect(body.layout.hiddenPanes).toContain(2)
+  })
+
+  it('does not save before initial load completes', () => {
+    // Fetch never resolves
+    fetchMock.mockReturnValueOnce(new Promise(() => {}))
+
+    render(<PaneLayout token="tok" slug="myproj" />)
+
+    act(() => {
+      vi.advanceTimersByTime(500)
+    })
+
+    // Only the initial GET should have been called, no PATCH
+    const patchCalls = fetchMock.mock.calls.filter(
+      ([url, opts]) => opts?.method === 'PATCH'
+    )
+    expect(patchCalls).toHaveLength(0)
+  })
+
+  it('does not fetch config when slug is not provided', () => {
+    render(<PaneLayout token="tok" slug={undefined} />)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('gracefully handles fetch errors on load', async () => {
+    fetchMock.mockRejectedValueOnce(new Error('Network error'))
+
+    vi.useRealTimers()
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Should still render with defaults
+    await waitFor(() => {
+      expect(getByTestId('pane-layout')).toBeDefined()
+    })
+    expect(getByTestId('layout-toggle').textContent).toBe('Tabs')
   })
 })

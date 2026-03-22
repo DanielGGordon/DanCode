@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import Terminal from './Terminal.jsx'
 
 export const ALL_PANES = [
@@ -16,6 +16,8 @@ export default function PaneLayout({ token, slug, panes = ALL_PANES }) {
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT
   )
+  const loadedRef = useRef(false)
+  const saveTimerRef = useRef(null)
 
   useEffect(() => {
     const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
@@ -34,6 +36,51 @@ export default function PaneLayout({ token, slug, panes = ALL_PANES }) {
       }
     }
   }, [])
+
+  // Load saved layout preferences from project config
+  useEffect(() => {
+    if (!slug || !token) return
+    let cancelled = false
+    fetch(`/api/projects/${slug}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((project) => {
+        if (cancelled || !project?.layout) return
+        if (project.layout.mode === 'split' || project.layout.mode === 'tabs') {
+          setLayoutMode(project.layout.mode)
+        }
+        if (Array.isArray(project.layout.hiddenPanes)) {
+          setHiddenPanes(new Set(project.layout.hiddenPanes))
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) loadedRef.current = true
+      })
+    return () => { cancelled = true }
+  }, [slug, token])
+
+  // Save layout preferences when they change (debounced)
+  useEffect(() => {
+    if (!loadedRef.current || !slug || !token) return
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      fetch(`/api/projects/${slug}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          layout: { mode: layoutMode, hiddenPanes: [...hiddenPanes] },
+        }),
+      }).catch(() => {})
+    }, 300)
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
+  }, [layoutMode, hiddenPanes, slug, token])
 
   const effectiveLayout = isMobile ? 'tabs' : layoutMode
 

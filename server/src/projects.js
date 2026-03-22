@@ -160,6 +160,25 @@ export function isValidSlug(slug) {
 }
 
 /**
+ * Update a project config by slug. Merges `updates` into the existing config.
+ * Returns the updated project object, or null if not found.
+ */
+export async function updateProject(slug, updates, projectsDir = getProjectsDir()) {
+  if (!isValidSlug(slug)) {
+    throw new Error('Invalid project slug');
+  }
+  const configPath = getProjectConfigPath(slug, projectsDir);
+  if (!existsSync(configPath)) {
+    return null;
+  }
+  const content = await readFile(configPath, 'utf-8');
+  const project = JSON.parse(content);
+  const updated = { ...project, ...updates };
+  await writeFile(configPath, JSON.stringify(updated, null, 2) + '\n');
+  return updated;
+}
+
+/**
  * Delete a project config by slug. Returns true if deleted, false if not found.
  */
 export async function deleteProject(slug, projectsDir = getProjectsDir()) {

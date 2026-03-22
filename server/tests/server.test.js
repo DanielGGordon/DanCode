@@ -367,4 +367,98 @@ describe('DanCode server', () => {
       expect(res.status).toBe(401);
     });
   });
+
+  describe('GET /api/projects/:slug', () => {
+    const authHeaders = () => ({
+      Authorization: `Bearer ${storedToken}`,
+    });
+
+    it('returns a single project by slug', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/alpha-project`, {
+        headers: authHeaders(),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.name).toBe('Alpha Project');
+      expect(body.slug).toBe('alpha-project');
+    });
+
+    it('returns 404 for non-existent project', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/nonexistent`, {
+        headers: authHeaders(),
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 400 for invalid slug', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/-leading-hyphen`, {
+        headers: authHeaders(),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 401 without auth token', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/alpha-project`);
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe('PATCH /api/projects/:slug', () => {
+    const authHeaders = () => ({
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${storedToken}`,
+    });
+
+    it('updates layout preferences and returns updated project', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/alpha-project`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({ layout: { mode: 'tabs', hiddenPanes: [2] } }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.slug).toBe('alpha-project');
+      expect(body.layout).toEqual({ mode: 'tabs', hiddenPanes: [2] });
+    });
+
+    it('persists layout so GET returns updated data', async () => {
+      await fetch(`http://localhost:${TEST_PORT}/api/projects/beta-project`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({ layout: { mode: 'split', hiddenPanes: [1] } }),
+      });
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/beta-project`, {
+        headers: { Authorization: `Bearer ${storedToken}` },
+      });
+      const body = await res.json();
+      expect(body.layout).toEqual({ mode: 'split', hiddenPanes: [1] });
+    });
+
+    it('returns 400 without layout object', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/alpha-project`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({ something: 'else' }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 404 for non-existent project', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/nonexistent`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({ layout: { mode: 'tabs' } }),
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 401 without auth token', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/alpha-project`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ layout: { mode: 'tabs' } }),
+      });
+      expect(res.status).toBe(401);
+    });
+  });
 });

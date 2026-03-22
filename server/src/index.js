@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { ensureSession, createProjectSession } from './tmux.js';
 import { setupTerminalNamespace } from './terminal.js';
 import { ensureAuthToken, validateToken } from './auth.js';
-import { validateProjectInput, createProject, listProjects, deleteProject, getProjectsDir, slugify, isValidSlug } from './projects.js';
+import { validateProjectInput, createProject, listProjects, getProject, updateProject, deleteProject, getProjectsDir, slugify, isValidSlug } from './projects.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -106,6 +106,42 @@ app.get('/api/projects', async (req, res) => {
     res.json(projects);
   } catch (err) {
     res.status(500).json({ error: 'Failed to list projects' });
+  }
+});
+
+app.get('/api/projects/:slug', async (req, res) => {
+  const { slug } = req.params;
+  if (!isValidSlug(slug)) {
+    return res.status(400).json({ error: 'Invalid project slug' });
+  }
+  try {
+    const project = await getProject(slug, projectsDir);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    res.json(project);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to get project' });
+  }
+});
+
+app.patch('/api/projects/:slug', async (req, res) => {
+  const { slug } = req.params;
+  if (!isValidSlug(slug)) {
+    return res.status(400).json({ error: 'Invalid project slug' });
+  }
+  const { layout } = req.body || {};
+  if (!layout || typeof layout !== 'object') {
+    return res.status(400).json({ error: 'Request body must include a layout object' });
+  }
+  try {
+    const updated = await updateProject(slug, { layout }, projectsDir);
+    if (!updated) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update project' });
   }
 });
 

@@ -11,6 +11,8 @@ Serves the DanCode web application and manages WebSocket connections for real-ti
 - **`GET /`** — Serves the DanCode placeholder page (will be replaced by the React build in production)
 - **`GET /api/projects`** — List all configured projects, sorted alphabetically by name. Returns a JSON array of project objects.
 - **`POST /api/projects`** — Create a new project. Accepts `{ name, path }`, validates inputs, writes config to `~/.dancode/projects/<slug>.json`, creates the project directory if needed, and spins up a tmux session `dancode-<slug>` with two windows (CLI shell + Claude). Returns 201 with the project object, 400 for validation errors, 409 for duplicates.
+- **`GET /api/projects/:slug`** — Get a single project by slug. Returns the project JSON object, or 404 if not found.
+- **`PATCH /api/projects/:slug`** — Update a project's layout preferences. Accepts `{ layout: { mode, hiddenPanes } }`. Returns the updated project object. Used by the frontend to persist split/tabs mode and pane visibility.
 - **`DELETE /api/projects/:slug`** — Delete a project's config file. Does NOT kill the tmux session. Returns 204 on success, 404 if the project does not exist.
 - **Socket.io** — Listens for WebSocket connections on the default namespace
 - **Socket.io `/terminal`** — Accepts connections and spawns a node-pty process attached to `tmux attach -t <session>`. Supports optional `pane` query parameter to connect to a specific tmux window via grouped sessions. Emits `output` events with terminal data; accepts `input` (keystrokes) and `resize` ({ cols, rows }) events.
@@ -39,6 +41,7 @@ Serves the DanCode web application and manages WebSocket connections for real-ti
 - `createProject(name, path, projectsDir?)` — Create a project config file. Throws on duplicate. Returns project object.
 - `listProjects(projectsDir?)` — List all configured projects, sorted by name.
 - `getProject(slug, projectsDir?)` — Get a project by slug. Returns null if not found.
+- `updateProject(slug, updates, projectsDir?)` — Merge updates into an existing project config. Returns the updated object, or null if not found.
 - `deleteProject(slug, projectsDir?)` — Delete a project config. Returns boolean.
 
 ## Exports (src/tmux.js)
