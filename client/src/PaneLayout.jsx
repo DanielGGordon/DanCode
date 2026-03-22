@@ -129,15 +129,16 @@ export default function PaneLayout({ token, slug, panes = ALL_PANES }) {
       {/* Pane content */}
       {effectiveLayout === 'split' ? (
         <div className="flex flex-row flex-1 min-h-0">
-          {visiblePanes.map(({ index, label }) => {
+          {panes.map(({ index, label }) => {
             const isFocused = focusedPane === index
+            const isHidden = hiddenPanes.has(index)
             return (
               <div
                 key={index}
                 data-testid={`pane-${index}`}
                 className={`flex-1 min-w-0 flex flex-col border-r last:border-r-0 ${
                   isFocused ? 'border-blue/50' : 'border-base01/30'
-                }`}
+                } ${isHidden ? 'hidden' : ''}`}
                 onClick={() => handlePaneClick(index)}
               >
                 <div
@@ -164,13 +165,14 @@ export default function PaneLayout({ token, slug, panes = ALL_PANES }) {
         </div>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col" data-testid="tabbed-content">
-          {visiblePanes.map(({ index, label }) => {
+          {panes.map(({ index, label }) => {
             const isActive = focusedPane === index
+            const isHidden = hiddenPanes.has(index)
             return (
               <div
                 key={index}
                 data-testid={`pane-${index}`}
-                className={`flex-1 min-h-0 flex flex-col ${isActive ? '' : 'hidden'}`}
+                className={`flex-1 min-h-0 flex flex-col ${isActive && !isHidden ? '' : 'hidden'}`}
               >
                 <Terminal
                   token={token}

@@ -426,15 +426,15 @@ describe('PaneLayout visibility toggles', () => {
   })
 
   it('hides a pane when its visibility toggle is clicked', () => {
-    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
 
     fireEvent.click(getByTestId('visibility-1'))
 
-    // Pane 1 (Claude) should no longer be rendered in split mode
-    expect(queryByTestId('pane-1')).toBeNull()
+    // Pane 1 (Claude) should be hidden via CSS but still mounted
+    expect(getByTestId('pane-1').className).toContain('hidden')
     // Panes 0 and 2 should still be visible
-    expect(getByTestId('pane-0')).toBeDefined()
-    expect(getByTestId('pane-2')).toBeDefined()
+    expect(getByTestId('pane-0').className).not.toContain('hidden')
+    expect(getByTestId('pane-2').className).not.toContain('hidden')
   })
 
   it('shows a hidden pane when its visibility toggle is clicked again', () => {
@@ -495,15 +495,15 @@ describe('PaneLayout visibility toggles', () => {
     expect(pane0Label.className).toContain('text-base1')
   })
 
-  it('only renders Terminal components for visible panes', () => {
+  it('keeps hidden pane Terminals mounted to preserve session state', () => {
     const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
     terminalInstances.length = 0
 
     fireEvent.click(getByTestId('visibility-2'))
 
-    // Should only have 2 Terminal instances after re-render
-    expect(terminalInstances).toHaveLength(2)
-    expect(terminalInstances.map((i) => i.pane)).toEqual([0, 1])
+    // All 3 Terminals should still be mounted (hidden via CSS, not unmounted)
+    expect(terminalInstances).toHaveLength(3)
+    expect(terminalInstances.map((i) => i.pane)).toEqual([0, 1, 2])
   })
 
   it('works with tabbed mode — hidden panes have no tab', () => {
