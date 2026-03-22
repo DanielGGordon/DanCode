@@ -159,6 +159,14 @@ function App() {
       />
       <header className="flex items-center px-4 py-2 bg-base02 border-b border-base01/30">
         <h1 className="text-sm font-semibold text-base1 tracking-wide">DanCode</h1>
+        {(() => {
+          const currentProject = selectedSlug && Array.isArray(projects) ? projects.find((p) => p.slug === selectedSlug) : null
+          return currentProject ? (
+            <span data-testid="header-project-name" className="ml-3 text-sm text-base0 border-l border-base01/30 pl-3">
+              {currentProject.name}
+            </span>
+          ) : null
+        })()}
         <button
           onClick={() => setShowNewProject(true)}
           data-testid="new-project-button"

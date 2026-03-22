@@ -482,6 +482,45 @@ describe('App', () => {
     expect(getByTestId('pane-layout').dataset.slug).toBe('my-project')
   })
 
+  it('shows current project name in header bar when a project is selected', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (url === '/api/projects') {
+        return { ok: true, status: 200, json: () => Promise.resolve([{ slug: 'sidebar-project', name: 'My Project', path: '/tmp' }]) }
+      }
+      return { ok: true, status: 200, json: () => Promise.resolve({}) }
+    })
+    const { getByTestId, queryByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    // No project name shown initially
+    expect(queryByTestId('header-project-name')).toBeNull()
+
+    // Select a project via sidebar
+    fireEvent.click(getByTestId('mock-sidebar-select'))
+
+    await waitFor(() => {
+      expect(getByTestId('header-project-name')).toBeDefined()
+    })
+    expect(getByTestId('header-project-name').textContent).toBe('My Project')
+    fetchSpy.mockRestore()
+  })
+
+  it('does not show project name in header when no project is selected', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
+    const { getByTestId, queryByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    expect(queryByTestId('header-project-name')).toBeNull()
+  })
+
   it('sidebar and command palette coexist — both switch projects in the same session', async () => {
     localStorageMock.setItem('dancode-auth-token', 'test-token')
     mockFetch(200, { valid: true })
