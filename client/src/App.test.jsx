@@ -28,6 +28,7 @@ vi.mock('./CommandPalette.jsx', () => ({
     <div data-testid="command-palette">
       <button data-testid="mock-palette-close" onClick={onClose}>Close</button>
       <button data-testid="mock-palette-select" onClick={() => onSelect('my-project')}>Select</button>
+      <button data-testid="mock-palette-select-other" onClick={() => onSelect('other-project')}>Select Other</button>
     </div>
   ) : null,
 }))
@@ -282,6 +283,54 @@ describe('App', () => {
     fireEvent.click(getByTestId('mock-palette-select'))
 
     expect(getByTestId('pane-layout')).toBeDefined()
+    expect(getByTestId('pane-layout').dataset.slug).toBe('my-project')
+  })
+
+  it('switches between projects via command palette', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
+    const { getByTestId, queryByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    // Select first project
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.click(getByTestId('mock-palette-select'))
+    expect(getByTestId('pane-layout').dataset.slug).toBe('my-project')
+
+    // Palette should be closed after selection
+    expect(queryByTestId('command-palette')).toBeNull()
+
+    // Open palette again and select a different project
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.click(getByTestId('mock-palette-select-other'))
+
+    // Should show pane layout for the new project
+    expect(getByTestId('pane-layout').dataset.slug).toBe('other-project')
+    expect(queryByTestId('command-palette')).toBeNull()
+  })
+
+  it('hides new project form when switching projects via palette', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
+    const { getByTestId, queryByTestId } = render(<App />)
+
+    await waitFor(() => {
+      expect(getByTestId('terminal')).toBeDefined()
+    })
+
+    // Open new project form
+    fireEvent.click(getByTestId('new-project-button'))
+    expect(getByTestId('new-project-form')).toBeDefined()
+
+    // Open palette and select a project while form is open
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.click(getByTestId('mock-palette-select'))
+
+    // Form should be hidden, pane layout should show
+    expect(queryByTestId('new-project-form')).toBeNull()
     expect(getByTestId('pane-layout').dataset.slug).toBe('my-project')
   })
 })

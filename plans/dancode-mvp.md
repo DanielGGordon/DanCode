@@ -152,7 +152,7 @@ A command palette overlay triggered by `Ctrl+K`. Shows a fuzzy-searchable list o
 - [x] All projects are listed below the input, filtered in real-time as the user types
 - [x] Arrow keys navigate the list, Enter selects the highlighted project
 - [x] Escape or clicking outside closes the palette without switching
-- [ ] Selecting a project: disconnects current pane sockets, connects to the new project's panes, updates the UI
+- [x] Selecting a project: disconnects current pane sockets, connects to the new project's panes, updates the UI
 - [ ] Current project is visually indicated (highlighted or marked) in the list
 - [ ] Switching is fast — terminal content for the new project appears within 1-2 seconds
 - [ ] If no projects exist, the palette shows a message prompting the user to create one
