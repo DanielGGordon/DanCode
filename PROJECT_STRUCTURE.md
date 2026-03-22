@@ -23,7 +23,8 @@ DanCode/
 │   ├── tests/
 │   │   ├── e2e/
 │   │   │   ├── fixture.js      # Playwright + Midscene.js AI fixture (provides aiAssert, etc.)
-│   │   │   └── placeholder.spec.js  # Playwright E2E test
+│   │   │   ├── placeholder.spec.js  # Playwright E2E test
+│   │   │   └── visual.spec.js  # Midscene AI visual assertion test (DOM-based on Pi 5)
 │   │   └── server.test.js      # Server unit tests
 │   ├── .env                    # Midscene.js config (git-ignored): Ollama endpoint, model settings
 │   ├── package.json

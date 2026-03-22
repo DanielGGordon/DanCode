@@ -46,7 +46,7 @@ const placeholderHTML = `<!DOCTYPE html>
     }
   </style>
 </head>
-<body>
+<body data-theme="dark">
   <div class="container">
     <h1>DanCode</h1>
     <p>Web-Based Project Terminal Manager</p>
