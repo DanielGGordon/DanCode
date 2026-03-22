@@ -198,7 +198,7 @@ The current project name is displayed in a top header bar. Clicking it reveals a
 - [x] A header bar spans the top of the screen showing the current project name
 - [x] Clicking the project name opens a dropdown listing all projects
 - [x] Selecting a project from the dropdown switches to it
-- [ ] Active project is visually distinct in the dropdown (bold, checkmark, or similar)
+- [x] Active project is visually distinct in the dropdown (bold, checkmark, or similar)
 - [ ] Dropdown closes on selection or when clicking outside
 - [ ] Header bar style matches Solarized Dark theme — subtle, not visually heavy
 - [ ] All three switching mechanisms (palette, sidebar, dropdown) coexist and work independently
