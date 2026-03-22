@@ -15,9 +15,17 @@ export default defineConfig({
       use: { browserName: 'chromium' },
     },
   ],
-  webServer: {
-    command: 'PORT=3001 node src/index.js',
-    port: 3001,
-    reuseExistingServer: false,
-  },
+  webServer: [
+    {
+      command: 'PORT=3001 node src/index.js',
+      port: 3001,
+      reuseExistingServer: false,
+    },
+    {
+      command: 'VITE_BACKEND_PORT=3001 npx vite --port 5174',
+      cwd: '../client',
+      port: 5174,
+      reuseExistingServer: false,
+    },
+  ],
 });

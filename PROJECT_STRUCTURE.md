@@ -28,7 +28,8 @@ DanCode/
 │   ├── tests/
 │   │   ├── e2e/
 │   │   │   ├── fixture.js      # Playwright + Midscene.js AI fixture (provides aiAssert, etc.)
-│   │   │   ├── placeholder.spec.js  # Playwright E2E test
+│   │   │   ├── placeholder.spec.js  # Playwright E2E test (server placeholder page)
+│   │   │   ├── terminal.spec.js     # Playwright E2E test (xterm.js terminal visibility)
 │   │   │   └── visual.spec.js  # Midscene AI visual assertion test (DOM-based on Pi 5)
 │   │   ├── server.test.js      # Server unit tests
 │   │   ├── terminal.test.js    # Socket.io /terminal namespace lifecycle tests
