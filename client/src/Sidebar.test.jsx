@@ -23,9 +23,9 @@ describe('Sidebar', () => {
 
   it('lists all projects by name', () => {
     const { getByTestId } = render(<Sidebar projects={PROJECTS} currentSlug={null} />)
-    expect(getByTestId('sidebar-project-alpha').textContent).toBe('Alpha')
-    expect(getByTestId('sidebar-project-beta').textContent).toBe('Beta')
-    expect(getByTestId('sidebar-project-gamma').textContent).toBe('Gamma')
+    expect(getByTestId('sidebar-project-alpha').textContent).toContain('Alpha')
+    expect(getByTestId('sidebar-project-beta').textContent).toContain('Beta')
+    expect(getByTestId('sidebar-project-gamma').textContent).toContain('Gamma')
   })
 
   it('renders a project list element', () => {
@@ -87,5 +87,55 @@ describe('Sidebar', () => {
     const { getByTestId } = render(<Sidebar projects={PROJECTS} currentSlug={null} />)
     // Should not throw
     fireEvent.click(getByTestId('sidebar-project-alpha'))
+  })
+
+  describe('tmux status indicator', () => {
+    it('shows a status dot for each project', () => {
+      const { getByTestId } = render(<Sidebar projects={PROJECTS} currentSlug={null} />)
+      for (const p of PROJECTS) {
+        const dot = getByTestId(`sidebar-status-${p.slug}`)
+        expect(dot).toBeDefined()
+        expect(dot.tagName).toBe('SPAN')
+      }
+    })
+
+    it('shows green dot when tmux session is running', () => {
+      const tmuxStatus = { alpha: true, beta: false, gamma: true }
+      const { getByTestId } = render(
+        <Sidebar projects={PROJECTS} currentSlug={null} tmuxStatus={tmuxStatus} />
+      )
+      const alphaDot = getByTestId('sidebar-status-alpha')
+      expect(alphaDot.className).toContain('bg-green')
+      expect(alphaDot.title).toBe('tmux session running')
+    })
+
+    it('shows dim dot when tmux session is not running', () => {
+      const tmuxStatus = { alpha: true, beta: false, gamma: true }
+      const { getByTestId } = render(
+        <Sidebar projects={PROJECTS} currentSlug={null} tmuxStatus={tmuxStatus} />
+      )
+      const betaDot = getByTestId('sidebar-status-beta')
+      expect(betaDot.className).toContain('bg-base01/40')
+      expect(betaDot.className).not.toContain('bg-green')
+      expect(betaDot.title).toBe('no tmux session')
+    })
+
+    it('defaults to not running when tmuxStatus is undefined', () => {
+      const { getByTestId } = render(
+        <Sidebar projects={PROJECTS} currentSlug={null} />
+      )
+      const alphaDot = getByTestId('sidebar-status-alpha')
+      expect(alphaDot.className).toContain('bg-base01/40')
+      expect(alphaDot.className).not.toContain('bg-green')
+    })
+
+    it('defaults to not running when project slug is missing from tmuxStatus', () => {
+      const tmuxStatus = { alpha: true }
+      const { getByTestId } = render(
+        <Sidebar projects={PROJECTS} currentSlug={null} tmuxStatus={tmuxStatus} />
+      )
+      const betaDot = getByTestId('sidebar-status-beta')
+      expect(betaDot.className).toContain('bg-base01/40')
+    })
   })
 })

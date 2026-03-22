@@ -15,6 +15,7 @@ function App() {
   const [selectedSlug, setSelectedSlug] = useState(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [projects, setProjects] = useState([])
+  const [tmuxStatus, setTmuxStatus] = useState({})
 
   useEffect(() => {
     if (!token) return
@@ -61,9 +62,24 @@ function App() {
     } catch {}
   }, [token])
 
+  // Fetch tmux session status for all projects
+  const fetchTmuxStatus = useCallback(async () => {
+    if (!token) return
+    try {
+      const res = await fetch('/api/tmux-status', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setTmuxStatus(data)
+      }
+    } catch {}
+  }, [token])
+
   useEffect(() => {
     fetchProjects()
-  }, [fetchProjects])
+    fetchTmuxStatus()
+  }, [fetchProjects, fetchTmuxStatus])
 
   // Ctrl+K keyboard shortcut for command palette
   useEffect(() => {
@@ -97,6 +113,7 @@ function App() {
     setShowNewProject(false)
     setSelectedSlug(null)
     setProjects([])
+    setTmuxStatus({})
   }
 
   if (validating) {
@@ -111,6 +128,7 @@ function App() {
     setShowNewProject(false)
     setSelectedSlug(project.slug)
     fetchProjects()
+    fetchTmuxStatus()
   }
 
   function handlePaletteSelect(slug) {
@@ -155,6 +173,7 @@ function App() {
           projects={projects}
           currentSlug={selectedSlug}
           onSelect={handleSidebarSelect}
+          tmuxStatus={tmuxStatus}
         />
         <main className="flex-1 min-h-0">
           {showNewProject ? (

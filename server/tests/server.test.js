@@ -368,6 +368,42 @@ describe('DanCode server', () => {
     });
   });
 
+  describe('GET /api/tmux-status', () => {
+    const authHeaders = () => ({
+      Authorization: `Bearer ${storedToken}`,
+    });
+
+    it('returns an object mapping slugs to booleans', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/tmux-status`, {
+        headers: authHeaders(),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(typeof body).toBe('object');
+      expect(Array.isArray(body)).toBe(false);
+      // Each value should be a boolean
+      for (const val of Object.values(body)) {
+        expect(typeof val).toBe('boolean');
+      }
+    });
+
+    it('includes all configured project slugs', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/tmux-status`, {
+        headers: authHeaders(),
+      });
+      const body = await res.json();
+      const slugs = Object.keys(body);
+      expect(slugs).toContain('alpha-project');
+      expect(slugs).toContain('beta-project');
+      expect(slugs).toContain('gamma-project');
+    });
+
+    it('returns 401 without auth token', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/tmux-status`);
+      expect(res.status).toBe(401);
+    });
+  });
+
   describe('GET /api/projects/:slug', () => {
     const authHeaders = () => ({
       Authorization: `Bearer ${storedToken}`,

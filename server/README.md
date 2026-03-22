@@ -13,6 +13,7 @@ Serves the DanCode web application and manages WebSocket connections for real-ti
 - **`POST /api/projects`** — Create a new project. Accepts `{ name, path }`, validates inputs, writes config to `~/.dancode/projects/<slug>.json`, creates the project directory if needed, and spins up a tmux session `dancode-<slug>` with two windows (CLI shell + Claude). Returns 201 with the project object, 400 for validation errors, 409 for duplicates.
 - **`GET /api/projects/:slug`** — Get a single project by slug. Returns the project JSON object, or 404 if not found.
 - **`PATCH /api/projects/:slug`** — Update a project's layout preferences. Accepts `{ layout: { mode, hiddenPanes } }`. Returns the updated project object. Used by the frontend to persist split/tabs mode and pane visibility.
+- **`GET /api/tmux-status`** — Returns a JSON object mapping each project slug to a boolean indicating whether its tmux session (`dancode-<slug>`) is currently running. Used by the sidebar to show status dots.
 - **`DELETE /api/projects/:slug`** — Delete a project's config file. Does NOT kill the tmux session. Returns 204 on success, 404 if the project does not exist.
 - **Socket.io** — Listens for WebSocket connections on the default namespace
 - **Socket.io `/terminal`** — Accepts connections and spawns a node-pty process attached to `tmux attach -t <session>`. Supports optional `pane` query parameter to connect to a specific tmux window via grouped sessions. Emits `output` events with terminal data; accepts `input` (keystrokes) and `resize` ({ cols, rows }) events.

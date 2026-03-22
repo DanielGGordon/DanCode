@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { Server } from 'socket.io';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { ensureSession, createProjectSession } from './tmux.js';
+import { ensureSession, createProjectSession, sessionExists } from './tmux.js';
 import { setupTerminalNamespace } from './terminal.js';
 import { ensureAuthToken, validateToken } from './auth.js';
 import { validateProjectInput, createProject, listProjects, getProject, updateProject, deleteProject, getProjectsDir, slugify, isValidSlug } from './projects.js';
@@ -106,6 +106,21 @@ app.get('/api/projects', async (req, res) => {
     res.json(projects);
   } catch (err) {
     res.status(500).json({ error: 'Failed to list projects' });
+  }
+});
+
+app.get('/api/tmux-status', async (req, res) => {
+  try {
+    const projects = await listProjects(projectsDir);
+    const status = {};
+    await Promise.all(
+      projects.map(async (p) => {
+        status[p.slug] = await sessionExists(`dancode-${p.slug}`);
+      })
+    );
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to check tmux status' });
   }
 });
 
