@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('xterm.js terminal element is visible', async ({ page }) => {
-  await page.goto('http://localhost:5174/');
+  await page.goto('/');
 
   // Wait for the terminal container (React component) to be visible
   const terminal = page.getByTestId('terminal');

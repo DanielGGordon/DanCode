@@ -6,13 +6,18 @@ export default defineConfig({
   retries: 0,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:3001',
     channel: 'chromium',
   },
   projects: [
     {
-      name: 'chromium',
-      use: { browserName: 'chromium' },
+      name: 'backend',
+      use: { baseURL: 'http://localhost:3001' },
+      testMatch: /placeholder\.spec|visual\.spec/,
+    },
+    {
+      name: 'frontend',
+      use: { baseURL: 'http://localhost:5174' },
+      testMatch: /terminal\.spec/,
     },
   ],
   webServer: [
