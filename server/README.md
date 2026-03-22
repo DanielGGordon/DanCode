@@ -10,10 +10,10 @@ Serves the DanCode web application and manages WebSocket connections for real-ti
 
 - **`GET /`** — Serves the DanCode placeholder page (will be replaced by the React build in production)
 - **`GET /api/projects`** — List all configured projects, sorted alphabetically by name. Returns a JSON array of project objects.
-- **`POST /api/projects`** — Create a new project. Accepts `{ name, path }`, validates inputs, writes config to `~/.dancode/projects/<slug>.json`, creates the project directory if needed, and spins up a tmux session `dancode-<slug>` with two panes (shell + Claude). Returns 201 with the project object, 400 for validation errors, 409 for duplicates.
+- **`POST /api/projects`** — Create a new project. Accepts `{ name, path }`, validates inputs, writes config to `~/.dancode/projects/<slug>.json`, creates the project directory if needed, and spins up a tmux session `dancode-<slug>` with two windows (CLI shell + Claude). Returns 201 with the project object, 400 for validation errors, 409 for duplicates.
 - **`DELETE /api/projects/:slug`** — Delete a project's config file. Does NOT kill the tmux session. Returns 204 on success, 404 if the project does not exist.
 - **Socket.io** — Listens for WebSocket connections on the default namespace
-- **Socket.io `/terminal`** — Accepts connections and spawns a node-pty process attached to `tmux attach -t <session>`. Emits `output` events with terminal data; accepts `input` (keystrokes) and `resize` ({ cols, rows }) events.
+- **Socket.io `/terminal`** — Accepts connections and spawns a node-pty process attached to `tmux attach -t <session>`. Supports optional `pane` query parameter to connect to a specific tmux window via grouped sessions. Emits `output` events with terminal data; accepts `input` (keystrokes) and `resize` ({ cols, rows }) events.
 
 ## Exports (src/index.js)
 
@@ -46,11 +46,13 @@ Serves the DanCode web application and manages WebSocket connections for real-ti
 - `sessionExists(name)` — Check whether a tmux session exists. Returns `Promise<boolean>`.
 - `createSession(name)` — Create a detached tmux session.
 - `ensureSession(name)` — Ensure a tmux session exists, creating it if needed. Returns `Promise<{created: boolean}>`.
-- `createProjectSession(slug, projectPath)` — Create a tmux session `dancode-<slug>` with two panes: pane 0 is a shell at the project directory, pane 1 runs `claude --dangerously-skip-permissions` at the project directory. Returns `Promise<{sessionName, created}>`.
+- `createProjectSession(slug, projectPath)` — Create a tmux session `dancode-<slug>` with two windows: window 0 (`cli`) is a shell at the project directory, window 1 (`claude`) runs `claude --dangerously-skip-permissions` at the project directory. Returns `Promise<{sessionName, created}>`.
+- `createConnectionSession(targetSession, windowIndex, connId)` — Create a grouped tmux session for viewing a single window independently. Used by the multi-pane web UI. Returns `Promise<string>` (the grouped session name).
+- `destroyConnectionSession(connSession)` — Destroy a grouped connection session. Safe to call if already gone.
 
 ## Exports (src/terminal.js)
 
-- `setupTerminalNamespace(io, sessionName)` — Sets up the `/terminal` Socket.io namespace. Each connecting client gets a node-pty process attached to `tmux attach -t <sessionName>`. Returns the namespace.
+- `setupTerminalNamespace(io, sessionName, getAuthToken)` — Sets up the `/terminal` Socket.io namespace. Each connecting client gets a node-pty process attached to `tmux attach -t <sessionName>`. When a `pane` query parameter is provided, creates a grouped tmux session for isolated single-window access. Returns the namespace.
 
 ## How it relates to the project
 

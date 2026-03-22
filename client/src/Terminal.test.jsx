@@ -128,4 +128,23 @@ describe('Terminal', () => {
     // io should not have been called since unmount cancelled the timer
     expect(io).not.toHaveBeenCalled()
   })
+
+  it('passes pane query parameter when pane prop is provided', async () => {
+    const { io } = await import('socket.io-client')
+    render(<Terminal token="test-token" slug="myproj" pane={1} />)
+    vi.runAllTimers()
+    expect(io).toHaveBeenCalledWith('/terminal', expect.objectContaining({
+      query: { cols: 80, rows: 24, slug: 'myproj', pane: 1 },
+      auth: { token: 'test-token' },
+    }))
+  })
+
+  it('does not include pane in query when pane prop is not provided', async () => {
+    const { io } = await import('socket.io-client')
+    render(<Terminal token="test-token" slug="myproj" />)
+    vi.runAllTimers()
+    expect(io).toHaveBeenCalledWith('/terminal', expect.objectContaining({
+      query: { cols: 80, rows: 24, slug: 'myproj' },
+    }))
+  })
 })

@@ -41,9 +41,12 @@ export async function ensureSession(name) {
 }
 
 /**
- * Create a tmux session for a DanCode project with two panes:
- *   - Pane 0: shell at the project directory
- *   - Pane 1: claude --dangerously-skip-permissions at the project directory
+ * Create a tmux session for a DanCode project with two windows:
+ *   - Window 0 (CLI): shell at the project directory
+ *   - Window 1 (Claude): claude --dangerously-skip-permissions at the project directory
+ *
+ * Uses separate windows (not panes) so each can be independently attached
+ * via grouped sessions for the multi-pane web UI.
  *
  * If a session with the name `dancode-<slug>` already exists, it is reused.
  *
@@ -58,21 +61,74 @@ export async function createProjectSession(slug, projectPath) {
     return { sessionName, created: false };
   }
 
-  // Create session with pane 0 at the project path
+  // Create session with window 0 (CLI) at the project path
   await execFileAsync('tmux', [
-    'new-session', '-d', '-s', sessionName, '-c', projectPath,
+    'new-session', '-d', '-s', sessionName, '-n', 'cli', '-c', projectPath,
   ]);
 
-  // Split horizontally to create pane 1 at the project path
+  // Create window 1 (Claude) at the project path
   await execFileAsync('tmux', [
-    'split-window', '-t', sessionName, '-h', '-c', projectPath,
+    'new-window', '-t', sessionName, '-n', 'claude', '-c', projectPath,
   ]);
 
-  // Run claude in pane 1
+  // Run claude in window 1
   await execFileAsync('tmux', [
-    'send-keys', '-t', `${sessionName}:0.1`,
+    'send-keys', '-t', `${sessionName}:claude`,
     'claude --dangerously-skip-permissions', 'Enter',
   ]);
 
+  // Select window 0 so the base session defaults to CLI
+  await execFileAsync('tmux', [
+    'select-window', '-t', `${sessionName}:cli`,
+  ]);
+
   return { sessionName, created: true };
+}
+
+/**
+ * Create a grouped tmux session for a single-window connection.
+ *
+ * Grouped sessions share the same windows as the target session but have
+ * independent view state (selected window, status bar, etc.). This lets
+ * multiple browser terminals each display a different window from the same
+ * underlying tmux session.
+ *
+ * @param {string} targetSession - the base session to group with (e.g. `dancode-myproj`)
+ * @param {number} windowIndex - which window to display (0-based)
+ * @param {string} connId - unique connection identifier for the grouped session name
+ * @returns {Promise<string>} the grouped session name
+ */
+export async function createConnectionSession(targetSession, windowIndex, connId) {
+  const connSession = `${targetSession}-conn-${connId}`;
+
+  // Create a grouped session sharing windows with the target
+  await execFileAsync('tmux', [
+    'new-session', '-d', '-t', targetSession, '-s', connSession,
+  ]);
+
+  // Hide the status bar so xterm.js shows only terminal content
+  await execFileAsync('tmux', [
+    'set', '-t', connSession, 'status', 'off',
+  ]);
+
+  // Select the requested window
+  await execFileAsync('tmux', [
+    'select-window', '-t', `${connSession}:${windowIndex}`,
+  ]);
+
+  return connSession;
+}
+
+/**
+ * Destroy a grouped connection session.
+ * Safe to call even if the session doesn't exist.
+ *
+ * @param {string} connSession - the grouped session name to destroy
+ */
+export async function destroyConnectionSession(connSession) {
+  try {
+    await execFileAsync('tmux', ['kill-session', '-t', connSession]);
+  } catch {
+    // Session already gone — that's fine
+  }
 }

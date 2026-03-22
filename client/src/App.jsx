@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import Terminal from './Terminal.jsx'
+import PaneLayout from './PaneLayout.jsx'
 import LoginScreen from './LoginScreen.jsx'
 import NewProjectForm from './NewProjectForm.jsx'
 
@@ -94,8 +95,10 @@ function App() {
             onCreated={handleProjectCreated}
             onCancel={() => setShowNewProject(false)}
           />
+        ) : selectedSlug ? (
+          <PaneLayout key={selectedSlug} token={token} slug={selectedSlug} />
         ) : (
-          <Terminal key={selectedSlug} token={token} slug={selectedSlug} />
+          <Terminal token={token} />
         )}
       </main>
     </div>

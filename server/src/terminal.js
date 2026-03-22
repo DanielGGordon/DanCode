@@ -1,6 +1,8 @@
 import pty from 'node-pty';
+import { randomBytes } from 'node:crypto';
 import { validateToken } from './auth.js';
 import { isValidSlug } from './projects.js';
+import { createConnectionSession, destroyConnectionSession } from './tmux.js';
 
 /**
  * Set up the Socket.io /terminal namespace.
@@ -9,6 +11,9 @@ import { isValidSlug } from './projects.js';
  *
  * Clients may pass a `slug` query parameter to connect to a project-specific
  * tmux session (`dancode-<slug>`) instead of the default bootstrap session.
+ *
+ * When a `pane` query parameter is provided (0-based window index), a grouped
+ * tmux session is created so this connection sees only that window.
  *
  * @param {import('socket.io').Server} io - Socket.io server instance
  * @param {string} defaultSession - default tmux session to attach to
@@ -27,7 +32,7 @@ export function setupTerminalNamespace(io, defaultSession, getAuthToken) {
     next();
   });
 
-  ns.on('connection', (socket) => {
+  ns.on('connection', async (socket) => {
     const cols = socket.handshake.query.cols
       ? parseInt(socket.handshake.query.cols, 10)
       : 80;
@@ -36,11 +41,30 @@ export function setupTerminalNamespace(io, defaultSession, getAuthToken) {
       : 24;
 
     const slug = socket.handshake.query.slug;
-    const sessionName = (slug && isValidSlug(slug))
+    const pane = socket.handshake.query.pane;
+    const baseSession = (slug && isValidSlug(slug))
       ? `dancode-${slug}`
       : defaultSession;
 
-    const ptyProcess = pty.spawn('tmux', ['attach', '-t', sessionName], {
+    // When a specific pane is requested, create a grouped session
+    // so this connection sees only that window.
+    let attachSession = baseSession;
+    let connSession = null;
+
+    if (pane != null && pane !== '') {
+      const windowIndex = parseInt(pane, 10);
+      if (!Number.isNaN(windowIndex) && windowIndex >= 0) {
+        const connId = randomBytes(4).toString('hex');
+        try {
+          connSession = await createConnectionSession(baseSession, windowIndex, connId);
+          attachSession = connSession;
+        } catch {
+          // If grouped session creation fails, fall back to base session
+        }
+      }
+    }
+
+    const ptyProcess = pty.spawn('tmux', ['attach', '-t', attachSession], {
       name: 'xterm-256color',
       cols,
       rows,
@@ -72,9 +96,17 @@ export function setupTerminalNamespace(io, defaultSession, getAuthToken) {
       } catch {
         // already dead
       }
+      // Clean up the ephemeral grouped session
+      if (connSession) {
+        destroyConnectionSession(connSession);
+      }
     });
 
     ptyProcess.onExit(() => {
+      // Clean up the ephemeral grouped session
+      if (connSession) {
+        destroyConnectionSession(connSession);
+      }
       socket.disconnect(true);
     });
   });

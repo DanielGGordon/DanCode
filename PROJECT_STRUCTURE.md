@@ -11,7 +11,9 @@ DanCode/
 │   │   ├── LoginScreen.test.jsx # LoginScreen component unit tests
 │   │   ├── NewProjectForm.jsx  # New project creation form (name + path inputs, calls POST /api/projects)
 │   │   ├── NewProjectForm.test.jsx # NewProjectForm component unit tests
-│   │   ├── Terminal.jsx        # xterm.js terminal connected via Socket.io
+│   │   ├── PaneLayout.jsx      # Multi-pane layout: renders Terminal instances side by side (50/50 split)
+│   │   ├── PaneLayout.test.jsx # PaneLayout component unit tests
+│   │   ├── Terminal.jsx        # xterm.js terminal connected via Socket.io (supports per-pane connections)
 │   │   ├── Terminal.test.jsx   # Terminal component unit tests
 │   │   ├── index.css           # Tailwind + Solarized Dark theme
 │   │   └── main.jsx            # Entry point

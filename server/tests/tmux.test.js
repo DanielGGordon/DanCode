@@ -4,7 +4,7 @@ import { promisify } from 'node:util';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { sessionExists, createSession, ensureSession, createProjectSession } from '../src/tmux.js';
+import { sessionExists, createSession, ensureSession, createProjectSession, createConnectionSession, destroyConnectionSession } from '../src/tmux.js';
 
 const execFileAsync = promisify(execFile);
 const TEST_SESSION = 'dancode-tmux-test';
@@ -75,21 +75,21 @@ describe('createProjectSession', () => {
     expect(await sessionExists(SESSION_NAME)).toBe(true);
   });
 
-  it('creates two panes', async () => {
+  it('creates two windows (CLI and Claude)', async () => {
     await createProjectSession(PROJECT_SLUG, tempDir);
     const { stdout } = await execFileAsync('tmux', [
-      'list-panes', '-t', SESSION_NAME, '-F', '#{pane_index}',
+      'list-windows', '-t', SESSION_NAME, '-F', '#{window_name}',
     ]);
-    const panes = stdout.trim().split('\n');
-    expect(panes).toHaveLength(2);
-    expect(panes).toContain('0');
-    expect(panes).toContain('1');
+    const windows = stdout.trim().split('\n');
+    expect(windows).toHaveLength(2);
+    expect(windows).toContain('cli');
+    expect(windows).toContain('claude');
   });
 
-  it('sets both panes to the project directory', async () => {
+  it('sets both windows to the project directory', async () => {
     await createProjectSession(PROJECT_SLUG, tempDir);
     const { stdout } = await execFileAsync('tmux', [
-      'list-panes', '-t', SESSION_NAME, '-F', '#{pane_current_path}',
+      'list-windows', '-t', SESSION_NAME, '-F', '#{pane_current_path}',
     ]);
     const paths = stdout.trim().split('\n');
     expect(paths).toHaveLength(2);
@@ -103,5 +103,73 @@ describe('createProjectSession', () => {
     const result = await createProjectSession(PROJECT_SLUG, tempDir);
     expect(result.created).toBe(false);
     expect(result.sessionName).toBe(SESSION_NAME);
+  });
+});
+
+describe('createConnectionSession / destroyConnectionSession', () => {
+  const PROJECT_SLUG = 'conn-sess-test';
+  const SESSION_NAME = `dancode-${PROJECT_SLUG}`;
+  let tempDir;
+
+  beforeEach(async () => {
+    await killSession(SESSION_NAME);
+    tempDir = await mkdtemp(join(tmpdir(), 'dancode-conn-'));
+    await createProjectSession(PROJECT_SLUG, tempDir);
+  });
+
+  afterEach(async () => {
+    // Kill all sessions starting with our test session name
+    try {
+      const { stdout } = await execFileAsync('tmux', [
+        'list-sessions', '-F', '#{session_name}',
+      ]);
+      for (const name of stdout.trim().split('\n')) {
+        if (name.startsWith(SESSION_NAME)) {
+          await killSession(name);
+        }
+      }
+    } catch {
+      // no sessions
+    }
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('creates a grouped session that shares windows with the base session', async () => {
+    const connSession = await createConnectionSession(SESSION_NAME, 0, 'test1');
+    expect(connSession).toBe(`${SESSION_NAME}-conn-test1`);
+    expect(await sessionExists(connSession)).toBe(true);
+  });
+
+  it('selects the requested window in the grouped session', async () => {
+    const connSession = await createConnectionSession(SESSION_NAME, 1, 'test2');
+    const { stdout } = await execFileAsync('tmux', [
+      'display-message', '-t', connSession, '-p', '#{window_name}',
+    ]);
+    expect(stdout.trim()).toBe('claude');
+  });
+
+  it('disables the status bar in the grouped session', async () => {
+    const connSession = await createConnectionSession(SESSION_NAME, 0, 'test3');
+    const { stdout } = await execFileAsync('tmux', [
+      'show-options', '-t', connSession, '-v', 'status',
+    ]);
+    expect(stdout.trim()).toBe('off');
+  });
+
+  it('destroyConnectionSession removes the grouped session', async () => {
+    const connSession = await createConnectionSession(SESSION_NAME, 0, 'test4');
+    expect(await sessionExists(connSession)).toBe(true);
+    await destroyConnectionSession(connSession);
+    expect(await sessionExists(connSession)).toBe(false);
+  });
+
+  it('destroyConnectionSession does not throw if session is already gone', async () => {
+    await expect(destroyConnectionSession('nonexistent-session')).resolves.not.toThrow();
+  });
+
+  it('destroying a grouped session does not affect the base session', async () => {
+    const connSession = await createConnectionSession(SESSION_NAME, 0, 'test5');
+    await destroyConnectionSession(connSession);
+    expect(await sessionExists(SESSION_NAME)).toBe(true);
   });
 });

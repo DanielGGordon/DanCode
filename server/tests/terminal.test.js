@@ -20,6 +20,14 @@ vi.mock('node-pty', () => ({
   },
 }));
 
+const mockCreateConnectionSession = vi.fn().mockResolvedValue('test-session-conn-abc123');
+const mockDestroyConnectionSession = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('../src/tmux.js', () => ({
+  createConnectionSession: (...args) => mockCreateConnectionSession(...args),
+  destroyConnectionSession: (...args) => mockDestroyConnectionSession(...args),
+}));
+
 import { setupTerminalNamespace } from '../src/terminal.js';
 import pty from 'node-pty';
 
@@ -161,5 +169,44 @@ describe('Socket.io /terminal namespace', () => {
 
     await disconnectPromise;
     expect(clientSocket.connected).toBe(false);
+  });
+
+  it('creates a grouped session and attaches to it when pane is specified', async () => {
+    await connectAndWaitForPty({ slug: 'myproj', pane: '1' });
+
+    expect(mockCreateConnectionSession).toHaveBeenCalledWith(
+      'dancode-myproj',
+      1,
+      expect.any(String),
+    );
+
+    expect(pty.spawn).toHaveBeenCalledWith(
+      'tmux',
+      ['attach', '-t', 'test-session-conn-abc123'],
+      expect.objectContaining({ name: 'xterm-256color' }),
+    );
+  });
+
+  it('attaches to base session when no pane is specified', async () => {
+    await connectAndWaitForPty({ slug: 'myproj' });
+
+    expect(mockCreateConnectionSession).not.toHaveBeenCalled();
+
+    expect(pty.spawn).toHaveBeenCalledWith(
+      'tmux',
+      ['attach', '-t', 'dancode-myproj'],
+      expect.objectContaining({ name: 'xterm-256color' }),
+    );
+  });
+
+  it('destroys grouped session on disconnect', async () => {
+    await connectAndWaitForPty({ slug: 'myproj', pane: '0' });
+
+    await new Promise((resolve) => {
+      clientSocket.on('disconnect', resolve);
+      clientSocket.disconnect();
+    });
+
+    await vi.waitFor(() => expect(mockDestroyConnectionSession).toHaveBeenCalledWith('test-session-conn-abc123'));
   });
 });

@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { io } from 'socket.io-client'
 import '@xterm/xterm/css/xterm.css'
 
-export default function Terminal({ token, slug }) {
+export default function Terminal({ token, slug, pane }) {
   const containerRef = useRef(null)
   const termRef = useRef(null)
 
@@ -58,6 +58,7 @@ export default function Terminal({ token, slug }) {
 
       const query = { cols: term.cols, rows: term.rows };
       if (slug) query.slug = slug;
+      if (pane != null) query.pane = pane;
 
       socket = io('/terminal', {
         query,

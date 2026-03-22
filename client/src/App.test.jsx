@@ -7,6 +7,11 @@ vi.mock('./Terminal.jsx', () => ({
   default: ({ slug }) => <div data-testid="terminal" data-slug={slug || ''}>Terminal</div>,
 }))
 
+// Mock PaneLayout
+vi.mock('./PaneLayout.jsx', () => ({
+  default: ({ slug }) => <div data-testid="pane-layout" data-slug={slug || ''}>PaneLayout</div>,
+}))
+
 // Mock NewProjectForm
 vi.mock('./NewProjectForm.jsx', () => ({
   default: ({ onCreated, onCancel }) => (
@@ -160,7 +165,7 @@ describe('App', () => {
     expect(getByTestId('terminal')).toBeDefined()
   })
 
-  it('closes new project form after project is created and passes slug to terminal', async () => {
+  it('closes new project form after project is created and shows pane layout with slug', async () => {
     localStorageMock.setItem('dancode-auth-token', 'test-token')
     mockFetch(200, { valid: true })
     const { getByTestId, queryByTestId } = render(<App />)
@@ -174,8 +179,8 @@ describe('App', () => {
 
     fireEvent.click(getByTestId('mock-create'))
     expect(queryByTestId('new-project-form')).toBeNull()
-    expect(getByTestId('terminal')).toBeDefined()
-    expect(getByTestId('terminal').dataset.slug).toBe('test')
+    expect(getByTestId('pane-layout')).toBeDefined()
+    expect(getByTestId('pane-layout').dataset.slug).toBe('test')
   })
 
   it('resets new project form state on logout', async () => {
