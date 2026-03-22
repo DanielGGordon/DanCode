@@ -84,7 +84,7 @@ Add token-based authentication. On first run, generate a random token and save i
 - [x] Socket.io connections include token in handshake auth — server middleware rejects invalid tokens
 - [x] REST endpoints return 401 for missing/invalid tokens
 - [x] Unit tests: token generation, token validation middleware, rejection of invalid tokens
-- [ ] E2E test: page shows login screen, enter token, terminal appears
+- [x] E2E test: page shows login screen, enter token, terminal appears
 - [ ] Visual test: `aiAssert("a centered login form with a token input field on a dark background")`
 
 ---
