@@ -5,3 +5,4 @@
 [done 2026-03-23 05:30] Toggleable horizontal bar at top of terminal view showing tmux attach command.
 [done 2026-03-23 06:00] Per-pane labels can optionally show the tmux pane-switch command (e.g., Ctrl+B, 0).
 [done 2026-03-23 06:15] "Show tmux commands" toggle controls both bar and per-pane labels. ⚠️ Learning: Must use --config client/vite.config.js when running vitest from the repo root, otherwise jsdom environment isn't loaded and all tests fail with "window is not defined".
+[done 2026-03-23 06:30] Toggle state is persisted to config.
