@@ -45,7 +45,10 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
 
   // Load saved layout preferences and panes from project config
   useEffect(() => {
-    if (!slug || !token) return
+    if (!slug || !token) {
+      setLoading(false)
+      return
+    }
     let cancelled = false
     setLoading(!panesProp)
     fetch(`/api/projects/${slug}`, {
