@@ -1233,4 +1233,17 @@ describe('PaneLayout tmux command bar', () => {
     expect(queryByTestId('pane-tmux-hint-1')).toBeNull()
     expect(queryByTestId('pane-tmux-hint-2')).toBeNull()
   })
+
+  it('shows per-pane tmux hints in tab layout', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Switch to tabs
+    fireEvent.click(getByTestId('layout-toggle'))
+    // Enable tmux bar
+    fireEvent.click(getByTestId('tmux-bar-toggle'))
+
+    expect(getByTestId('pane-tmux-hint-0').textContent).toBe('Ctrl+B, 0')
+    expect(getByTestId('pane-tmux-hint-1').textContent).toBe('Ctrl+B, 1')
+    expect(getByTestId('pane-tmux-hint-2').textContent).toBe('Ctrl+B, 2')
+  })
 })

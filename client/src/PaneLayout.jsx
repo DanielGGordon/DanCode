@@ -162,6 +162,14 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
                   }`}
                 >
                   {label}
+                  {showTmuxBar && (
+                    <code
+                      data-testid={`pane-tmux-hint-${index}`}
+                      className="text-base01 font-mono ml-2"
+                    >
+                      Ctrl+B, {index}
+                    </code>
+                  )}
                 </button>
               )
             })}
