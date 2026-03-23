@@ -147,6 +147,8 @@ export async function createConnectionSession(targetSession, windowIndex, connId
     ';',
     'set', '-t', connSession, 'status', 'off',
     ';',
+    'set', '-t', connSession, 'mouse', 'on',
+    ';',
     'select-window', '-t', `${connSession}:${windowIndex}`,
   ]);
 
@@ -165,6 +167,66 @@ export async function destroyConnectionSession(connSession) {
   } catch {
     // Session already gone — that's fine
   }
+}
+
+/**
+ * List all panes in a specific window of a tmux session.
+ * @param {string} sessionName - tmux session name
+ * @param {number} windowIndex - window index
+ * @returns {Promise<Array<{index: number, command: string}>>}
+ */
+export async function listPanes(sessionName, windowIndex) {
+  try {
+    const { stdout } = await execFileAsync('tmux', [
+      'list-panes', '-t', `${sessionName}:${windowIndex}`,
+      '-F', '#{pane_index}:#{pane_current_command}',
+    ]);
+    return stdout.trim().split('\n').filter(Boolean).map((line) => {
+      const colonIdx = line.indexOf(':');
+      return {
+        index: parseInt(line.slice(0, colonIdx), 10),
+        command: line.slice(colonIdx + 1),
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Break multi-pane windows into separate windows so each pane becomes
+ * its own window. This lets DanCode's per-window connection logic work
+ * with sessions that were set up using tmux pane splits.
+ *
+ * Idempotent: windows that already have a single pane are left alone.
+ *
+ * @param {string} sessionName - tmux session name
+ * @returns {Promise<number>} number of panes that were broken out
+ */
+export async function breakPanesIntoWindows(sessionName) {
+  const windows = await listWindows(sessionName);
+  let brokenOut = 0;
+
+  for (const win of windows) {
+    const panes = await listPanes(sessionName, win.index);
+    if (panes.length <= 1) continue;
+
+    // Break panes in reverse order so indices stay stable
+    for (let i = panes.length - 1; i >= 1; i--) {
+      const pane = panes[i];
+      await execFileAsync('tmux', [
+        'break-pane', '-d',
+        '-s', `${sessionName}:${win.index}.${pane.index}`,
+        '-n', pane.command,
+      ]);
+      brokenOut++;
+    }
+  }
+
+  if (brokenOut > 0) {
+    console.log(`Broke ${brokenOut} pane(s) into separate windows in session "${sessionName}"`);
+  }
+  return brokenOut;
 }
 
 /**

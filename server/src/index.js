@@ -4,7 +4,7 @@ import { Server } from 'socket.io';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
-import { ensureSession, createProjectSession, sessionExists, listSessions, listWindows, getOrphanedSessions } from './tmux.js';
+import { ensureSession, createProjectSession, sessionExists, listSessions, listWindows, getOrphanedSessions, breakPanesIntoWindows } from './tmux.js';
 import { setupTerminalNamespace } from './terminal.js';
 import { ensureAuthToken, validateToken } from './auth.js';
 import { validateProjectInput, createProject, createAdoptedProject, listProjects, getProject, updateProject, deleteProject, getProjectsDir, slugify, isValidSlug } from './projects.js';
@@ -245,6 +245,9 @@ app.post('/api/projects', async (req, res) => {
     }
 
     try {
+      // Break any multi-pane windows into separate windows so each
+      // gets its own xterm.js terminal in the browser
+      await breakPanesIntoWindows(adoptSession);
       const project = await createAdoptedProject(name, adoptSession, projectsDir);
       return res.status(201).json(project);
     } catch (err) {
@@ -319,6 +322,18 @@ export async function startServer(port = PORT, { tokenPath, projectsDir: projDir
     await ensureSession(TMUX_SESSION);
   } catch (err) {
     throw new Error(`Failed to ensure tmux session "${TMUX_SESSION}": ${err.message}`);
+  }
+
+  // Migrate adopted sessions: break multi-pane windows into separate windows
+  try {
+    const projects = await listProjects(projectsDir);
+    for (const proj of projects) {
+      if (proj.tmuxSession && await sessionExists(proj.tmuxSession)) {
+        await breakPanesIntoWindows(proj.tmuxSession);
+      }
+    }
+  } catch {
+    // Non-fatal — sessions will be migrated on next connection
   }
 
   if (!terminalNamespaceRegistered) {

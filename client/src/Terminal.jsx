@@ -181,12 +181,22 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
 
   const showOverlay = connectionState === 'disconnected' || connectionState === 'session-exit'
 
+  // Use capture phase so this fires before xterm.js swallows the event
+  const handleMouseDown = useCallback(() => {
+    if (onFocus) onFocus()
+    // Defer focus() so xterm finishes processing the mousedown first
+    setTimeout(() => {
+      if (termRef.current) termRef.current.focus()
+    }, 0)
+  }, [onFocus])
+
   return (
     <div
       ref={containerRef}
       data-testid="terminal"
       data-slug={slug || ''}
       className="w-full h-full relative"
+      onMouseDownCapture={handleMouseDown}
     >
       {showOverlay && (
         <div
