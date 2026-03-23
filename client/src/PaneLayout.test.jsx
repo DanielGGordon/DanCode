@@ -1365,3 +1365,87 @@ describe('PaneLayout tmux command bar', () => {
     expect(getByTestId('pane-tmux-hint-2').textContent).toBe('Ctrl+B, 2')
   })
 })
+
+describe('PaneLayout fetch error state', () => {
+  let originalFetch
+
+  beforeEach(() => {
+    originalFetch = global.fetch
+  })
+
+  afterEach(() => {
+    global.fetch = originalFetch
+  })
+
+  it('shows error message when project fetch fails (no panes prop)', async () => {
+    global.fetch = vi.fn(() => Promise.reject(new Error('Network error')))
+
+    const { getByTestId, getByText } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    await waitFor(() => {
+      expect(getByTestId('pane-fetch-error')).toBeDefined()
+    })
+    expect(getByText('Failed to Load Project')).toBeDefined()
+    expect(getByText('Network error')).toBeDefined()
+    expect(getByTestId('pane-retry-button')).toBeDefined()
+  })
+
+  it('shows error message when project fetch returns non-ok status (no panes prop)', async () => {
+    global.fetch = vi.fn(() => Promise.resolve({ ok: false, status: 500 }))
+
+    const { getByTestId, getByText } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    await waitFor(() => {
+      expect(getByTestId('pane-fetch-error')).toBeDefined()
+    })
+    expect(getByText(/Failed to load project/)).toBeDefined()
+  })
+
+  it('retry button re-fetches project config', async () => {
+    let callCount = 0
+    global.fetch = vi.fn(() => {
+      callCount++
+      if (callCount <= 1) {
+        return Promise.reject(new Error('Network error'))
+      }
+      // Second call succeeds
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          name: 'Test', slug: 'myproj', path: '/tmp',
+          panes: ALL_PANES,
+        }),
+      })
+    })
+
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Wait for error state
+    await waitFor(() => {
+      expect(getByTestId('pane-fetch-error')).toBeDefined()
+    })
+
+    // Click retry
+    fireEvent.click(getByTestId('pane-retry-button'))
+
+    // Should re-fetch
+    await waitFor(() => {
+      expect(callCount).toBeGreaterThanOrEqual(2)
+    })
+  })
+
+  it('does not show error when panes prop is provided and fetch fails', async () => {
+    global.fetch = vi.fn(() => Promise.reject(new Error('Network error')))
+
+    const { getByTestId, queryByTestId } = render(
+      <PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />
+    )
+
+    // Should render normally with provided panes, no error
+    await waitFor(() => {
+      expect(getByTestId('pane-layout')).toBeDefined()
+    })
+    expect(queryByTestId('pane-fetch-error')).toBeNull()
+    expect(getByTestId('pane-0')).toBeDefined()
+  })
+})

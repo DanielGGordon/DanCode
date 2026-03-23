@@ -114,7 +114,9 @@ export function setupTerminalNamespace(io, defaultSession, getAuthToken, resolve
       }
     });
 
-    ptyProcess.onExit(() => {
+    ptyProcess.onExit(({ exitCode }) => {
+      // Notify client that the tmux session ended before disconnecting
+      socket.emit('session-exit', { exitCode });
       // Clean up the ephemeral grouped session
       if (connSession) {
         destroyConnectionSession(connSession);

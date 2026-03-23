@@ -17,12 +17,14 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
   const [showTmuxBar, setShowTmuxBar] = useState(false)
   const [tmuxSessionName, setTmuxSessionName] = useState(null)
   const [loading, setLoading] = useState(!panesProp)
+  const [fetchError, setFetchError] = useState(null)
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT
   )
   const loadedRef = useRef(false)
   const saveTimerRef = useRef(null)
 
+  const [fetchAttempt, setFetchAttempt] = useState(0)
   const panes = panesProp || fetchedPanes || ALL_PANES
 
   useEffect(() => {
@@ -51,10 +53,14 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
     }
     let cancelled = false
     setLoading(!panesProp)
+    setFetchError(null)
     fetch(`/api/projects/${slug}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => {
+        if (!res.ok) throw new Error(`Failed to load project (${res.status})`)
+        return res.json()
+      })
       .then(async (project) => {
         if (cancelled || !project) return
         if (project.tmuxSession) {
@@ -88,7 +94,11 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
           } catch {}
         }
       })
-      .catch(() => {})
+      .catch((err) => {
+        if (!cancelled && !panesProp) {
+          setFetchError(err.message || 'Failed to load project configuration')
+        }
+      })
       .finally(() => {
         if (!cancelled) {
           setLoading(false)
@@ -96,7 +106,7 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
         }
       })
     return () => { cancelled = true }
-  }, [slug, token, panesProp])
+  }, [slug, token, panesProp, fetchAttempt])
 
   // Save layout preferences when they change (debounced)
   useEffect(() => {
@@ -160,6 +170,24 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
         <div data-testid="pane-loading" className="flex flex-col items-center justify-center flex-1 gap-3">
           <div className="w-6 h-6 border-2 border-base01/30 border-t-blue rounded-full animate-spin" />
           <span className="text-xs text-base01">Loading project…</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (fetchError) {
+    return (
+      <div data-testid="pane-layout" className="flex flex-col w-full h-full">
+        <div data-testid="pane-fetch-error" className="flex flex-col items-center justify-center flex-1 gap-3 p-6">
+          <div className="text-red text-lg font-semibold">Failed to Load Project</div>
+          <p className="text-base0 text-sm text-center max-w-sm">{fetchError}</p>
+          <button
+            data-testid="pane-retry-button"
+            onClick={() => setFetchAttempt((n) => n + 1)}
+            className="mt-2 px-4 py-2 text-sm font-medium text-base1 bg-blue/20 border border-blue/50 rounded hover:bg-blue/30 transition-colors"
+          >
+            Retry
+          </button>
         </div>
       </div>
     )

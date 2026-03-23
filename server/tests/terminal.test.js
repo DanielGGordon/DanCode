@@ -193,6 +193,20 @@ describe('Socket.io /terminal namespace', () => {
     expect(clientSocket.connected).toBe(false);
   });
 
+  it('emits session-exit with exitCode before disconnecting when pty exits', async () => {
+    await connectAndWaitForPty();
+
+    const exitCallback = mockPty.onExit.mock.calls[0][0];
+    const sessionExitPromise = new Promise((resolve) =>
+      clientSocket.on('session-exit', resolve)
+    );
+
+    exitCallback({ exitCode: 42 });
+
+    const data = await sessionExitPromise;
+    expect(data).toEqual({ exitCode: 42 });
+  });
+
   it('creates a grouped session and attaches to it when pane is specified', async () => {
     await connectAndWaitForPty({ slug: 'myproj', pane: '1' });
 

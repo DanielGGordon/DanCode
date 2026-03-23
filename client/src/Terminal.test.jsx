@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, cleanup } from '@testing-library/react'
+import { render, cleanup, fireEvent, act } from '@testing-library/react'
 import Terminal from './Terminal.jsx'
 
 // Mock xterm.js
@@ -33,8 +33,11 @@ vi.mock('@xterm/addon-fit', () => ({
   },
 }))
 
-// Mock socket.io-client
-const mockSocketOn = vi.fn()
+// Mock socket.io-client with event handler tracking
+let socketHandlers = {}
+const mockSocketOn = vi.fn((event, handler) => {
+  socketHandlers[event] = handler
+})
 const mockSocketEmit = vi.fn()
 const mockSocketDisconnect = vi.fn()
 
@@ -57,6 +60,7 @@ globalThis.ResizeObserver = class {
 beforeEach(() => {
   vi.useFakeTimers()
   vi.clearAllMocks()
+  socketHandlers = {}
   cleanup()
   // jsdom elements have zero dimensions by default; set non-zero so terminals
   // treat containers as visible and connect normally in most tests.
@@ -233,5 +237,117 @@ describe('Terminal', () => {
     expect(io).toHaveBeenCalledWith('/terminal', expect.objectContaining({
       auth: { token: 'test-token' },
     }))
+  })
+
+  // --- Error state tests ---
+
+  it('does not show error overlay initially', () => {
+    const { queryByTestId } = render(<Terminal token="test-token" />)
+    expect(queryByTestId('terminal-error-overlay')).toBeNull()
+  })
+
+  it('shows "Session Ended" overlay when session-exit event is received', () => {
+    const { queryByTestId, getByText } = render(<Terminal token="test-token" />)
+    vi.runAllTimers()
+
+    // Trigger session-exit event inside act() to flush React state updates
+    act(() => {
+      socketHandlers['session-exit']({ exitCode: 1 })
+    })
+
+    expect(queryByTestId('terminal-error-overlay')).not.toBeNull()
+    expect(getByText('Session Ended')).toBeDefined()
+    expect(getByText(/code 1/)).toBeDefined()
+    expect(queryByTestId('terminal-reconnect-button')).not.toBeNull()
+  })
+
+  it('shows "Disconnected" overlay when socket disconnects unexpectedly', () => {
+    const { queryByTestId, getByText } = render(<Terminal token="test-token" />)
+    vi.runAllTimers()
+
+    act(() => {
+      socketHandlers['disconnect']('transport close')
+    })
+
+    expect(queryByTestId('terminal-error-overlay')).not.toBeNull()
+    expect(getByText('Disconnected')).toBeDefined()
+    expect(getByText(/Lost connection/)).toBeDefined()
+  })
+
+  it('does not show overlay when client deliberately disconnects', () => {
+    const { queryByTestId } = render(<Terminal token="test-token" />)
+    vi.runAllTimers()
+
+    act(() => {
+      socketHandlers['disconnect']('io client disconnect')
+    })
+
+    expect(queryByTestId('terminal-error-overlay')).toBeNull()
+  })
+
+  it('shows "Disconnected" overlay on connect_error', () => {
+    const { queryByTestId, getByText } = render(<Terminal token="test-token" />)
+    vi.runAllTimers()
+
+    act(() => {
+      socketHandlers['connect_error'](new Error('timeout'))
+    })
+
+    expect(queryByTestId('terminal-error-overlay')).not.toBeNull()
+    expect(getByText('Disconnected')).toBeDefined()
+  })
+
+  it('preserves session-exit state when disconnect follows', () => {
+    const { getByText } = render(<Terminal token="test-token" />)
+    vi.runAllTimers()
+
+    // Session exits first, then socket disconnects
+    act(() => {
+      socketHandlers['session-exit']({ exitCode: 0 })
+      socketHandlers['disconnect']('transport close')
+    })
+
+    // Should still show "Session Ended", not "Disconnected"
+    expect(getByText('Session Ended')).toBeDefined()
+  })
+
+  it('shows exit code 0 in session-exit overlay', () => {
+    const { getByText } = render(<Terminal token="test-token" />)
+    vi.runAllTimers()
+
+    act(() => {
+      socketHandlers['session-exit']({ exitCode: 0 })
+    })
+
+    expect(getByText(/code 0/)).toBeDefined()
+  })
+
+  it('reconnect button creates a new socket connection', async () => {
+    const { io } = await import('socket.io-client')
+    const { getByTestId } = render(<Terminal token="test-token" />)
+    vi.runAllTimers()
+
+    // Trigger disconnect
+    act(() => {
+      socketHandlers['disconnect']('transport close')
+    })
+
+    const callsBefore = io.mock.calls.length
+
+    // Click reconnect
+    fireEvent.click(getByTestId('terminal-reconnect-button'))
+    vi.runAllTimers()
+
+    // Should have created a new socket connection
+    expect(io.mock.calls.length).toBeGreaterThan(callsBefore)
+  })
+
+  it('listens for session-exit and disconnect events on socket', () => {
+    render(<Terminal token="test-token" />)
+    vi.runAllTimers()
+    expect(mockSocketOn).toHaveBeenCalledWith('session-exit', expect.any(Function))
+    expect(mockSocketOn).toHaveBeenCalledWith('disconnect', expect.any(Function))
+    expect(mockSocketOn).toHaveBeenCalledWith('connect_error', expect.any(Function))
+    expect(mockSocketOn).toHaveBeenCalledWith('connect', expect.any(Function))
   })
 })

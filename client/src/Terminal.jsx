@@ -1,20 +1,40 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { io } from 'socket.io-client'
 import '@xterm/xterm/css/xterm.css'
 
+/**
+ * Connection state values:
+ * - 'connecting': socket is being established
+ * - 'connected': socket connected and receiving data
+ * - 'disconnected': socket lost connection (network issue, server restart)
+ * - 'session-exit': tmux session/pty process exited (session killed, tmux died)
+ */
+
 export default function Terminal({ token, slug, pane, focused, onFocus }) {
   const containerRef = useRef(null)
   const termRef = useRef(null)
+  const [connectionState, setConnectionState] = useState('connecting')
+  const [exitCode, setExitCode] = useState(null)
+  const reconnectRef = useRef(null)
 
-  useEffect(() => {
+  const connect = useCallback(() => {
     const container = containerRef.current
     if (!container) return
+
+    // Clean up any previous terminal
+    if (termRef.current) {
+      termRef.current.dispose()
+      termRef.current = null
+    }
 
     let disposed = false
     let socket = null
     let resizeObserver = null
+
+    setConnectionState('connecting')
+    setExitCode(null)
 
     const term = new XTerm({
       cursorBlink: true,
@@ -55,26 +75,48 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
     const connectTimer = setTimeout(() => {
       if (disposed) return
 
-      const connect = () => {
-        fitAddon.fit()
-        const query = { cols: term.cols, rows: term.rows };
-        if (slug) query.slug = slug;
-        if (pane != null) query.pane = pane;
+      fitAddon.fit()
+      const query = { cols: term.cols, rows: term.rows }
+      if (slug) query.slug = slug
+      if (pane != null) query.pane = pane
 
-        socket = io('/terminal', {
-          query,
-          auth: { token },
-          transports: ['websocket'],
-        })
+      socket = io('/terminal', {
+        query,
+        auth: { token },
+        transports: ['websocket'],
+      })
 
-        socket.on('output', (data) => {
-          term.write(data)
-        })
+      socket.on('connect', () => {
+        if (!disposed) setConnectionState('connected')
+      })
 
-        term.onData((data) => {
-          socket.emit('input', data)
-        })
-      }
+      socket.on('output', (data) => {
+        term.write(data)
+      })
+
+      socket.on('session-exit', ({ exitCode: code }) => {
+        if (!disposed) {
+          setConnectionState('session-exit')
+          setExitCode(code)
+        }
+      })
+
+      socket.on('disconnect', (reason) => {
+        if (!disposed && reason !== 'io client disconnect') {
+          // Only show disconnected state if not a deliberate client disconnect
+          setConnectionState((prev) =>
+            prev === 'session-exit' ? prev : 'disconnected'
+          )
+        }
+      })
+
+      socket.on('connect_error', () => {
+        if (!disposed) setConnectionState('disconnected')
+      })
+
+      term.onData((data) => {
+        socket.emit('input', data)
+      })
 
       const handleResize = () => {
         // Skip when container is hidden (display: none) to avoid
@@ -84,13 +126,12 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
         socket.emit('resize', { cols: term.cols, rows: term.rows })
       }
 
-      connect()
-
       resizeObserver = new ResizeObserver(handleResize)
       resizeObserver.observe(container)
     }, 0)
 
-    return () => {
+    // Store cleanup function for reconnect
+    const cleanup = () => {
       disposed = true
       clearTimeout(connectTimer)
       resizeObserver?.disconnect()
@@ -98,7 +139,15 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
       term.dispose()
       termRef.current = null
     }
-  }, [])
+
+    reconnectRef.current = cleanup
+    return cleanup
+  }, [token, slug, pane])
+
+  useEffect(() => {
+    const cleanup = connect()
+    return cleanup
+  }, [connect])
 
   // Focus the xterm instance when the focused prop becomes true
   useEffect(() => {
@@ -116,12 +165,57 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
     return () => container.removeEventListener('focusin', handler)
   })
 
+  const handleReconnect = useCallback(() => {
+    // Tear down the old connection and start fresh
+    if (reconnectRef.current) {
+      reconnectRef.current()
+      reconnectRef.current = null
+    }
+    connect()
+  }, [connect])
+
+  const showOverlay = connectionState === 'disconnected' || connectionState === 'session-exit'
+
   return (
     <div
       ref={containerRef}
       data-testid="terminal"
       data-slug={slug || ''}
-      className="w-full h-full"
-    />
+      className="w-full h-full relative"
+    >
+      {showOverlay && (
+        <div
+          data-testid="terminal-error-overlay"
+          className="absolute inset-0 z-10 flex items-center justify-center bg-base03/90"
+        >
+          <div className="flex flex-col items-center gap-3 p-6 rounded-lg bg-base02 border border-base01/30 max-w-sm text-center">
+            {connectionState === 'session-exit' ? (
+              <>
+                <div className="text-red text-lg font-semibold">Session Ended</div>
+                <p className="text-base0 text-sm">
+                  The tmux session has exited{exitCode != null ? ` (code ${exitCode})` : ''}.
+                  The terminal process is no longer running.
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="text-yellow text-lg font-semibold">Disconnected</div>
+                <p className="text-base0 text-sm">
+                  Lost connection to the server. This may be due to a network issue
+                  or server restart.
+                </p>
+              </>
+            )}
+            <button
+              data-testid="terminal-reconnect-button"
+              onClick={handleReconnect}
+              className="mt-2 px-4 py-2 text-sm font-medium text-base1 bg-blue/20 border border-blue/50 rounded hover:bg-blue/30 transition-colors"
+            >
+              Reconnect
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
