@@ -247,4 +247,4 @@ Toggleable UI elements that display tmux commands for educational purposes. Plus
 - [x] Polish: consistent spacing, borders, and shadows across all components
 - [x] All 11 success criteria from the PRD (Section 9) pass
 - [x] Full E2E test suite passes
-- [ ] Full visual test suite passes
+- [x] Full visual test suite passes

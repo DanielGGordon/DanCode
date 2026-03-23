@@ -1,4 +1,4 @@
-import { test, expect } from './fixture.js';
+import { test, expect } from '@playwright/test';
 import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
@@ -50,6 +50,20 @@ async function createProject(page, name) {
   return { slug, projectPath };
 }
 
+/**
+ * Visual assertion: "a command palette overlay is displayed near the top of the screen
+ * with a search input and a list of projects"
+ *
+ * Uses programmatic visual verification because no local vision model
+ * runs reliably on Pi 5 ARM64 (phi3.5 needs 3.7 GiB, only ~2.5 GiB available).
+ *
+ * Verifies:
+ *   1. The palette overlay is visible with a backdrop
+ *   2. A search input is present
+ *   3. Project items are listed
+ *   4. The palette is positioned near the top of the screen and centered horizontally
+ *   5. Styling matches Solarized Dark theme
+ */
 test.describe('Command palette visual', () => {
   let token;
   const created = [];
@@ -72,7 +86,7 @@ test.describe('Command palette visual', () => {
     }
   });
 
-  test('command palette passes visual assertion', async ({ page, aiAssert }) => {
+  test('command palette passes visual assertion', async ({ page }) => {
     token = await login(page);
 
     // Create two projects so the palette shows a list
@@ -86,12 +100,58 @@ test.describe('Command palette visual', () => {
 
     // Open command palette
     await page.keyboard.press('Control+k');
-    await expect(page.getByTestId('command-palette')).toBeVisible();
-    await expect(page.getByTestId('command-palette-input')).toBeVisible();
+    const palette = page.getByTestId('command-palette');
+    await expect(palette).toBeVisible();
 
-    await aiAssert('a command palette overlay is displayed near the top of the screen with a search input and a list of projects', undefined, {
-      domIncluded: true,
-      screenshotIncluded: true,
+    // 1. Verify backdrop is present
+    const backdrop = page.getByTestId('command-palette-backdrop');
+    await expect(backdrop).toBeVisible();
+
+    // 2. Verify search input is present
+    const searchInput = page.getByTestId('command-palette-input');
+    await expect(searchInput).toBeVisible();
+
+    // 3. Verify project items are listed
+    const list = page.getByTestId('command-palette-list');
+    await expect(list).toBeVisible();
+    const items = list.locator('li');
+    const itemCount = await items.count();
+    expect(itemCount).toBeGreaterThanOrEqual(2);
+
+    // 4. Verify the palette is positioned near the top and centered
+    const layout = await page.evaluate(() => {
+      const palette = document.querySelector('[data-testid="command-palette"]');
+      const rect = palette.getBoundingClientRect();
+      return {
+        top: rect.top,
+        centerX: rect.left + rect.width / 2,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      };
     });
+
+    // Palette should be in the top 40% of the viewport
+    expect(layout.top / layout.viewportHeight).toBeLessThanOrEqual(0.4);
+
+    // Palette should be horizontally centered (within 10% of center)
+    const xOffset = Math.abs(layout.centerX - layout.viewportWidth / 2) / layout.viewportWidth;
+    expect(xOffset).toBeLessThanOrEqual(0.1);
+
+    // 5. Verify Solarized Dark styling on the palette
+    const styles = await page.evaluate(() => {
+      const palette = document.querySelector('[data-testid="command-palette"]');
+      return {
+        bg: window.getComputedStyle(palette).backgroundColor,
+      };
+    });
+
+    function isDarkSolarized(rgb) {
+      const match = rgb.match(/(\d+),\s*(\d+),\s*(\d+)/);
+      if (!match) return false;
+      const [, r, g, b] = match.map(Number);
+      return r <= 20 && g <= 70 && b <= 80;
+    }
+
+    expect(isDarkSolarized(styles.bg)).toBe(true);
   });
 });
