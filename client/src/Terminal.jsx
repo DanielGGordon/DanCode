@@ -193,7 +193,7 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
           data-testid="terminal-error-overlay"
           className="absolute inset-0 z-10 flex items-center justify-center bg-base03/90"
         >
-          <div className="flex flex-col items-center gap-3 p-6 rounded-lg bg-base02 border border-base01/30 max-w-sm text-center">
+          <div className="flex flex-col items-center gap-3 p-6 rounded-lg bg-base02 border border-base01/30 shadow-lg max-w-sm text-center">
             {connectionState === 'session-exit' ? (
               <>
                 <div className="text-red text-lg font-semibold">Session Ended</div>

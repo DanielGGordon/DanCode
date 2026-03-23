@@ -184,10 +184,10 @@ function App() {
         currentSlug={selectedSlug}
         onSelect={handlePaletteSelect}
       />
-      <header className="flex items-center px-4 py-1.5 bg-base03 border-b border-base01/20">
+      <header className="flex items-center px-4 py-1.5 bg-base03 border-b border-base01/30">
         <h1 className="text-sm font-medium text-base0 tracking-wide">DanCode</h1>
         {selectedProjectName && (
-          <div className="relative ml-3 border-l border-base01/20 pl-3" ref={dropdownRef}>
+          <div className="relative ml-3 border-l border-base01/30 pl-3" ref={dropdownRef}>
             <button
               data-testid="header-project-name"
               onClick={() => setDropdownOpen((prev) => !prev)}
@@ -197,7 +197,7 @@ function App() {
               <svg className="w-3 h-3" viewBox="0 0 12 12" fill="currentColor"><path d="M3 5l3 3 3-3z" /></svg>
             </button>
             {dropdownOpen && (
-              <ul data-testid="header-dropdown" className="absolute top-full left-0 mt-1 min-w-48 bg-base02 border border-base01/20 rounded shadow-md z-50 py-1">
+              <ul data-testid="header-dropdown" className="absolute top-full left-0 mt-1 min-w-48 bg-base02 border border-base01/30 rounded shadow-lg z-50 py-1">
                 {Array.isArray(projects) && projects.map((p) => (
                   <li key={p.slug}>
                     <button

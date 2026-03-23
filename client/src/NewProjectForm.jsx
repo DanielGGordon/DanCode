@@ -97,7 +97,7 @@ export default function NewProjectForm({ token, onCreated, onCancel }) {
       <form
         onSubmit={handleSubmit}
         data-testid="new-project-form"
-        className="flex flex-col gap-4 p-8 rounded-lg bg-base02 border border-base01/30 w-full max-w-md"
+        className="flex flex-col gap-4 p-8 rounded-lg bg-base02 border border-base01/30 shadow-lg w-full max-w-md"
       >
         <h2 className="text-xl font-semibold text-base1 text-center">New Project</h2>
 

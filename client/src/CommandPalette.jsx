@@ -82,7 +82,7 @@ export default function CommandPalette({ open, onClose, projects, currentSlug, o
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search projects…"
-            className="w-full px-3 py-2 text-sm text-base1 bg-base03 border border-base01/30 rounded placeholder-base01 outline-none focus:border-blue/50"
+            className="w-full px-3 py-2 text-sm text-base0 bg-base03 border border-base01/50 rounded placeholder-base01 focus:outline-none focus:border-blue"
           />
         </div>
         <ul ref={listRef} data-testid="command-palette-list" className="max-h-64 overflow-y-auto py-1">

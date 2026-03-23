@@ -33,7 +33,7 @@ export default function LoginScreen({ onLogin }) {
     <div className="w-screen h-screen flex items-center justify-center bg-base03">
       <form
         onSubmit={handleSubmit}
-        className="flex flex-col gap-4 p-8 rounded-lg bg-base02 border border-base01/30 w-full max-w-sm"
+        className="flex flex-col gap-4 p-8 rounded-lg bg-base02 border border-base01/30 shadow-lg w-full max-w-sm"
       >
         <h1 className="text-xl font-semibold text-base1 text-center">DanCode</h1>
         <p className="text-sm text-base0 text-center">Enter your auth token to continue</p>

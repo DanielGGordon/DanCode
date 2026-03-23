@@ -178,16 +178,18 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
   if (fetchError) {
     return (
       <div data-testid="pane-layout" className="flex flex-col w-full h-full">
-        <div data-testid="pane-fetch-error" className="flex flex-col items-center justify-center flex-1 gap-3 p-6">
-          <div className="text-red text-lg font-semibold">Failed to Load Project</div>
-          <p className="text-base0 text-sm text-center max-w-sm">{fetchError}</p>
-          <button
-            data-testid="pane-retry-button"
-            onClick={() => setFetchAttempt((n) => n + 1)}
-            className="mt-2 px-4 py-2 text-sm font-medium text-base1 bg-blue/20 border border-blue/50 rounded hover:bg-blue/30 transition-colors"
-          >
-            Retry
-          </button>
+        <div data-testid="pane-fetch-error" className="flex items-center justify-center flex-1 p-6">
+          <div className="flex flex-col items-center gap-3 p-6 rounded-lg bg-base02 border border-base01/30 shadow-lg max-w-sm text-center">
+            <div className="text-red text-lg font-semibold">Failed to Load Project</div>
+            <p className="text-base0 text-sm">{fetchError}</p>
+            <button
+              data-testid="pane-retry-button"
+              onClick={() => setFetchAttempt((n) => n + 1)}
+              className="mt-2 px-4 py-2 text-sm font-medium text-base1 bg-blue/20 border border-blue/50 rounded hover:bg-blue/30 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
         </div>
       </div>
     )
