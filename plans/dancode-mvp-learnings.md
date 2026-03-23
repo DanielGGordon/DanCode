@@ -7,3 +7,4 @@
 [done 2026-03-23 06:15] "Show tmux commands" toggle controls both bar and per-pane labels. ⚠️ Learning: Must use --config client/vite.config.js when running vitest from the repo root, otherwise jsdom environment isn't loaded and all tests fail with "window is not defined".
 [done 2026-03-23 06:30] Toggle state is persisted to config.
 [done 2026-03-23 07:25] Polish: loading states when switching projects, smooth transitions between layout modes.
+[done 2026-03-23 07:50] Polish: error states (tmux session died, WebSocket disconnected) show clear messages with recovery options. ⚠️ Learning: Socket event handlers in tests must be wrapped in act() to flush React state updates; also avoid manual innerHTML manipulation on React-managed containers.
