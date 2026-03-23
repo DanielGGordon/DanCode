@@ -244,7 +244,7 @@ Toggleable UI elements that display tmux commands for educational purposes. Plus
 - [x] Toggle state is persisted to config
 - [x] Polish: loading states when switching projects, smooth transitions between layout modes
 - [x] Polish: error states (tmux session died, WebSocket disconnected) show clear messages with recovery options
-- [ ] Polish: consistent spacing, borders, and shadows across all components
+- [x] Polish: consistent spacing, borders, and shadows across all components
 - [ ] All 11 success criteria from the PRD (Section 9) pass
 - [ ] Full E2E test suite passes
 - [ ] Full visual test suite passes

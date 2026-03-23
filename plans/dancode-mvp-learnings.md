@@ -8,3 +8,4 @@
 [done 2026-03-23 06:30] Toggle state is persisted to config.
 [done 2026-03-23 07:25] Polish: loading states when switching projects, smooth transitions between layout modes.
 [done 2026-03-23 07:50] Polish: error states (tmux session died, WebSocket disconnected) show clear messages with recovery options. ⚠️ Learning: Socket event handlers in tests must be wrapped in act() to flush React state updates; also avoid manual innerHTML manipulation on React-managed containers.
+[done 2026-03-23 08:05] Polish: consistent spacing, borders, and shadows across all components.
