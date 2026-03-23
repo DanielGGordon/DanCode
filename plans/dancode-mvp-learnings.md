@@ -10,3 +10,4 @@
 [done 2026-03-23 07:50] Polish: error states (tmux session died, WebSocket disconnected) show clear messages with recovery options. ⚠️ Learning: Socket event handlers in tests must be wrapped in act() to flush React state updates; also avoid manual innerHTML manipulation on React-managed containers.
 [done 2026-03-23 08:05] Polish: consistent spacing, borders, and shadows across all components.
 [done 2026-03-23 08:20] All 11 success criteria from the PRD (Section 9) pass. ⚠️ Learning: Express 5 uses path-to-regexp v8+ which requires named wildcard params ({*path}) instead of bare (*). Also, server was missing express.static() for serving the client build in production.
+[done 2026-03-23 08:50] Full E2E test suite passes. ⚠️ Learning: createProjectSession makes 2 tmux windows (CLI+Claude) not 3 — layout tests expected a Ralph pane that never existed. Also getByTestId("terminal") hits strict mode when PaneLayout renders multiple terminals; scope with pane-0 first.
