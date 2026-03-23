@@ -15,6 +15,7 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
   const [layoutMode, setLayoutMode] = useState('split')
   const [hiddenPanes, setHiddenPanes] = useState(new Set())
   const [showTmuxBar, setShowTmuxBar] = useState(false)
+  const [tmuxSessionName, setTmuxSessionName] = useState(null)
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT
   )
@@ -51,6 +52,9 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
       .then((res) => (res.ok ? res.json() : null))
       .then(async (project) => {
         if (cancelled || !project) return
+        if (project.tmuxSession) {
+          setTmuxSessionName(project.tmuxSession)
+        }
         if (project.layout) {
           if (project.layout.mode === 'split' || project.layout.mode === 'tabs') {
             setLayoutMode(project.layout.mode)
@@ -216,7 +220,7 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
         >
           <span className="text-base01 mr-2">$</span>
           <code className="text-green font-mono select-all">
-            tmux attach -t dancode-{slug}
+            tmux attach -t {tmuxSessionName || `dancode-${slug}`}
           </code>
         </div>
       )}
