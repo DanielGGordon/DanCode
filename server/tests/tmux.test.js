@@ -4,7 +4,7 @@ import { promisify } from 'node:util';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { sessionExists, createSession, ensureSession, createProjectSession, createConnectionSession, destroyConnectionSession, listSessions } from '../src/tmux.js';
+import { sessionExists, createSession, ensureSession, createProjectSession, createConnectionSession, destroyConnectionSession, listSessions, listWindows } from '../src/tmux.js';
 
 const execFileAsync = promisify(execFile);
 const TEST_SESSION = 'dancode-tmux-test';
@@ -71,6 +71,41 @@ describe('listSessions', () => {
     // listSessions always returns an array (even if tmux server not running)
     const sessions = await listSessions();
     expect(Array.isArray(sessions)).toBe(true);
+  });
+});
+
+describe('listWindows', () => {
+  const WIN_SESSION = 'dancode-listwin-test';
+
+  beforeEach(async () => {
+    await killSession(WIN_SESSION);
+  });
+
+  afterAll(async () => {
+    await killSession(WIN_SESSION);
+  });
+
+  it('returns empty array for non-existent session', async () => {
+    const windows = await listWindows('nonexistent-session');
+    expect(windows).toEqual([]);
+  });
+
+  it('returns windows with index and name for an existing session', async () => {
+    await execFileAsync('tmux', ['new-session', '-d', '-s', WIN_SESSION, '-n', 'editor']);
+    await execFileAsync('tmux', ['new-window', '-t', WIN_SESSION, '-n', 'shell']);
+
+    const windows = await listWindows(WIN_SESSION);
+    expect(windows).toHaveLength(2);
+    expect(windows[0]).toEqual({ index: 0, name: 'editor' });
+    expect(windows[1]).toEqual({ index: 1, name: 'shell' });
+  });
+
+  it('returns single window for a simple session', async () => {
+    await createSession(WIN_SESSION);
+    const windows = await listWindows(WIN_SESSION);
+    expect(windows).toHaveLength(1);
+    expect(windows[0].index).toBe(0);
+    expect(typeof windows[0].name).toBe('string');
   });
 });
 

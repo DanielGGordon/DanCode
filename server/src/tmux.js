@@ -20,6 +20,28 @@ export async function listSessions() {
 }
 
 /**
+ * List all windows in a tmux session.
+ * @param {string} sessionName - tmux session name
+ * @returns {Promise<Array<{index: number, name: string}>>} array of windows (empty if session doesn't exist)
+ */
+export async function listWindows(sessionName) {
+  try {
+    const { stdout } = await execFileAsync('tmux', [
+      'list-windows', '-t', sessionName, '-F', '#{window_index}:#{window_name}',
+    ]);
+    return stdout.trim().split('\n').filter(Boolean).map((line) => {
+      const colonIdx = line.indexOf(':');
+      return {
+        index: parseInt(line.slice(0, colonIdx), 10),
+        name: line.slice(colonIdx + 1),
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Check whether a tmux session with the given name exists.
  * @param {string} name - tmux session name
  * @returns {Promise<boolean>}

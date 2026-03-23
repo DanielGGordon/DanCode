@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { Server } from 'socket.io';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { ensureSession, createProjectSession, sessionExists, listSessions } from './tmux.js';
+import { ensureSession, createProjectSession, sessionExists, listSessions, listWindows } from './tmux.js';
 import { setupTerminalNamespace } from './terminal.js';
 import { ensureAuthToken, validateToken } from './auth.js';
 import { validateProjectInput, createProject, createAdoptedProject, listProjects, getProject, updateProject, deleteProject, getProjectsDir, slugify, isValidSlug } from './projects.js';
@@ -161,6 +161,25 @@ app.get('/api/projects/:slug', async (req, res) => {
     res.json(project);
   } catch (err) {
     res.status(500).json({ error: 'Failed to get project' });
+  }
+});
+
+app.get('/api/projects/:slug/panes', async (req, res) => {
+  const { slug } = req.params;
+  if (!isValidSlug(slug)) {
+    return res.status(400).json({ error: 'Invalid project slug' });
+  }
+  try {
+    const project = await getProject(slug, projectsDir);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    const sessionName = project.tmuxSession || `dancode-${slug}`;
+    const windows = await listWindows(sessionName);
+    const panes = windows.map((w) => ({ index: w.index, label: w.name }));
+    res.json(panes);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to list panes' });
   }
 });
 

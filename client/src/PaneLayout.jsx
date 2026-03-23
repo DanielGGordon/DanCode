@@ -9,7 +9,8 @@ export const ALL_PANES = [
 
 export const MOBILE_BREAKPOINT = 768
 
-export default function PaneLayout({ token, slug, panes = ALL_PANES }) {
+export default function PaneLayout({ token, slug, panes: panesProp }) {
+  const [fetchedPanes, setFetchedPanes] = useState(null)
   const [focusedPane, setFocusedPane] = useState(0)
   const [layoutMode, setLayoutMode] = useState('split')
   const [hiddenPanes, setHiddenPanes] = useState(new Set())
@@ -18,6 +19,24 @@ export default function PaneLayout({ token, slug, panes = ALL_PANES }) {
   )
   const loadedRef = useRef(false)
   const saveTimerRef = useRef(null)
+
+  // Fetch actual panes from the server when no explicit panes prop is given
+  useEffect(() => {
+    if (panesProp || !slug || !token) return
+    let cancelled = false
+    fetch(`/api/projects/${slug}/panes`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data || !Array.isArray(data) || data.length === 0) return
+        setFetchedPanes(data)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [slug, token, panesProp])
+
+  const panes = panesProp || fetchedPanes || ALL_PANES
 
   useEffect(() => {
     const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)

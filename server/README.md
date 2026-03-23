@@ -10,8 +10,9 @@ Serves the DanCode web application and manages WebSocket connections for real-ti
 
 - **`GET /`** — Serves the DanCode placeholder page (will be replaced by the React build in production)
 - **`GET /api/projects`** — List all configured projects, sorted alphabetically by name. Returns a JSON array of project objects.
-- **`POST /api/projects`** — Create a new project. Accepts `{ name, path }`, validates inputs, writes config to `~/.dancode/projects/<slug>.json`, creates the project directory if needed, and spins up a tmux session `dancode-<slug>` with two windows (CLI shell + Claude). Returns 201 with the project object, 400 for validation errors, 409 for duplicates.
+- **`POST /api/projects`** — Create a new project. Accepts `{ name, path }` for standard projects or `{ name, adoptSession }` to adopt an existing tmux session. Standard mode validates inputs, writes config to `~/.dancode/projects/<slug>.json`, creates the project directory if needed, and spins up a tmux session `dancode-<slug>` with two windows (CLI shell + Claude). Adopt mode links the project to the named tmux session without creating a new one. Returns 201 with the project object, 400 for validation errors, 409 for duplicates.
 - **`GET /api/projects/:slug`** — Get a single project by slug. Returns the project JSON object, or 404 if not found.
+- **`GET /api/projects/:slug/panes`** — List the tmux windows (panes) for a project's session. Returns a JSON array of `{ index, label }` objects. For adopted sessions, reflects the actual windows in the adopted tmux session. For standard projects, returns the `dancode-<slug>` session's windows.
 - **`PATCH /api/projects/:slug`** — Update a project's layout preferences. Accepts `{ layout: { mode, hiddenPanes } }`. Returns the updated project object. Used by the frontend to persist split/tabs mode and pane visibility.
 - **`GET /api/tmux-status`** — Returns a JSON object mapping each project slug to a boolean indicating whether its tmux session (`dancode-<slug>`) is currently running. Used by the sidebar to show status dots.
 - **`GET /api/tmux/sessions`** — Returns a JSON array of tmux sessions that are NOT already mapped to a DanCode project. Each entry is `{ name }`. Filters out project sessions (`dancode-<slug>` for configured projects) and internal connection sessions (containing `-conn-`). Used by the "Adopt existing tmux session" feature.
@@ -49,6 +50,7 @@ Serves the DanCode web application and manages WebSocket connections for real-ti
 ## Exports (src/tmux.js)
 
 - `listSessions()` — List all tmux session names. Returns `Promise<string[]>` (empty if no tmux server).
+- `listWindows(sessionName)` — List all windows in a tmux session. Returns `Promise<Array<{index, name}>>` (empty if session doesn't exist).
 - `sessionExists(name)` — Check whether a tmux session exists. Returns `Promise<boolean>`.
 - `createSession(name)` — Create a detached tmux session.
 - `ensureSession(name)` — Ensure a tmux session exists, creating it if needed. Returns `Promise<{created: boolean}>`.

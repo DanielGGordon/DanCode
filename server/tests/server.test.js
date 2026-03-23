@@ -597,6 +597,84 @@ describe('DanCode server', () => {
     });
   });
 
+  describe('GET /api/projects/:slug/panes', () => {
+    const authHeaders = () => ({
+      Authorization: `Bearer ${storedToken}`,
+    });
+
+    const PANES_SESSION = 'panes-test-session';
+
+    beforeAll(async () => {
+      // Create a tmux session with named windows for pane listing
+      try {
+        await execFileAsync('tmux', ['new-session', '-d', '-s', PANES_SESSION, '-n', 'editor']);
+        await execFileAsync('tmux', ['new-window', '-t', PANES_SESSION, '-n', 'shell']);
+      } catch {
+        // already exists
+      }
+      // Create an adopted project pointing to this session
+      const { mkdir } = await import('node:fs/promises');
+      await mkdir(projectsDir, { recursive: true });
+      const project = {
+        name: 'Panes Test',
+        slug: 'panes-test',
+        tmuxSession: PANES_SESSION,
+        createdAt: '2025-01-01T00:00:00.000Z',
+      };
+      await writeFile(join(projectsDir, 'panes-test.json'), JSON.stringify(project, null, 2) + '\n');
+    });
+
+    afterAll(async () => {
+      try {
+        await execFileAsync('tmux', ['kill-session', '-t', PANES_SESSION]);
+      } catch {
+        // already gone
+      }
+    });
+
+    it('returns panes for an adopted project with correct labels', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/panes-test/panes`, {
+        headers: authHeaders(),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(Array.isArray(body)).toBe(true);
+      expect(body).toHaveLength(2);
+      expect(body[0]).toEqual({ index: 0, label: 'editor' });
+      expect(body[1]).toEqual({ index: 1, label: 'shell' });
+    });
+
+    it('returns panes for a regular project (dancode-* session)', async () => {
+      // alpha-project has no tmuxSession, so it resolves to dancode-alpha-project
+      // That session may not exist, so we expect an empty array
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/alpha-project/panes`, {
+        headers: authHeaders(),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(Array.isArray(body)).toBe(true);
+    });
+
+    it('returns 404 for non-existent project', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/nonexistent/panes`, {
+        headers: authHeaders(),
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 400 for invalid slug', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/-bad/panes`, {
+        headers: authHeaders(),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 401 without auth token', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/panes-test/panes`);
+      expect(res.status).toBe(401);
+    });
+  });
+
   describe('PATCH /api/projects/:slug', () => {
     const authHeaders = () => ({
       'Content-Type': 'application/json',
