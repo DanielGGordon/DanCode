@@ -4,3 +4,4 @@
 [done 2026-03-23 05:00] E2E test: create a tmux session manually, open New Project form, adopt it, see its panes in DanCode. ⚠️ Learning: The dev server on port 3001 may be running stale code — if endpoints return 404, restart it. Playwright reuseExistingServer means it won't auto-restart.
 [done 2026-03-23 05:30] Toggleable horizontal bar at top of terminal view showing tmux attach command.
 [done 2026-03-23 06:00] Per-pane labels can optionally show the tmux pane-switch command (e.g., Ctrl+B, 0).
+[done 2026-03-23 06:15] "Show tmux commands" toggle controls both bar and per-pane labels. ⚠️ Learning: Must use --config client/vite.config.js when running vitest from the repo root, otherwise jsdom environment isn't loaded and all tests fail with "window is not defined".
