@@ -14,6 +14,7 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
   const [focusedPane, setFocusedPane] = useState(0)
   const [layoutMode, setLayoutMode] = useState('split')
   const [hiddenPanes, setHiddenPanes] = useState(new Set())
+  const [showTmuxBar, setShowTmuxBar] = useState(false)
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT
   )
@@ -183,16 +184,42 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
             )
           })}
         </div>
-        {!isMobile && (
+        <div className="flex gap-1 ml-auto">
           <button
-            data-testid="layout-toggle"
-            onClick={toggleLayout}
-            className="ml-auto px-2 py-1 text-xs text-base01 hover:text-base0 border border-base01/30 rounded transition-colors"
+            data-testid="tmux-bar-toggle"
+            onClick={() => setShowTmuxBar((prev) => !prev)}
+            className={`px-2 py-1 text-xs border rounded transition-colors ${
+              showTmuxBar
+                ? 'text-base1 bg-base03 border-blue/50'
+                : 'text-base01 border-base01/30 hover:text-base0'
+            }`}
           >
-            {layoutMode === 'split' ? 'Tabs' : 'Split'}
+            tmux
           </button>
-        )}
+          {!isMobile && (
+            <button
+              data-testid="layout-toggle"
+              onClick={toggleLayout}
+              className="px-2 py-1 text-xs text-base01 hover:text-base0 border border-base01/30 rounded transition-colors"
+            >
+              {layoutMode === 'split' ? 'Tabs' : 'Split'}
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Tmux attach command bar */}
+      {showTmuxBar && (
+        <div
+          data-testid="tmux-bar"
+          className="flex items-center px-3 py-1.5 bg-base03 border-b border-base01/30 text-xs"
+        >
+          <span className="text-base01 mr-2">$</span>
+          <code className="text-green font-mono select-all">
+            tmux attach -t dancode-{slug}
+          </code>
+        </div>
+      )}
 
       {/* Pane content */}
       {effectiveLayout === 'split' ? (

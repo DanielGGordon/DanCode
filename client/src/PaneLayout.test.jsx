@@ -1142,3 +1142,66 @@ describe('PaneLayout dynamic pane fetching', () => {
     expect(getByTestId('pane-2')).toBeDefined()
   })
 })
+
+describe('PaneLayout tmux command bar', () => {
+  it('renders a tmux bar toggle button', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    expect(getByTestId('tmux-bar-toggle')).toBeDefined()
+    expect(getByTestId('tmux-bar-toggle').textContent).toBe('tmux')
+  })
+
+  it('tmux bar is hidden by default', () => {
+    const { queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    expect(queryByTestId('tmux-bar')).toBeNull()
+  })
+
+  it('shows tmux bar when toggle is clicked', () => {
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    fireEvent.click(getByTestId('tmux-bar-toggle'))
+
+    expect(getByTestId('tmux-bar')).toBeDefined()
+  })
+
+  it('hides tmux bar when toggle is clicked again', () => {
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    fireEvent.click(getByTestId('tmux-bar-toggle'))
+    expect(getByTestId('tmux-bar')).toBeDefined()
+
+    fireEvent.click(getByTestId('tmux-bar-toggle'))
+    expect(queryByTestId('tmux-bar')).toBeNull()
+  })
+
+  it('displays the correct tmux attach command with project slug', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    fireEvent.click(getByTestId('tmux-bar-toggle'))
+
+    const bar = getByTestId('tmux-bar')
+    expect(bar.textContent).toContain('tmux attach -t dancode-myproj')
+  })
+
+  it('updates the tmux command when slug changes', () => {
+    const { getByTestId, rerender } = render(<PaneLayout token="tok" slug="project-a" />)
+
+    fireEvent.click(getByTestId('tmux-bar-toggle'))
+    expect(getByTestId('tmux-bar').textContent).toContain('tmux attach -t dancode-project-a')
+
+    rerender(<PaneLayout token="tok" slug="project-b" />)
+    expect(getByTestId('tmux-bar').textContent).toContain('tmux attach -t dancode-project-b')
+  })
+
+  it('toggle button shows active styling when bar is visible', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Initially inactive styling
+    expect(getByTestId('tmux-bar-toggle').className).toContain('text-base01')
+
+    fireEvent.click(getByTestId('tmux-bar-toggle'))
+
+    // Active styling
+    expect(getByTestId('tmux-bar-toggle').className).toContain('text-base1')
+    expect(getByTestId('tmux-bar-toggle').className).toContain('border-blue/50')
+  })
+})
