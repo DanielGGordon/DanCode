@@ -223,7 +223,7 @@ When creating a new project, the user can choose to adopt an existing tmux sessi
 - [x] Selecting a session and submitting the form creates a project config pointing to that session (does not create a new tmux session)
 - [x] The adopted session's panes are displayed in the UI as-is
 - [x] If there are no orphaned sessions, the option is disabled or shows "No sessions available"
-- [ ] Unit tests: orphan session detection (filters out `dancode-*` sessions that are already in config)
+- [x] Unit tests: orphan session detection (filters out `dancode-*` sessions that are already in config)
 - [ ] E2E test: create a tmux session manually, open New Project form, adopt it, see its panes in DanCode
 
 ---

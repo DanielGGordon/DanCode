@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { Server } from 'socket.io';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { ensureSession, createProjectSession, sessionExists, listSessions, listWindows } from './tmux.js';
+import { ensureSession, createProjectSession, sessionExists, listSessions, listWindows, getOrphanedSessions } from './tmux.js';
 import { setupTerminalNamespace } from './terminal.js';
 import { ensureAuthToken, validateToken } from './auth.js';
 import { validateProjectInput, createProject, createAdoptedProject, listProjects, getProject, updateProject, deleteProject, getProjectsDir, slugify, isValidSlug } from './projects.js';
@@ -132,15 +132,7 @@ app.get('/api/tmux/sessions', async (req, res) => {
       listProjects(projectsDir),
     ]);
 
-    // Build set of session names that are already mapped to a project
-    const mappedSessions = new Set(
-      projects.map((p) => p.tmuxSession || `dancode-${p.slug}`)
-    );
-
-    // Filter out mapped sessions and internal connection sessions
-    const orphaned = allSessions.filter(
-      (name) => !mappedSessions.has(name) && !name.includes('-conn-')
-    );
+    const orphaned = getOrphanedSessions(allSessions, projects);
 
     res.json(orphaned.map((name) => ({ name })));
   } catch (err) {

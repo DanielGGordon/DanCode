@@ -166,3 +166,20 @@ export async function destroyConnectionSession(connSession) {
     // Session already gone — that's fine
   }
 }
+
+/**
+ * Filter a list of tmux session names to only those that are "orphaned" —
+ * not already mapped to a DanCode project and not internal connection sessions.
+ *
+ * @param {string[]} allSessions - all tmux session names
+ * @param {Array<{slug: string, tmuxSession?: string}>} projects - configured projects
+ * @returns {string[]} session names not mapped to any project
+ */
+export function getOrphanedSessions(allSessions, projects) {
+  const mappedSessions = new Set(
+    projects.map((p) => p.tmuxSession || `dancode-${p.slug}`)
+  );
+  return allSessions.filter(
+    (name) => !mappedSessions.has(name) && !name.includes('-conn-')
+  );
+}

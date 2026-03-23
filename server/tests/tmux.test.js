@@ -4,7 +4,7 @@ import { promisify } from 'node:util';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { sessionExists, createSession, ensureSession, createProjectSession, createConnectionSession, destroyConnectionSession, listSessions, listWindows } from '../src/tmux.js';
+import { sessionExists, createSession, ensureSession, createProjectSession, createConnectionSession, destroyConnectionSession, listSessions, listWindows, getOrphanedSessions } from '../src/tmux.js';
 
 const execFileAsync = promisify(execFile);
 const TEST_SESSION = 'dancode-tmux-test';
@@ -227,5 +227,89 @@ describe('createConnectionSession / destroyConnectionSession', () => {
     const connSession = await createConnectionSession(SESSION_NAME, 0, 'test5');
     await destroyConnectionSession(connSession);
     expect(await sessionExists(SESSION_NAME)).toBe(true);
+  });
+});
+
+describe('getOrphanedSessions', () => {
+  it('returns all sessions when there are no projects', () => {
+    const sessions = ['my-session', 'another-session'];
+    const projects = [];
+    expect(getOrphanedSessions(sessions, projects)).toEqual(['my-session', 'another-session']);
+  });
+
+  it('returns empty array when there are no sessions', () => {
+    const projects = [{ slug: 'foo', name: 'Foo' }];
+    expect(getOrphanedSessions([], projects)).toEqual([]);
+  });
+
+  it('filters out dancode-<slug> sessions that match a project', () => {
+    const sessions = ['dancode-my-project', 'dancode-other', 'unrelated'];
+    const projects = [{ slug: 'my-project', name: 'My Project' }];
+    const orphaned = getOrphanedSessions(sessions, projects);
+    expect(orphaned).toEqual(['dancode-other', 'unrelated']);
+  });
+
+  it('filters out sessions matching project.tmuxSession for adopted projects', () => {
+    const sessions = ['my-custom-session', 'dancode-adopted', 'orphan'];
+    const projects = [{ slug: 'adopted', name: 'Adopted', tmuxSession: 'my-custom-session' }];
+    const orphaned = getOrphanedSessions(sessions, projects);
+    // my-custom-session is mapped via tmuxSession, dancode-adopted is NOT mapped
+    // because the project uses tmuxSession override
+    expect(orphaned).toContain('dancode-adopted');
+    expect(orphaned).not.toContain('my-custom-session');
+    expect(orphaned).toContain('orphan');
+  });
+
+  it('uses tmuxSession over dancode-<slug> when both could match', () => {
+    // Project has tmuxSession set, so dancode-<slug> is NOT considered mapped
+    const sessions = ['custom-sess', 'dancode-proj'];
+    const projects = [{ slug: 'proj', name: 'Proj', tmuxSession: 'custom-sess' }];
+    const orphaned = getOrphanedSessions(sessions, projects);
+    expect(orphaned).toEqual(['dancode-proj']);
+  });
+
+  it('filters out connection sessions (containing -conn-)', () => {
+    const sessions = ['dancode-proj-conn-abc', 'dancode-proj-conn-def', 'real-session'];
+    const projects = [];
+    const orphaned = getOrphanedSessions(sessions, projects);
+    expect(orphaned).toEqual(['real-session']);
+  });
+
+  it('filters out both mapped and connection sessions simultaneously', () => {
+    const sessions = [
+      'dancode-alpha',         // mapped via slug
+      'my-adopted-session',    // mapped via tmuxSession
+      'dancode-alpha-conn-1',  // connection session
+      'orphan-session',        // not mapped, not a connection
+    ];
+    const projects = [
+      { slug: 'alpha', name: 'Alpha' },
+      { slug: 'beta', name: 'Beta', tmuxSession: 'my-adopted-session' },
+    ];
+    const orphaned = getOrphanedSessions(sessions, projects);
+    expect(orphaned).toEqual(['orphan-session']);
+  });
+
+  it('does not filter out sessions with similar but non-matching names', () => {
+    const sessions = ['dancode-my-project-extra', 'dancode-my-project'];
+    const projects = [{ slug: 'my-project', name: 'My Project' }];
+    const orphaned = getOrphanedSessions(sessions, projects);
+    // Only exact match is filtered
+    expect(orphaned).toEqual(['dancode-my-project-extra']);
+  });
+
+  it('handles multiple projects with a mix of adopted and regular', () => {
+    const sessions = [
+      'dancode-regular',
+      'dancode-another',
+      'custom-tmux',
+      'stray-session',
+    ];
+    const projects = [
+      { slug: 'regular', name: 'Regular' },
+      { slug: 'adopted', name: 'Adopted', tmuxSession: 'custom-tmux' },
+    ];
+    const orphaned = getOrphanedSessions(sessions, projects);
+    expect(orphaned).toEqual(['dancode-another', 'stray-session']);
   });
 });
