@@ -4,6 +4,22 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 
 /**
+ * List all tmux session names.
+ * @returns {Promise<string[]>} array of session names (empty if no tmux server)
+ */
+export async function listSessions() {
+  try {
+    const { stdout } = await execFileAsync('tmux', [
+      'list-sessions', '-F', '#{session_name}',
+    ]);
+    return stdout.trim().split('\n').filter(Boolean);
+  } catch {
+    // tmux server not running or no sessions
+    return [];
+  }
+}
+
+/**
  * Check whether a tmux session with the given name exists.
  * @param {string} name - tmux session name
  * @returns {Promise<boolean>}

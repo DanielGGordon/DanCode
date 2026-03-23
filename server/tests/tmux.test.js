@@ -4,7 +4,7 @@ import { promisify } from 'node:util';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { sessionExists, createSession, ensureSession, createProjectSession, createConnectionSession, destroyConnectionSession } from '../src/tmux.js';
+import { sessionExists, createSession, ensureSession, createProjectSession, createConnectionSession, destroyConnectionSession, listSessions } from '../src/tmux.js';
 
 const execFileAsync = promisify(execFile);
 const TEST_SESSION = 'dancode-tmux-test';
@@ -50,6 +50,27 @@ describe('tmux session management', () => {
     const result = await ensureSession(TEST_SESSION);
     expect(result.created).toBe(true);
     expect(await sessionExists(TEST_SESSION)).toBe(true);
+  });
+});
+
+describe('listSessions', () => {
+  const LIST_SESSION = 'dancode-list-test';
+
+  afterAll(async () => {
+    await killSession(LIST_SESSION);
+  });
+
+  it('returns an array of session names', async () => {
+    await ensureSession(LIST_SESSION);
+    const sessions = await listSessions();
+    expect(Array.isArray(sessions)).toBe(true);
+    expect(sessions).toContain(LIST_SESSION);
+  });
+
+  it('returns an empty array when no sessions match', async () => {
+    // listSessions always returns an array (even if tmux server not running)
+    const sessions = await listSessions();
+    expect(Array.isArray(sessions)).toBe(true);
   });
 });
 

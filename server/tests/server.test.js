@@ -404,6 +404,89 @@ describe('DanCode server', () => {
     });
   });
 
+  describe('GET /api/tmux/sessions', () => {
+    const authHeaders = () => ({
+      Authorization: `Bearer ${storedToken}`,
+    });
+
+    const ORPHAN_SESSION = 'orphan-test-session';
+
+    beforeAll(async () => {
+      // Create an orphan tmux session (not mapped to any project)
+      try {
+        await execFileAsync('tmux', ['new-session', '-d', '-s', ORPHAN_SESSION]);
+      } catch {
+        // already exists
+      }
+    });
+
+    afterAll(async () => {
+      try {
+        await execFileAsync('tmux', ['kill-session', '-t', ORPHAN_SESSION]);
+      } catch {
+        // already gone
+      }
+    });
+
+    it('returns an array of orphaned tmux sessions', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/tmux/sessions`, {
+        headers: authHeaders(),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(Array.isArray(body)).toBe(true);
+      // Each entry should have a name property
+      for (const session of body) {
+        expect(session).toHaveProperty('name');
+        expect(typeof session.name).toBe('string');
+      }
+    });
+
+    it('includes sessions not mapped to any project', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/tmux/sessions`, {
+        headers: authHeaders(),
+      });
+      const body = await res.json();
+      const names = body.map((s) => s.name);
+      expect(names).toContain(ORPHAN_SESSION);
+    });
+
+    it('excludes sessions that are mapped to a configured project', async () => {
+      // Create a project session so it appears in tmux
+      await execFileAsync('tmux', ['new-session', '-d', '-s', 'dancode-alpha-project']).catch(() => {});
+      try {
+        const res = await fetch(`http://localhost:${TEST_PORT}/api/tmux/sessions`, {
+          headers: authHeaders(),
+        });
+        const body = await res.json();
+        const names = body.map((s) => s.name);
+        expect(names).not.toContain('dancode-alpha-project');
+      } finally {
+        await execFileAsync('tmux', ['kill-session', '-t', 'dancode-alpha-project']).catch(() => {});
+      }
+    });
+
+    it('excludes connection sessions (containing -conn-)', async () => {
+      // Create a connection-style session
+      await execFileAsync('tmux', ['new-session', '-d', '-s', 'something-conn-abc']).catch(() => {});
+      try {
+        const res = await fetch(`http://localhost:${TEST_PORT}/api/tmux/sessions`, {
+          headers: authHeaders(),
+        });
+        const body = await res.json();
+        const names = body.map((s) => s.name);
+        expect(names).not.toContain('something-conn-abc');
+      } finally {
+        await execFileAsync('tmux', ['kill-session', '-t', 'something-conn-abc']).catch(() => {});
+      }
+    });
+
+    it('returns 401 without auth token', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/tmux/sessions`);
+      expect(res.status).toBe(401);
+    });
+  });
+
   describe('GET /api/projects/:slug', () => {
     const authHeaders = () => ({
       Authorization: `Bearer ${storedToken}`,

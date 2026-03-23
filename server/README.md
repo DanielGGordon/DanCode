@@ -14,6 +14,7 @@ Serves the DanCode web application and manages WebSocket connections for real-ti
 - **`GET /api/projects/:slug`** — Get a single project by slug. Returns the project JSON object, or 404 if not found.
 - **`PATCH /api/projects/:slug`** — Update a project's layout preferences. Accepts `{ layout: { mode, hiddenPanes } }`. Returns the updated project object. Used by the frontend to persist split/tabs mode and pane visibility.
 - **`GET /api/tmux-status`** — Returns a JSON object mapping each project slug to a boolean indicating whether its tmux session (`dancode-<slug>`) is currently running. Used by the sidebar to show status dots.
+- **`GET /api/tmux/sessions`** — Returns a JSON array of tmux sessions that are NOT already mapped to a DanCode project. Each entry is `{ name }`. Filters out project sessions (`dancode-<slug>` for configured projects) and internal connection sessions (containing `-conn-`). Used by the "Adopt existing tmux session" feature.
 - **`DELETE /api/projects/:slug`** — Delete a project's config file. Does NOT kill the tmux session. Returns 204 on success, 404 if the project does not exist.
 - **Socket.io** — Listens for WebSocket connections on the default namespace
 - **Socket.io `/terminal`** — Accepts connections and spawns a node-pty process attached to `tmux attach -t <session>`. Supports optional `pane` query parameter to connect to a specific tmux window via grouped sessions. Emits `output` events with terminal data; accepts `input` (keystrokes) and `resize` ({ cols, rows }) events.
@@ -47,6 +48,7 @@ Serves the DanCode web application and manages WebSocket connections for real-ti
 
 ## Exports (src/tmux.js)
 
+- `listSessions()` — List all tmux session names. Returns `Promise<string[]>` (empty if no tmux server).
 - `sessionExists(name)` — Check whether a tmux session exists. Returns `Promise<boolean>`.
 - `createSession(name)` — Create a detached tmux session.
 - `ensureSession(name)` — Ensure a tmux session exists, creating it if needed. Returns `Promise<{created: boolean}>`.
