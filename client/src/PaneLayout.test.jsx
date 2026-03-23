@@ -61,19 +61,19 @@ beforeEach(() => {
 
 describe('PaneLayout', () => {
   it('renders a pane-layout container', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     expect(getByTestId('pane-layout')).toBeDefined()
   })
 
   it('renders three panes by default (CLI, Claude, Ralph)', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     expect(getByTestId('pane-0')).toBeDefined()
     expect(getByTestId('pane-1')).toBeDefined()
     expect(getByTestId('pane-2')).toBeDefined()
   })
 
   it('renders three Terminal components with different pane indices', () => {
-    render(<PaneLayout token="tok" slug="myproj" />)
+    render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     expect(terminalInstances).toHaveLength(3)
     expect(terminalInstances[0]).toMatchObject({ token: 'tok', slug: 'myproj', pane: 0 })
     expect(terminalInstances[1]).toMatchObject({ token: 'tok', slug: 'myproj', pane: 1 })
@@ -81,14 +81,14 @@ describe('PaneLayout', () => {
   })
 
   it('displays CLI, Claude, and Ralph labels in split mode', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     expect(getByTestId('pane-0').textContent).toContain('CLI')
     expect(getByTestId('pane-1').textContent).toContain('Claude')
     expect(getByTestId('pane-2').textContent).toContain('Ralph')
   })
 
   it('defaults to split layout mode', () => {
-    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     // Toggle button should say "Tabs" (offering switch to tabs)
     expect(getByTestId('layout-toggle').textContent).toBe('Tabs')
     // Tab bar should not be present in split mode
@@ -96,14 +96,14 @@ describe('PaneLayout', () => {
   })
 
   it('uses flex-row for split panes container', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     // The split panes are inside a nested flex-row div
     const pane0 = getByTestId('pane-0')
     expect(pane0.parentElement.className).toContain('flex-row')
   })
 
   it('gives each pane equal width via flex-1 (33/33/33 split)', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     expect(getByTestId('pane-0').className).toContain('flex-1')
     expect(getByTestId('pane-1').className).toContain('flex-1')
     expect(getByTestId('pane-2').className).toContain('flex-1')
@@ -135,21 +135,21 @@ describe('PaneLayout', () => {
   })
 
   it('focuses the first pane by default', () => {
-    render(<PaneLayout token="tok" slug="myproj" />)
+    render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     expect(terminalInstances[0].focused).toBe(true)
     expect(terminalInstances[1].focused).toBe(false)
     expect(terminalInstances[2].focused).toBe(false)
   })
 
   it('passes onFocus callback to each Terminal', () => {
-    render(<PaneLayout token="tok" slug="myproj" />)
+    render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     terminalInstances.forEach((inst) => {
       expect(typeof inst.onFocus).toBe('function')
     })
   })
 
   it('switches focus when a pane is clicked', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     // Clear captured instances from initial render
     terminalInstances.length = 0
 
@@ -163,7 +163,7 @@ describe('PaneLayout', () => {
   })
 
   it('highlights focused pane label with brighter text', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     // Pane 0 is focused by default — its label should have text-base1
     const pane0Label = getByTestId('pane-0').querySelector('div')
     expect(pane0Label.className).toContain('text-base1')
@@ -174,7 +174,7 @@ describe('PaneLayout', () => {
   })
 
   it('updates visual highlight when focus changes via click', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     fireEvent.click(getByTestId('pane-2'))
 
@@ -186,7 +186,7 @@ describe('PaneLayout', () => {
   })
 
   it('updates focus when Terminal fires onFocus callback', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Simulate xterm native focus on pane 2
     const pane2Inst = terminalInstances.find((inst) => inst.pane === 2)
@@ -206,12 +206,12 @@ describe('PaneLayout', () => {
 
 describe('PaneLayout toggle (split ↔ tabs)', () => {
   it('renders a layout toggle button', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     expect(getByTestId('layout-toggle')).toBeDefined()
   })
 
   it('switches to tabbed mode when toggle is clicked', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     fireEvent.click(getByTestId('layout-toggle'))
 
     // Button should now say "Split"
@@ -223,7 +223,7 @@ describe('PaneLayout toggle (split ↔ tabs)', () => {
   })
 
   it('switches back to split mode when toggle is clicked again', () => {
-    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     fireEvent.click(getByTestId('layout-toggle')) // → tabs
     fireEvent.click(getByTestId('layout-toggle')) // → split
 
@@ -233,7 +233,7 @@ describe('PaneLayout toggle (split ↔ tabs)', () => {
   })
 
   it('shows tab buttons for each pane in tabbed mode', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     fireEvent.click(getByTestId('layout-toggle'))
 
     expect(getByTestId('tab-0').textContent).toBe('CLI')
@@ -242,7 +242,7 @@ describe('PaneLayout toggle (split ↔ tabs)', () => {
   })
 
   it('shows only the focused pane in tabbed mode (others are hidden)', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     fireEvent.click(getByTestId('layout-toggle'))
 
     // Pane 0 is focused by default — should be visible
@@ -253,7 +253,7 @@ describe('PaneLayout toggle (split ↔ tabs)', () => {
   })
 
   it('switches visible pane when a tab is clicked', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     fireEvent.click(getByTestId('layout-toggle'))
 
     fireEvent.click(getByTestId('tab-1'))
@@ -264,7 +264,7 @@ describe('PaneLayout toggle (split ↔ tabs)', () => {
   })
 
   it('highlights the active tab button', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     fireEvent.click(getByTestId('layout-toggle'))
 
     // Tab 0 should be highlighted (active)
@@ -278,7 +278,7 @@ describe('PaneLayout toggle (split ↔ tabs)', () => {
   })
 
   it('preserves focused pane when switching layout modes', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Focus pane 2 in split mode
     fireEvent.click(getByTestId('pane-2'))
@@ -291,7 +291,7 @@ describe('PaneLayout toggle (split ↔ tabs)', () => {
   })
 
   it('renders all Terminal instances in tabbed mode (hidden panes still mounted)', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     terminalInstances.length = 0
 
     fireEvent.click(getByTestId('layout-toggle'))
@@ -308,7 +308,7 @@ describe('PaneLayout mobile auto-tabs', () => {
 
   it('auto-selects tabbed mode on mobile viewport (<768px)', () => {
     mockViewport(375)
-    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Should show tab bar (tabbed mode)
     expect(getByTestId('tab-bar')).toBeDefined()
@@ -319,7 +319,7 @@ describe('PaneLayout mobile auto-tabs', () => {
 
   it('shows split mode on desktop viewport (>=768px)', () => {
     mockViewport(1024)
-    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Should be in split mode
     expect(queryByTestId('tab-bar')).toBeNull()
@@ -330,7 +330,7 @@ describe('PaneLayout mobile auto-tabs', () => {
 
   it('shows tab buttons for each pane on mobile', () => {
     mockViewport(375)
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     expect(getByTestId('tab-0').textContent).toBe('CLI')
     expect(getByTestId('tab-1').textContent).toBe('Claude')
@@ -339,7 +339,7 @@ describe('PaneLayout mobile auto-tabs', () => {
 
   it('shows only the focused pane on mobile', () => {
     mockViewport(375)
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     expect(getByTestId('pane-0').className).not.toContain('hidden')
     expect(getByTestId('pane-1').className).toContain('hidden')
@@ -348,7 +348,7 @@ describe('PaneLayout mobile auto-tabs', () => {
 
   it('switches visible pane when a tab is clicked on mobile', () => {
     mockViewport(375)
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     fireEvent.click(getByTestId('tab-2'))
 
@@ -358,7 +358,7 @@ describe('PaneLayout mobile auto-tabs', () => {
 
   it('switches to tabs when viewport shrinks below breakpoint', () => {
     const viewport = mockViewport(1024)
-    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Initially desktop — split mode
     expect(queryByTestId('tab-bar')).toBeNull()
@@ -376,7 +376,7 @@ describe('PaneLayout mobile auto-tabs', () => {
 
   it('switches back to split when viewport grows above breakpoint', () => {
     const viewport = mockViewport(375)
-    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Initially mobile — tabbed mode
     expect(getByTestId('tab-bar')).toBeDefined()
@@ -393,7 +393,7 @@ describe('PaneLayout mobile auto-tabs', () => {
 
   it('treats exactly 768px as desktop (not mobile)', () => {
     mockViewport(768)
-    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     expect(queryByTestId('tab-bar')).toBeNull()
     expect(getByTestId('layout-toggle')).toBeDefined()
@@ -401,7 +401,7 @@ describe('PaneLayout mobile auto-tabs', () => {
 
   it('treats 767px as mobile', () => {
     mockViewport(767)
-    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     expect(getByTestId('tab-bar')).toBeDefined()
     expect(queryByTestId('layout-toggle')).toBeNull()
@@ -410,7 +410,7 @@ describe('PaneLayout mobile auto-tabs', () => {
 
 describe('PaneLayout visibility toggles', () => {
   it('renders visibility toggle buttons for each pane', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     expect(getByTestId('visibility-toggles')).toBeDefined()
     expect(getByTestId('visibility-0').textContent).toBe('CLI')
     expect(getByTestId('visibility-1').textContent).toBe('Claude')
@@ -418,7 +418,7 @@ describe('PaneLayout visibility toggles', () => {
   })
 
   it('all panes are visible by default', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     // All visibility buttons should have active styling (text-base1)
     expect(getByTestId('visibility-0').className).toContain('text-base1')
     expect(getByTestId('visibility-1').className).toContain('text-base1')
@@ -426,7 +426,7 @@ describe('PaneLayout visibility toggles', () => {
   })
 
   it('hides a pane when its visibility toggle is clicked', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     fireEvent.click(getByTestId('visibility-1'))
 
@@ -438,7 +438,7 @@ describe('PaneLayout visibility toggles', () => {
   })
 
   it('shows a hidden pane when its visibility toggle is clicked again', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Hide pane 1
     fireEvent.click(getByTestId('visibility-1'))
@@ -451,7 +451,7 @@ describe('PaneLayout visibility toggles', () => {
   })
 
   it('prevents hiding the last visible pane', () => {
-    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Hide panes 1 and 2
     fireEvent.click(getByTestId('visibility-1'))
@@ -466,7 +466,7 @@ describe('PaneLayout visibility toggles', () => {
   })
 
   it('marks hidden pane toggle with dimmed styling', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     fireEvent.click(getByTestId('visibility-2'))
 
@@ -477,7 +477,7 @@ describe('PaneLayout visibility toggles', () => {
   })
 
   it('moves focus to first visible pane when focused pane is hidden', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Focus pane 1
     fireEvent.click(getByTestId('pane-1'))
@@ -496,7 +496,7 @@ describe('PaneLayout visibility toggles', () => {
   })
 
   it('keeps hidden pane Terminals mounted to preserve session state', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     terminalInstances.length = 0
 
     fireEvent.click(getByTestId('visibility-2'))
@@ -507,7 +507,7 @@ describe('PaneLayout visibility toggles', () => {
   })
 
   it('works with tabbed mode — hidden panes have no tab', () => {
-    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Switch to tabs
     fireEvent.click(getByTestId('layout-toggle'))
@@ -522,7 +522,7 @@ describe('PaneLayout visibility toggles', () => {
   })
 
   it('last visible pane toggle shows disabled styling', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     fireEvent.click(getByTestId('visibility-1'))
     fireEvent.click(getByTestId('visibility-2'))
@@ -584,7 +584,7 @@ describe('PaneLayout config persistence', () => {
     }
 
     vi.useRealTimers()
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/projects/myproj', {
@@ -603,7 +603,7 @@ describe('PaneLayout config persistence', () => {
     }
 
     vi.useRealTimers()
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // After loading, should be in tabs mode
     await waitFor(() => {
@@ -621,7 +621,7 @@ describe('PaneLayout config persistence', () => {
     }
 
     vi.useRealTimers()
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     await waitFor(() => {
       expect(getByTestId('pane-1').className).toContain('hidden')
@@ -635,7 +635,7 @@ describe('PaneLayout config persistence', () => {
       json: () => Promise.resolve({ name: 'Test', slug: 'myproj', path: '/tmp' }),
     }
 
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Wait for load to complete (flush promise chain + setTimeout(0) in .finally)
     await act(async () => {
@@ -670,7 +670,7 @@ describe('PaneLayout config persistence', () => {
       json: () => Promise.resolve({ name: 'Test', slug: 'myproj', path: '/tmp' }),
     }
 
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Wait for load to complete (flush promise chain + setTimeout(0) in .finally)
     await act(async () => {
@@ -704,7 +704,7 @@ describe('PaneLayout config persistence', () => {
     }
 
     vi.useRealTimers()
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // After loading, tmux bar should be visible
     await waitFor(() => {
@@ -718,7 +718,7 @@ describe('PaneLayout config persistence', () => {
       json: () => Promise.resolve({ name: 'Test', slug: 'myproj', path: '/tmp' }),
     }
 
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Wait for load to complete (flush promise chain + setTimeout(0) in .finally)
     await act(async () => {
@@ -747,7 +747,7 @@ describe('PaneLayout config persistence', () => {
     // Config fetch never resolves
     configResponse = new Promise(() => {})
 
-    render(<PaneLayout token="tok" slug="myproj" />)
+    render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     act(() => {
       vi.advanceTimersByTime(500)
@@ -761,7 +761,7 @@ describe('PaneLayout config persistence', () => {
   })
 
   it('does not fetch config when slug is not provided', () => {
-    render(<PaneLayout token="tok" slug={undefined} />)
+    render(<PaneLayout token="tok" slug={undefined} panes={ALL_PANES} />)
 
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -770,7 +770,7 @@ describe('PaneLayout config persistence', () => {
     configResponse = Promise.reject(new Error('Network error'))
 
     vi.useRealTimers()
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Should still render with defaults
     await waitFor(() => {
@@ -780,7 +780,7 @@ describe('PaneLayout config persistence', () => {
   })
 
   it('does not fetch or save config when token is not provided', () => {
-    render(<PaneLayout token={undefined} slug="myproj" />)
+    render(<PaneLayout token={undefined} slug="myproj" panes={ALL_PANES} />)
 
     act(() => { vi.advanceTimersByTime(500) })
 
@@ -791,7 +791,7 @@ describe('PaneLayout config persistence', () => {
     configResponse = { ok: false, status: 404 }
 
     vi.useRealTimers()
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     await waitFor(() => {
       expect(getByTestId('pane-layout')).toBeDefined()
@@ -814,7 +814,7 @@ describe('PaneLayout config persistence', () => {
     }
 
     vi.useRealTimers()
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     await waitFor(() => {
       expect(getByTestId('pane-layout')).toBeDefined()
@@ -833,7 +833,7 @@ describe('PaneLayout config persistence', () => {
     }
 
     vi.useRealTimers()
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     await waitFor(() => {
       expect(getByTestId('pane-layout')).toBeDefined()
@@ -850,7 +850,7 @@ describe('PaneLayout config persistence', () => {
       json: () => Promise.resolve({ name: 'Test', slug: 'myproj', path: '/tmp' }),
     }
 
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Flush load
     await act(async () => {
@@ -887,7 +887,7 @@ describe('PaneLayout config persistence', () => {
       json: () => Promise.resolve({ name: 'Test', slug: 'myproj', path: '/tmp' }),
     }
 
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     await act(async () => {
       await Promise.resolve()
@@ -919,7 +919,7 @@ describe('PaneLayout config persistence', () => {
       json: () => Promise.resolve({ name: 'Test', slug: 'myproj', path: '/tmp' }),
     }
 
-    const { getByTestId, unmount } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId, unmount } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     await act(async () => {
       await Promise.resolve()
@@ -963,7 +963,7 @@ describe('PaneLayout layout state management', () => {
   })
 
   it('multiple rapid layout toggles end in correct state', () => {
-    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Toggle 4 times (split → tabs → split → tabs → split)
     fireEvent.click(getByTestId('layout-toggle'))
@@ -978,7 +978,7 @@ describe('PaneLayout layout state management', () => {
 
   it('effectiveLayout is tabs on mobile even when layoutMode is split', () => {
     mockViewport(1024)
-    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Start in split mode on desktop
     expect(queryByTestId('tab-bar')).toBeNull()
@@ -988,12 +988,12 @@ describe('PaneLayout layout state management', () => {
     // Need to re-render, let's just test directly with mobile viewport
     cleanup()
     mockViewport(375)
-    const { getByTestId: mobileGet } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId: mobileGet } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     expect(mobileGet('tab-bar')).toBeDefined()
   })
 
   it('focus moves through visible panes as panes are hidden', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Focus pane 1
     fireEvent.click(getByTestId('pane-1'))
@@ -1009,7 +1009,7 @@ describe('PaneLayout layout state management', () => {
   })
 
   it('hiding panes in split mode adjusts visible count (remaining panes fill space)', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // All 3 panes visible with flex-1
     expect(getByTestId('pane-0').className).toContain('flex-1')
@@ -1027,7 +1027,7 @@ describe('PaneLayout layout state management', () => {
   })
 
   it('layout mode state is preserved through visibility changes', () => {
-    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Switch to tabs
     fireEvent.click(getByTestId('layout-toggle'))
@@ -1042,7 +1042,7 @@ describe('PaneLayout layout state management', () => {
   })
 
   it('tab bar updates when pane visibility changes in tabbed mode', () => {
-    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Switch to tabs
     fireEvent.click(getByTestId('layout-toggle'))
@@ -1062,7 +1062,7 @@ describe('PaneLayout layout state management', () => {
   })
 
   it('focus switches when active tab is hidden in tabbed mode', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Switch to tabs, focus pane 1
     fireEvent.click(getByTestId('layout-toggle'))
@@ -1080,7 +1080,7 @@ describe('PaneLayout layout state management', () => {
   })
 
   it('re-showing a hidden pane does not change current focus', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Hide pane 2
     fireEvent.click(getByTestId('visibility-2'))
@@ -1135,17 +1135,16 @@ describe('PaneLayout dynamic pane fetching', () => {
     expect(getByTestId('pane-1').textContent).toContain('shell')
   })
 
-  it('uses ALL_PANES as default while fetch is pending', () => {
+  it('shows loading state while fetch is pending', () => {
     originalFetch = global.fetch
     // Never resolve
     global.fetch = vi.fn(() => new Promise(() => {}))
 
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
 
-    // Should render 3 default panes immediately
-    expect(getByTestId('pane-0')).toBeDefined()
-    expect(getByTestId('pane-1')).toBeDefined()
-    expect(getByTestId('pane-2')).toBeDefined()
+    // Should show loading indicator, not panes
+    expect(getByTestId('pane-loading')).toBeDefined()
+    expect(queryByTestId('pane-0')).toBeNull()
   })
 
   it('skips panes fetch when panes prop is provided', () => {
@@ -1182,30 +1181,100 @@ describe('PaneLayout dynamic pane fetching', () => {
 
     const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
 
+    // After loading resolves (config fetch succeeds, panes fetch fails), should show default panes
     await waitFor(() => {
-      expect(getByTestId('pane-layout')).toBeDefined()
+      expect(getByTestId('pane-0')).toBeDefined()
     })
-    // Should still have 3 default panes
-    expect(getByTestId('pane-0')).toBeDefined()
     expect(getByTestId('pane-1')).toBeDefined()
     expect(getByTestId('pane-2')).toBeDefined()
   })
 })
 
+describe('PaneLayout loading state', () => {
+  let originalFetch
+
+  afterEach(() => {
+    if (originalFetch) global.fetch = originalFetch
+  })
+
+  it('shows loading spinner when no panes prop and fetch is pending', () => {
+    originalFetch = global.fetch
+    global.fetch = vi.fn(() => new Promise(() => {}))
+
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    expect(getByTestId('pane-loading')).toBeDefined()
+    expect(getByTestId('pane-loading').textContent).toContain('Loading project')
+    expect(queryByTestId('layout-toggle')).toBeNull()
+  })
+
+  it('hides loading spinner after fetch resolves', async () => {
+    originalFetch = global.fetch
+    global.fetch = vi.fn((url) => {
+      if (typeof url === 'string' && url.endsWith('/panes')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([
+            { index: 0, label: 'CLI' },
+            { index: 1, label: 'Claude' },
+          ]),
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ name: 'Test', slug: 'myproj', path: '/tmp' }),
+      })
+    })
+
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Initially loading
+    expect(getByTestId('pane-loading')).toBeDefined()
+
+    // After fetch resolves, panes appear
+    await waitFor(() => {
+      expect(queryByTestId('pane-loading')).toBeNull()
+    })
+    expect(getByTestId('pane-0')).toBeDefined()
+    expect(getByTestId('pane-1')).toBeDefined()
+  })
+
+  it('skips loading state when panes prop is provided', () => {
+    const { queryByTestId, getByTestId } = render(
+      <PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />
+    )
+
+    // No loading indicator, content renders immediately
+    expect(queryByTestId('pane-loading')).toBeNull()
+    expect(getByTestId('pane-0')).toBeDefined()
+  })
+
+  it('shows loading spinner with pane-layout wrapper for consistent testid', () => {
+    originalFetch = global.fetch
+    global.fetch = vi.fn(() => new Promise(() => {}))
+
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // pane-layout testid is present even during loading
+    expect(getByTestId('pane-layout')).toBeDefined()
+    expect(getByTestId('pane-loading')).toBeDefined()
+  })
+})
+
 describe('PaneLayout tmux command bar', () => {
   it('renders a tmux bar toggle button', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     expect(getByTestId('tmux-bar-toggle')).toBeDefined()
     expect(getByTestId('tmux-bar-toggle').textContent).toBe('tmux')
   })
 
   it('tmux bar is hidden by default', () => {
-    const { queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { queryByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     expect(queryByTestId('tmux-bar')).toBeNull()
   })
 
   it('shows tmux bar when toggle is clicked', () => {
-    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     fireEvent.click(getByTestId('tmux-bar-toggle'))
 
@@ -1213,7 +1282,7 @@ describe('PaneLayout tmux command bar', () => {
   })
 
   it('hides tmux bar when toggle is clicked again', () => {
-    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     fireEvent.click(getByTestId('tmux-bar-toggle'))
     expect(getByTestId('tmux-bar')).toBeDefined()
@@ -1223,7 +1292,7 @@ describe('PaneLayout tmux command bar', () => {
   })
 
   it('displays the correct tmux attach command with project slug', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     fireEvent.click(getByTestId('tmux-bar-toggle'))
 
@@ -1232,17 +1301,17 @@ describe('PaneLayout tmux command bar', () => {
   })
 
   it('updates the tmux command when slug changes', () => {
-    const { getByTestId, rerender } = render(<PaneLayout token="tok" slug="project-a" />)
+    const { getByTestId, rerender } = render(<PaneLayout token="tok" slug="project-a" panes={ALL_PANES} />)
 
     fireEvent.click(getByTestId('tmux-bar-toggle'))
     expect(getByTestId('tmux-bar').textContent).toContain('tmux attach -t dancode-project-a')
 
-    rerender(<PaneLayout token="tok" slug="project-b" />)
+    rerender(<PaneLayout token="tok" slug="project-b" panes={ALL_PANES} />)
     expect(getByTestId('tmux-bar').textContent).toContain('tmux attach -t dancode-project-b')
   })
 
   it('toggle button shows active styling when bar is visible', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Initially inactive styling
     expect(getByTestId('tmux-bar-toggle').className).toContain('text-base01')
@@ -1255,14 +1324,14 @@ describe('PaneLayout tmux command bar', () => {
   })
 
   it('per-pane tmux hints are hidden by default', () => {
-    const { queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { queryByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
     expect(queryByTestId('pane-tmux-hint-0')).toBeNull()
     expect(queryByTestId('pane-tmux-hint-1')).toBeNull()
     expect(queryByTestId('pane-tmux-hint-2')).toBeNull()
   })
 
   it('shows per-pane tmux hints when tmux toggle is on', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     fireEvent.click(getByTestId('tmux-bar-toggle'))
 
@@ -1272,7 +1341,7 @@ describe('PaneLayout tmux command bar', () => {
   })
 
   it('hides per-pane tmux hints when tmux toggle is turned off', () => {
-    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     fireEvent.click(getByTestId('tmux-bar-toggle'))
     expect(getByTestId('pane-tmux-hint-0')).toBeDefined()
@@ -1284,7 +1353,7 @@ describe('PaneLayout tmux command bar', () => {
   })
 
   it('shows per-pane tmux hints in tab layout', () => {
-    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" panes={ALL_PANES} />)
 
     // Switch to tabs
     fireEvent.click(getByTestId('layout-toggle'))

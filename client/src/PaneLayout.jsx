@@ -16,6 +16,7 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
   const [hiddenPanes, setHiddenPanes] = useState(new Set())
   const [showTmuxBar, setShowTmuxBar] = useState(false)
   const [tmuxSessionName, setTmuxSessionName] = useState(null)
+  const [loading, setLoading] = useState(!panesProp)
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT
   )
@@ -46,6 +47,7 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
   useEffect(() => {
     if (!slug || !token) return
     let cancelled = false
+    setLoading(!panesProp)
     fetch(`/api/projects/${slug}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -85,7 +87,10 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
       })
       .catch(() => {})
       .finally(() => {
-        if (!cancelled) setTimeout(() => { loadedRef.current = true }, 0)
+        if (!cancelled) {
+          setLoading(false)
+          setTimeout(() => { loadedRef.current = true }, 0)
+        }
       })
     return () => { cancelled = true }
   }, [slug, token, panesProp])
@@ -146,8 +151,19 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
     })
   }, [panes])
 
+  if (loading) {
+    return (
+      <div data-testid="pane-layout" className="flex flex-col w-full h-full">
+        <div data-testid="pane-loading" className="flex flex-col items-center justify-center flex-1 gap-3">
+          <div className="w-6 h-6 border-2 border-base01/30 border-t-blue rounded-full animate-spin" />
+          <span className="text-xs text-base01">Loading project…</span>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div data-testid="pane-layout" className="flex flex-col w-full h-full">
+    <div data-testid="pane-layout" className="flex flex-col w-full h-full animate-fade-in">
       {/* Layout toolbar */}
       <div className="flex items-center px-2 py-1 bg-base02 border-b border-base01/30">
         {effectiveLayout === 'tabs' && (
@@ -228,7 +244,7 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
       {showTmuxBar && (
         <div
           data-testid="tmux-bar"
-          className="flex items-center px-3 py-1.5 bg-base03 border-b border-base01/30 text-xs"
+          className="flex items-center px-3 py-1.5 bg-base03 border-b border-base01/30 text-xs transition-all duration-150"
         >
           <span className="text-base01 mr-2">$</span>
           <code className="text-green font-mono select-all">
@@ -239,7 +255,7 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
 
       {/* Pane content */}
       {effectiveLayout === 'split' ? (
-        <div className="flex flex-row flex-1 min-h-0">
+        <div key="split" className="flex flex-row flex-1 min-h-0 animate-fade-in">
           {panes.map(({ index, label }) => {
             const isFocused = focusedPane === index
             const isHidden = hiddenPanes.has(index)
@@ -247,13 +263,13 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
               <div
                 key={index}
                 data-testid={`pane-${index}`}
-                className={`flex-1 min-w-0 flex flex-col border-r last:border-r-0 ${
+                className={`flex-1 min-w-0 flex flex-col border-r last:border-r-0 transition-[border-color] duration-150 ${
                   isFocused ? 'border-blue/50' : 'border-base01/30'
                 } ${isHidden ? 'hidden' : ''}`}
                 onClick={() => handlePaneClick(index)}
               >
                 <div
-                  className={`px-3 py-1 text-xs font-medium border-b select-none flex items-center justify-between ${
+                  className={`px-3 py-1 text-xs font-medium border-b select-none flex items-center justify-between transition-colors duration-150 ${
                     isFocused
                       ? 'text-base1 bg-base02 border-blue/50'
                       : 'text-base01 bg-base02 border-base01/30'
@@ -283,7 +299,7 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
           })}
         </div>
       ) : (
-        <div className="flex-1 min-h-0 flex flex-col" data-testid="tabbed-content">
+        <div key="tabs" className="flex-1 min-h-0 flex flex-col animate-fade-in" data-testid="tabbed-content">
           {panes.map(({ index, label }) => {
             const isActive = focusedPane === index
             const isHidden = hiddenPanes.has(index)
