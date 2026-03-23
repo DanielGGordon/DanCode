@@ -3,3 +3,4 @@
 [done 2026-03-23 05:10] Unit tests: orphan session detection (filters out dancode-* sessions that are already in config).
 [done 2026-03-23 05:00] E2E test: create a tmux session manually, open New Project form, adopt it, see its panes in DanCode. ⚠️ Learning: The dev server on port 3001 may be running stale code — if endpoints return 404, restart it. Playwright reuseExistingServer means it won't auto-restart.
 [done 2026-03-23 05:30] Toggleable horizontal bar at top of terminal view showing tmux attach command.
+[done 2026-03-23 06:00] Per-pane labels can optionally show the tmux pane-switch command (e.g., Ctrl+B, 0).
