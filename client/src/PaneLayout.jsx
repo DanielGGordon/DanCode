@@ -20,22 +20,6 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
   const loadedRef = useRef(false)
   const saveTimerRef = useRef(null)
 
-  // Fetch actual panes from the server when no explicit panes prop is given
-  useEffect(() => {
-    if (panesProp || !slug || !token) return
-    let cancelled = false
-    fetch(`/api/projects/${slug}/panes`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (cancelled || !data || !Array.isArray(data) || data.length === 0) return
-        setFetchedPanes(data)
-      })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [slug, token, panesProp])
-
   const panes = panesProp || fetchedPanes || ALL_PANES
 
   useEffect(() => {
@@ -56,7 +40,7 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
     }
   }, [])
 
-  // Load saved layout preferences from project config
+  // Load saved layout preferences (and panes for adopted sessions) from project config
   useEffect(() => {
     if (!slug || !token) return
     let cancelled = false
@@ -64,13 +48,31 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => (res.ok ? res.json() : null))
-      .then((project) => {
-        if (cancelled || !project?.layout) return
-        if (project.layout.mode === 'split' || project.layout.mode === 'tabs') {
-          setLayoutMode(project.layout.mode)
+      .then(async (project) => {
+        if (cancelled || !project) return
+        if (project.layout) {
+          if (project.layout.mode === 'split' || project.layout.mode === 'tabs') {
+            setLayoutMode(project.layout.mode)
+          }
+          if (Array.isArray(project.layout.hiddenPanes)) {
+            setHiddenPanes(new Set(project.layout.hiddenPanes))
+          }
         }
-        if (Array.isArray(project.layout.hiddenPanes)) {
-          setHiddenPanes(new Set(project.layout.hiddenPanes))
+        // Only fetch panes for adopted sessions; standard projects use ALL_PANES
+        if (!panesProp && project.tmuxSession) {
+          try {
+            const panesRes = await fetch(`/api/projects/${slug}/panes`, {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+            if (cancelled) return
+            if (panesRes.ok) {
+              const data = await panesRes.json()
+              if (!cancelled && Array.isArray(data) && data.length > 0) {
+                setFetchedPanes(data)
+                setFocusedPane(data[0].index)
+              }
+            }
+          } catch {}
         }
       })
       .catch(() => {})
@@ -78,7 +80,7 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
         if (!cancelled) setTimeout(() => { loadedRef.current = true }, 0)
       })
     return () => { cancelled = true }
-  }, [slug, token])
+  }, [slug, token, panesProp])
 
   // Save layout preferences when they change (debounced)
   useEffect(() => {
