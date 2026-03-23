@@ -145,8 +145,13 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
   }, [token, slug, pane])
 
   useEffect(() => {
-    const cleanup = connect()
-    return cleanup
+    connect()
+    return () => {
+      if (reconnectRef.current) {
+        reconnectRef.current()
+        reconnectRef.current = null
+      }
+    }
   }, [connect])
 
   // Focus the xterm instance when the focused prop becomes true
@@ -194,7 +199,7 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
                 <div className="text-red text-lg font-semibold">Session Ended</div>
                 <p className="text-base0 text-sm">
                   The tmux session has exited{exitCode != null ? ` (code ${exitCode})` : ''}.
-                  The terminal process is no longer running.
+                  Re-open this project to start a new session.
                 </p>
               </>
             ) : (
@@ -204,15 +209,15 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
                   Lost connection to the server. This may be due to a network issue
                   or server restart.
                 </p>
+                <button
+                  data-testid="terminal-reconnect-button"
+                  onClick={handleReconnect}
+                  className="mt-2 px-4 py-2 text-sm font-medium text-base1 bg-blue/20 border border-blue/50 rounded hover:bg-blue/30 transition-colors"
+                >
+                  Reconnect
+                </button>
               </>
             )}
-            <button
-              data-testid="terminal-reconnect-button"
-              onClick={handleReconnect}
-              className="mt-2 px-4 py-2 text-sm font-medium text-base1 bg-blue/20 border border-blue/50 rounded hover:bg-blue/30 transition-colors"
-            >
-              Reconnect
-            </button>
           </div>
         </div>
       )}

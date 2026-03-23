@@ -20,7 +20,7 @@ The dev server proxies `/api` and `/socket.io` requests to the backend at `http:
 - `LoginScreen` — Token input form with submit button; calls `onLogin` callback with the entered token
 - `NewProjectForm` — Project creation form with name and directory path inputs (path pre-filled with `~/`); submits to `POST /api/projects` with Bearer token auth
 - `PaneLayout` — Multi-pane layout that renders Terminal instances side by side in a split view (or tabbed on mobile/toggle). Supports pane visibility toggles and persists layout mode (split/tabs) and hidden panes to the project config via `PATCH /api/projects/:slug`. Shows error state with retry button when project config fetch fails.
-- `Terminal` — xterm.js terminal that connects to the backend Socket.io `/terminal` namespace, with Solarized Dark theme and automatic resize. Accepts optional `pane` prop to connect to a specific tmux window. Shows error overlays for WebSocket disconnection and tmux session exit with a reconnect button.
+- `Terminal` — xterm.js terminal that connects to the backend Socket.io `/terminal` namespace, with Solarized Dark theme and automatic resize. Accepts optional `pane` prop to connect to a specific tmux window. Shows a reconnect button on WebSocket disconnection and an informational overlay when the tmux session exits.
 - `main.jsx` — Entry point, mounts React to `#root`
 
 ## Relation to other modules
