@@ -47,6 +47,7 @@ DanCode/
 │   │   │   ├── terminal-visual.spec.js  # Visual assertion: Solarized Dark theme + fills viewport (screenshot pixel analysis)
 │   │   │   ├── new-project.spec.js    # Playwright E2E test (new project creation flow: form → submit → terminal panes)
 │   │   │   ├── new-project-visual.spec.js  # Midscene AI visual assertion test (new project form on dark background)
+│   │   │   ├── adopt-session.spec.js  # Playwright E2E test (adopt existing tmux session: create session, adopt via form, verify panes)
 │   │   │   ├── layout.spec.js        # Playwright E2E test (multi-pane layout: split/tabs, mobile viewport, pane visibility)
 │   │   │   ├── layout-visual.spec.js # Midscene AI visual assertion test (two panes side by side with labels)
 │   │   │   ├── command-palette.spec.js  # Playwright E2E test (Ctrl+K opens palette, search, switch project, terminals update)
