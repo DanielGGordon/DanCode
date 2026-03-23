@@ -706,7 +706,43 @@ describe('DanCode server', () => {
       expect(body.layout).toEqual({ mode: 'split', hiddenPanes: [1] });
     });
 
-    it('returns 400 without layout object', async () => {
+    it('updates showTmuxCommands preference', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/alpha-project`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({ showTmuxCommands: true }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.showTmuxCommands).toBe(true);
+    });
+
+    it('persists showTmuxCommands so GET returns it', async () => {
+      await fetch(`http://localhost:${TEST_PORT}/api/projects/beta-project`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({ showTmuxCommands: true }),
+      });
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/beta-project`, {
+        headers: { Authorization: `Bearer ${storedToken}` },
+      });
+      const body = await res.json();
+      expect(body.showTmuxCommands).toBe(true);
+    });
+
+    it('accepts layout and showTmuxCommands together', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/alpha-project`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({ layout: { mode: 'split' }, showTmuxCommands: false }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.layout.mode).toBe('split');
+      expect(body.showTmuxCommands).toBe(false);
+    });
+
+    it('returns 400 without layout or showTmuxCommands', async () => {
       const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/alpha-project`, {
         method: 'PATCH',
         headers: authHeaders(),

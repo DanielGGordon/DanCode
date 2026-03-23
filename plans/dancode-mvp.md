@@ -241,7 +241,7 @@ Toggleable UI elements that display tmux commands for educational purposes. Plus
 - [x] Toggleable horizontal bar at the top of the terminal view showing: `tmux attach -t dancode-<project>`
 - [x] Per-pane labels can optionally show the tmux pane-switch command (e.g., `Ctrl+B, 0`)
 - [x] "Show tmux commands" toggle in the UI controls both the bar and per-pane labels
-- [ ] Toggle state is persisted to config
+- [x] Toggle state is persisted to config
 - [ ] Polish: loading states when switching projects, smooth transitions between layout modes
 - [ ] Polish: error states (tmux session died, WebSocket disconnected) show clear messages with recovery options
 - [ ] Polish: consistent spacing, borders, and shadows across all components

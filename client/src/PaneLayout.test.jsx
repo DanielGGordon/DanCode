@@ -694,6 +694,55 @@ describe('PaneLayout config persistence', () => {
     expect(body.layout.hiddenPanes).toContain(2)
   })
 
+  it('restores showTmuxCommands from config', async () => {
+    configResponse = {
+      ok: true,
+      json: () => Promise.resolve({
+        name: 'Test', slug: 'myproj', path: '/tmp',
+        showTmuxCommands: true,
+      }),
+    }
+
+    vi.useRealTimers()
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // After loading, tmux bar should be visible
+    await waitFor(() => {
+      expect(getByTestId('tmux-bar')).toBeDefined()
+    })
+  })
+
+  it('saves showTmuxCommands toggle via PATCH', async () => {
+    configResponse = {
+      ok: true,
+      json: () => Promise.resolve({ name: 'Test', slug: 'myproj', path: '/tmp' }),
+    }
+
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    // Wait for load to complete (flush promise chain + setTimeout(0) in .finally)
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    act(() => { vi.advanceTimersByTime(0) })
+
+    // Toggle tmux commands on
+    fireEvent.click(getByTestId('tmux-bar-toggle'))
+
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
+
+    const patchCall = fetchMock.mock.calls.find(
+      ([url, opts]) => opts?.method === 'PATCH'
+    )
+    expect(patchCall).toBeDefined()
+    const body = JSON.parse(patchCall[1].body)
+    expect(body.showTmuxCommands).toBe(true)
+  })
+
   it('does not save before initial load completes', () => {
     // Config fetch never resolves
     configResponse = new Promise(() => {})

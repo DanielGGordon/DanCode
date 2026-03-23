@@ -180,12 +180,19 @@ app.patch('/api/projects/:slug', async (req, res) => {
   if (!isValidSlug(slug)) {
     return res.status(400).json({ error: 'Invalid project slug' });
   }
-  const { layout } = req.body || {};
-  if (!layout || typeof layout !== 'object') {
-    return res.status(400).json({ error: 'Request body must include a layout object' });
+  const body = req.body || {};
+  const updates = {};
+  if (body.layout && typeof body.layout === 'object') {
+    updates.layout = body.layout;
+  }
+  if (typeof body.showTmuxCommands === 'boolean') {
+    updates.showTmuxCommands = body.showTmuxCommands;
+  }
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: 'Request body must include layout or showTmuxCommands' });
   }
   try {
-    const updated = await updateProject(slug, { layout }, projectsDir);
+    const updated = await updateProject(slug, updates, projectsDir);
     if (!updated) {
       return res.status(404).json({ error: 'Project not found' });
     }

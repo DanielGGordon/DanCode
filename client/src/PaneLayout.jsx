@@ -55,6 +55,9 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
         if (project.tmuxSession) {
           setTmuxSessionName(project.tmuxSession)
         }
+        if (typeof project.showTmuxCommands === 'boolean') {
+          setShowTmuxBar(project.showTmuxCommands)
+        }
         if (project.layout) {
           if (project.layout.mode === 'split' || project.layout.mode === 'tabs') {
             setLayoutMode(project.layout.mode)
@@ -100,13 +103,14 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
         },
         body: JSON.stringify({
           layout: { mode: layoutMode, hiddenPanes: [...hiddenPanes] },
+          showTmuxCommands: showTmuxBar,
         }),
       }).catch(() => {})
     }, 300)
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     }
-  }, [layoutMode, hiddenPanes, slug, token])
+  }, [layoutMode, hiddenPanes, showTmuxBar, slug, token])
 
   const effectiveLayout = isMobile ? 'tabs' : layoutMode
 
