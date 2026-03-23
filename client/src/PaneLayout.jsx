@@ -40,7 +40,7 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
     }
   }, [])
 
-  // Load saved layout preferences (and panes for adopted sessions) from project config
+  // Load saved layout preferences and panes from project config
   useEffect(() => {
     if (!slug || !token) return
     let cancelled = false
@@ -58,8 +58,8 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
             setHiddenPanes(new Set(project.layout.hiddenPanes))
           }
         }
-        // Only fetch panes for adopted sessions; standard projects use ALL_PANES
-        if (!panesProp && project.tmuxSession) {
+        // Fetch actual panes from the server for all projects
+        if (!panesProp) {
           try {
             const panesRes = await fetch(`/api/projects/${slug}/panes`, {
               headers: { Authorization: `Bearer ${token}` },
