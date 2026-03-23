@@ -241,13 +241,21 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
                 onClick={() => handlePaneClick(index)}
               >
                 <div
-                  className={`px-3 py-1 text-xs font-medium border-b select-none ${
+                  className={`px-3 py-1 text-xs font-medium border-b select-none flex items-center justify-between ${
                     isFocused
                       ? 'text-base1 bg-base02 border-blue/50'
                       : 'text-base01 bg-base02 border-base01/30'
                   }`}
                 >
-                  {label}
+                  <span>{label}</span>
+                  {showTmuxBar && (
+                    <code
+                      data-testid={`pane-tmux-hint-${index}`}
+                      className="text-base01 font-mono ml-2"
+                    >
+                      Ctrl+B, {index}
+                    </code>
+                  )}
                 </div>
                 <div className="flex-1 min-h-0">
                   <Terminal

@@ -1204,4 +1204,33 @@ describe('PaneLayout tmux command bar', () => {
     expect(getByTestId('tmux-bar-toggle').className).toContain('text-base1')
     expect(getByTestId('tmux-bar-toggle').className).toContain('border-blue/50')
   })
+
+  it('per-pane tmux hints are hidden by default', () => {
+    const { queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+    expect(queryByTestId('pane-tmux-hint-0')).toBeNull()
+    expect(queryByTestId('pane-tmux-hint-1')).toBeNull()
+    expect(queryByTestId('pane-tmux-hint-2')).toBeNull()
+  })
+
+  it('shows per-pane tmux hints when tmux toggle is on', () => {
+    const { getByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    fireEvent.click(getByTestId('tmux-bar-toggle'))
+
+    expect(getByTestId('pane-tmux-hint-0').textContent).toBe('Ctrl+B, 0')
+    expect(getByTestId('pane-tmux-hint-1').textContent).toBe('Ctrl+B, 1')
+    expect(getByTestId('pane-tmux-hint-2').textContent).toBe('Ctrl+B, 2')
+  })
+
+  it('hides per-pane tmux hints when tmux toggle is turned off', () => {
+    const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="myproj" />)
+
+    fireEvent.click(getByTestId('tmux-bar-toggle'))
+    expect(getByTestId('pane-tmux-hint-0')).toBeDefined()
+
+    fireEvent.click(getByTestId('tmux-bar-toggle'))
+    expect(queryByTestId('pane-tmux-hint-0')).toBeNull()
+    expect(queryByTestId('pane-tmux-hint-1')).toBeNull()
+    expect(queryByTestId('pane-tmux-hint-2')).toBeNull()
+  })
 })
