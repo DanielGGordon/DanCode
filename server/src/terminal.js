@@ -18,9 +18,11 @@ import { createConnectionSession, destroyConnectionSession } from './tmux.js';
  * @param {import('socket.io').Server} io - Socket.io server instance
  * @param {string} defaultSession - default tmux session to attach to
  * @param {() => string} getAuthToken - function returning the current auth token
+ * @param {(slug: string) => Promise<string>} [resolveSession] - optional async function
+ *   that resolves a project slug to its tmux session name (supports adopted sessions)
  * @returns {import('socket.io').Namespace} the /terminal namespace
  */
-export function setupTerminalNamespace(io, defaultSession, getAuthToken) {
+export function setupTerminalNamespace(io, defaultSession, getAuthToken, resolveSession) {
   const ns = io.of('/terminal');
 
   ns.use((socket, next) => {
@@ -42,9 +44,18 @@ export function setupTerminalNamespace(io, defaultSession, getAuthToken) {
 
     const slug = socket.handshake.query.slug;
     const pane = socket.handshake.query.pane;
-    const baseSession = (slug && isValidSlug(slug))
-      ? `dancode-${slug}`
-      : defaultSession;
+    let baseSession = defaultSession;
+    if (slug && isValidSlug(slug)) {
+      if (resolveSession) {
+        try {
+          baseSession = await resolveSession(slug);
+        } catch {
+          baseSession = `dancode-${slug}`;
+        }
+      } else {
+        baseSession = `dancode-${slug}`;
+      }
+    }
 
     // When a specific pane is requested, create a grouped session
     // so this connection sees only that window.

@@ -113,6 +113,49 @@ export async function createProject(name, path, projectsDir = getProjectsDir()) 
 }
 
 /**
+ * Create a project config that adopts an existing tmux session.
+ * Unlike createProject, this does not require a directory path
+ * and does not create a tmux session — it links to the given one.
+ *
+ * @param {string} name - project display name
+ * @param {string} tmuxSession - name of the existing tmux session to adopt
+ * @param {string} [projectsDir] - override for projects config directory
+ * @returns {Promise<object>} the created project config
+ */
+export async function createAdoptedProject(name, tmuxSession, projectsDir = getProjectsDir()) {
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    throw new Error('Project name is required');
+  }
+
+  const trimmedName = name.trim();
+  const slug = slugify(trimmedName);
+  if (!slug) {
+    throw new Error('Project name must contain at least one alphanumeric character');
+  }
+
+  // Ensure projects directory exists
+  if (!existsSync(projectsDir)) {
+    await mkdir(projectsDir, { recursive: true });
+  }
+
+  // Check for duplicate
+  const configPath = getProjectConfigPath(slug, projectsDir);
+  if (existsSync(configPath)) {
+    throw new Error(`A project with the name "${trimmedName}" already exists`);
+  }
+
+  const project = {
+    name: trimmedName,
+    slug,
+    tmuxSession,
+    createdAt: new Date().toISOString(),
+  };
+
+  await writeFile(configPath, JSON.stringify(project, null, 2) + '\n');
+  return project;
+}
+
+/**
  * List all configured projects.
  */
 export async function listProjects(projectsDir = getProjectsDir()) {

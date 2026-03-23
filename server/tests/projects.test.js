@@ -10,6 +10,7 @@ import {
   validateProjectInput,
   resolvePath,
   createProject,
+  createAdoptedProject,
   listProjects,
   getProject,
   updateProject,
@@ -208,6 +209,52 @@ describe('project config CRUD', () => {
       await createProject('My Project', '/tmp/a', tempDir);
       await expect(createProject('MY PROJECT', '/tmp/b', tempDir))
         .rejects.toThrow('already exists');
+    });
+  });
+
+  describe('createAdoptedProject', () => {
+    it('creates a config file with tmuxSession field and no path', async () => {
+      const project = await createAdoptedProject('My Adopted', 'existing-session', tempDir);
+
+      expect(project.name).toBe('My Adopted');
+      expect(project.slug).toBe('my-adopted');
+      expect(project.tmuxSession).toBe('existing-session');
+      expect(project.path).toBeUndefined();
+      expect(project.createdAt).toBeDefined();
+
+      const configPath = getProjectConfigPath('my-adopted', tempDir);
+      expect(existsSync(configPath)).toBe(true);
+
+      const content = JSON.parse(await readFile(configPath, 'utf-8'));
+      expect(content.tmuxSession).toBe('existing-session');
+    });
+
+    it('creates the projects directory if it does not exist', async () => {
+      const nestedDir = join(tempDir, 'nested', 'adopted');
+      await createAdoptedProject('Test', 'sess', nestedDir);
+      expect(existsSync(join(nestedDir, 'test.json'))).toBe(true);
+    });
+
+    it('throws on duplicate project name', async () => {
+      await createAdoptedProject('Dup', 'sess-a', tempDir);
+      await expect(createAdoptedProject('Dup', 'sess-b', tempDir))
+        .rejects.toThrow('already exists');
+    });
+
+    it('throws on empty name', async () => {
+      await expect(createAdoptedProject('', 'sess', tempDir))
+        .rejects.toThrow('name is required');
+    });
+
+    it('throws on non-alphanumeric name', async () => {
+      await expect(createAdoptedProject('!!!', 'sess', tempDir))
+        .rejects.toThrow('alphanumeric');
+    });
+
+    it('trims the name', async () => {
+      const project = await createAdoptedProject('  Spaced  ', 'sess', tempDir);
+      expect(project.name).toBe('Spaced');
+      expect(project.slug).toBe('spaced');
     });
   });
 

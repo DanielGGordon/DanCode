@@ -245,6 +245,81 @@ describe('DanCode server', () => {
       });
       expect(res.status).toBe(401);
     });
+
+    describe('adopt mode', () => {
+      const ADOPT_SESSION = 'adopt-test-session';
+
+      beforeAll(async () => {
+        try {
+          await execFileAsync('tmux', ['new-session', '-d', '-s', ADOPT_SESSION]);
+        } catch {
+          // already exists
+        }
+      });
+
+      afterAll(async () => {
+        try {
+          await execFileAsync('tmux', ['kill-session', '-t', ADOPT_SESSION]);
+        } catch {
+          // already gone
+        }
+      });
+
+      it('creates a project linked to an existing tmux session', async () => {
+        const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ name: 'Adopted Project', adoptSession: ADOPT_SESSION }),
+        });
+        expect(res.status).toBe(201);
+        const body = await res.json();
+        expect(body.name).toBe('Adopted Project');
+        expect(body.slug).toBe('adopted-project');
+        expect(body.tmuxSession).toBe(ADOPT_SESSION);
+        expect(body.path).toBeUndefined();
+      });
+
+      it('does not create a new tmux session (no dancode-* session)', async () => {
+        const { stdout } = await execFileAsync('tmux', [
+          'list-sessions', '-F', '#{session_name}',
+        ]);
+        const sessions = stdout.trim().split('\n');
+        expect(sessions).not.toContain('dancode-adopted-project');
+      });
+
+      it('returns 400 when adopted session does not exist', async () => {
+        const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ name: 'Ghost', adoptSession: 'nonexistent-session' }),
+        });
+        expect(res.status).toBe(400);
+        const body = await res.json();
+        expect(body.error).toContain('does not exist');
+      });
+
+      it('returns 400 when name is missing in adopt mode', async () => {
+        const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ adoptSession: ADOPT_SESSION }),
+        });
+        expect(res.status).toBe(400);
+        const body = await res.json();
+        expect(body.error).toContain('name');
+      });
+
+      it('returns 409 for duplicate project name in adopt mode', async () => {
+        const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ name: 'Adopted Project', adoptSession: ADOPT_SESSION }),
+        });
+        expect(res.status).toBe(409);
+        const body = await res.json();
+        expect(body.error).toContain('already exists');
+      });
+    });
   });
 
   describe('DELETE /api/projects/:slug', () => {

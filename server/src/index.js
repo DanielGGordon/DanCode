@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { ensureSession, createProjectSession, sessionExists, listSessions } from './tmux.js';
 import { setupTerminalNamespace } from './terminal.js';
 import { ensureAuthToken, validateToken } from './auth.js';
-import { validateProjectInput, createProject, listProjects, getProject, updateProject, deleteProject, getProjectsDir, slugify, isValidSlug } from './projects.js';
+import { validateProjectInput, createProject, createAdoptedProject, listProjects, getProject, updateProject, deleteProject, getProjectsDir, slugify, isValidSlug } from './projects.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -115,7 +115,8 @@ app.get('/api/tmux-status', async (req, res) => {
     const status = {};
     await Promise.all(
       projects.map(async (p) => {
-        status[p.slug] = await sessionExists(`dancode-${p.slug}`);
+        const sessionName = p.tmuxSession || `dancode-${p.slug}`;
+        status[p.slug] = await sessionExists(sessionName);
       })
     );
     res.json(status);
@@ -132,7 +133,9 @@ app.get('/api/tmux/sessions', async (req, res) => {
     ]);
 
     // Build set of session names that are already mapped to a project
-    const mappedSessions = new Set(projects.map((p) => `dancode-${p.slug}`));
+    const mappedSessions = new Set(
+      projects.map((p) => p.tmuxSession || `dancode-${p.slug}`)
+    );
 
     // Filter out mapped sessions and internal connection sessions
     const orphaned = allSessions.filter(
@@ -198,7 +201,36 @@ app.delete('/api/projects/:slug', async (req, res) => {
 });
 
 app.post('/api/projects', async (req, res) => {
-  const { name, path } = req.body || {};
+  const { name, path, adoptSession } = req.body || {};
+
+  if (adoptSession) {
+    // Adopt mode: link to an existing tmux session without creating a new one
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'Project name is required' });
+    }
+    const slug = slugify(name.trim());
+    if (!slug) {
+      return res.status(400).json({ error: 'Project name must contain at least one alphanumeric character' });
+    }
+    if (`dancode-${slug}` === TMUX_SESSION) {
+      return res.status(400).json({ error: 'Project name conflicts with a reserved session name' });
+    }
+
+    // Verify the tmux session actually exists
+    if (!(await sessionExists(adoptSession))) {
+      return res.status(400).json({ error: `Tmux session "${adoptSession}" does not exist` });
+    }
+
+    try {
+      const project = await createAdoptedProject(name, adoptSession, projectsDir);
+      return res.status(201).json(project);
+    } catch (err) {
+      if (err.message.includes('already exists')) {
+        return res.status(409).json({ error: err.message });
+      }
+      return res.status(500).json({ error: 'Failed to create project' });
+    }
+  }
 
   const validation = validateProjectInput(name, path);
   if (!validation.valid) {
@@ -254,7 +286,11 @@ export async function startServer(port = PORT, { tokenPath, projectsDir: projDir
   }
 
   if (!terminalNamespaceRegistered) {
-    setupTerminalNamespace(io, TMUX_SESSION, () => authToken);
+    async function resolveSession(slug) {
+      const project = await getProject(slug, projectsDir);
+      return project?.tmuxSession || `dancode-${slug}`;
+    }
+    setupTerminalNamespace(io, TMUX_SESSION, () => authToken, resolveSession);
     terminalNamespaceRegistered = true;
   }
 
