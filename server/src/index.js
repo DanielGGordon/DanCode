@@ -287,8 +287,12 @@ app.post('/api/projects', async (req, res) => {
   }
 });
 
-// SPA fallback: serve index.html for non-API routes (client-side routing)
+// SPA fallback: serve index.html for client-side routes only
+// Skip /api paths (should 404 as JSON) and file-like asset paths (should 404 normally)
 app.get('{*path}', (req, res) => {
+  if (req.path.startsWith('/api/') || req.path.includes('.')) {
+    return res.status(404).json({ error: 'Not found' });
+  }
   if (hasClientBuild) {
     res.sendFile(join(clientDistPath, 'index.html'));
   } else {
