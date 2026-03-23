@@ -102,25 +102,48 @@ function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [dropdownOpen])
 
-  // Ctrl+K keyboard shortcut for command palette
+  // Global keyboard shortcuts — capture phase so they work even when xterm has focus
   useEffect(() => {
     if (!token) return
 
     function handleKeyDown(e) {
+      // Ctrl+K: toggle command palette
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         const tag = document.activeElement?.tagName
         if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return
         e.preventDefault()
+        e.stopPropagation()
         setPaletteOpen((prev) => !prev)
       }
+      // Escape: close palette
       if (e.key === 'Escape' && paletteOpen) {
+        e.preventDefault()
+        e.stopPropagation()
         setPaletteOpen(false)
+      }
+      // Alt+Right: next project, Alt+Left: previous project
+      if (e.altKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft') && Array.isArray(projects) && projects.length > 1) {
+        e.preventDefault()
+        e.stopPropagation()
+        const currentIndex = projects.findIndex((p) => p.slug === selectedSlug)
+        let nextIndex
+        if (e.key === 'ArrowRight') {
+          nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % projects.length
+        } else {
+          nextIndex = currentIndex <= 0 ? projects.length - 1 : currentIndex - 1
+        }
+        const next = projects[nextIndex]
+        setSelectedSlug(next.slug)
+        setSelectedProjectName(next.name || null)
+        setShowNewProject(false)
+        setPaletteOpen(false)
+        setDropdownOpen(false)
       }
     }
 
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [token, paletteOpen])
+    document.addEventListener('keydown', handleKeyDown, true)
+    return () => document.removeEventListener('keydown', handleKeyDown, true)
+  }, [token, paletteOpen, projects, selectedSlug])
 
   function handleLogin(value) {
     localStorage.setItem(TOKEN_KEY, value)

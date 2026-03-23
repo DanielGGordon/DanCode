@@ -12,9 +12,15 @@ import '@xterm/xterm/css/xterm.css'
  * - 'session-exit': tmux session/pty process exited (session killed, tmux died)
  */
 
+const DEFAULT_FONT_SIZE = 14
+const MIN_FONT_SIZE = 8
+const MAX_FONT_SIZE = 32
+
 export default function Terminal({ token, slug, pane, focused, onFocus }) {
   const containerRef = useRef(null)
   const termRef = useRef(null)
+  const fitAddonRef = useRef(null)
+  const fontSizeRef = useRef(DEFAULT_FONT_SIZE)
   const [connectionState, setConnectionState] = useState('connecting')
   const [exitCode, setExitCode] = useState(null)
   const reconnectRef = useRef(null)
@@ -39,7 +45,7 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
     const term = new XTerm({
       cursorBlink: true,
       fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', Menlo, monospace",
-      fontSize: 14,
+      fontSize: fontSizeRef.current,
       theme: {
         background: '#002b36',
         foreground: '#839496',
@@ -69,6 +75,7 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
     term.open(container)
 
     termRef.current = term
+    fitAddonRef.current = fitAddon
 
     // Defer socket connection so StrictMode cleanup can cancel it
     // before a backend pty/tmux session is spawned.
@@ -169,6 +176,48 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
     container.addEventListener('focusin', handler)
     return () => container.removeEventListener('focusin', handler)
   })
+
+  // Ctrl+wheel to resize font — capture phase to intercept before xterm/tmux
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const handler = (e) => {
+      if (!e.ctrlKey) return
+      e.preventDefault()
+      e.stopPropagation()
+      const term = termRef.current
+      if (!term) return
+      const delta = e.deltaY > 0 ? -1 : 1
+      const newSize = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, fontSizeRef.current + delta))
+      if (newSize !== fontSizeRef.current) {
+        fontSizeRef.current = newSize
+        term.options.fontSize = newSize
+        if (fitAddonRef.current) fitAddonRef.current.fit()
+      }
+    }
+    container.addEventListener('wheel', handler, { passive: false, capture: true })
+    return () => container.removeEventListener('wheel', handler, { capture: true })
+  }, [])
+
+  // Ctrl+V to paste from clipboard — capture phase to intercept before xterm/tmux
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const handler = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key !== 'v') return
+      e.preventDefault()
+      e.stopPropagation()
+      const term = termRef.current
+      if (!term) return
+      navigator.clipboard.readText().then((text) => {
+        if (text) term.paste(text)
+      }).catch(() => {
+        // Clipboard access denied — fall through silently
+      })
+    }
+    container.addEventListener('keydown', handler, { capture: true })
+    return () => container.removeEventListener('keydown', handler, { capture: true })
+  }, [])
 
   const handleReconnect = useCallback(() => {
     // Tear down the old connection and start fresh

@@ -2,7 +2,29 @@ import pty from 'node-pty';
 import { randomBytes } from 'node:crypto';
 import { validateToken } from './auth.js';
 import { isValidSlug } from './projects.js';
-import { createConnectionSession, destroyConnectionSession } from './tmux.js';
+import { createConnectionSession, destroyConnectionSession, breakPanesIntoWindows, joinWindowsIntoPanes } from './tmux.js';
+
+// Track active connections per base session for break/rejoin lifecycle
+const sessionConnections = new Map();
+
+function trackConnect(baseSession) {
+  sessionConnections.set(baseSession, (sessionConnections.get(baseSession) || 0) + 1);
+}
+
+async function trackDisconnect(baseSession) {
+  const count = (sessionConnections.get(baseSession) || 1) - 1;
+  if (count <= 0) {
+    sessionConnections.delete(baseSession);
+    // Last connection gone — rejoin windows back into panes
+    try {
+      await joinWindowsIntoPanes(baseSession);
+    } catch {
+      // Non-fatal
+    }
+  } else {
+    sessionConnections.set(baseSession, count);
+  }
+}
 
 /**
  * Set up the Socket.io /terminal namespace.
@@ -57,6 +79,16 @@ export function setupTerminalNamespace(io, defaultSession, getAuthToken, resolve
       }
     }
 
+    // Break panes into windows on first connection to this session
+    if (!sessionConnections.has(baseSession)) {
+      try {
+        await breakPanesIntoWindows(baseSession);
+      } catch {
+        // Non-fatal
+      }
+    }
+    trackConnect(baseSession);
+
     // When a specific pane is requested, create a grouped session
     // so this connection sees only that window.
     let attachSession = baseSession;
@@ -102,25 +134,27 @@ export function setupTerminalNamespace(io, defaultSession, getAuthToken, resolve
       }
     });
 
-    socket.on('disconnect', () => {
+    let disconnected = false;
+    const cleanup = () => {
+      if (disconnected) return;
+      disconnected = true;
       try {
         ptyProcess.kill();
       } catch {
         // already dead
       }
-      // Clean up the ephemeral grouped session
       if (connSession) {
         destroyConnectionSession(connSession);
       }
-    });
+      trackDisconnect(baseSession);
+    };
+
+    socket.on('disconnect', cleanup);
 
     ptyProcess.onExit(({ exitCode }) => {
       // Notify client that the tmux session ended before disconnecting
       socket.emit('session-exit', { exitCode });
-      // Clean up the ephemeral grouped session
-      if (connSession) {
-        destroyConnectionSession(connSession);
-      }
+      cleanup();
       socket.disconnect(true);
     });
   });

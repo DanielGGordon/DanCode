@@ -324,18 +324,6 @@ export async function startServer(port = PORT, { tokenPath, projectsDir: projDir
     throw new Error(`Failed to ensure tmux session "${TMUX_SESSION}": ${err.message}`);
   }
 
-  // Migrate adopted sessions: break multi-pane windows into separate windows
-  try {
-    const projects = await listProjects(projectsDir);
-    for (const proj of projects) {
-      if (proj.tmuxSession && await sessionExists(proj.tmuxSession)) {
-        await breakPanesIntoWindows(proj.tmuxSession);
-      }
-    }
-  } catch {
-    // Non-fatal — sessions will be migrated on next connection
-  }
-
   if (!terminalNamespaceRegistered) {
     async function resolveSession(slug) {
       const project = await getProject(slug, projectsDir);

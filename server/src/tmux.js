@@ -230,6 +230,42 @@ export async function breakPanesIntoWindows(sessionName) {
 }
 
 /**
+ * Rejoin separate single-pane windows back into panes within the first window.
+ * Reverses what breakPanesIntoWindows() did.
+ *
+ * Idempotent: sessions with only one window are left alone.
+ *
+ * @param {string} sessionName - tmux session name
+ * @returns {Promise<number>} number of windows that were joined back
+ */
+export async function joinWindowsIntoPanes(sessionName) {
+  const windows = await listWindows(sessionName);
+  if (windows.length <= 1) return 0;
+
+  const sorted = [...windows].sort((a, b) => a.index - b.index);
+  const target = sorted[0];
+  let joined = 0;
+
+  for (let i = 1; i < sorted.length; i++) {
+    try {
+      await execFileAsync('tmux', [
+        'join-pane', '-d', '-h',
+        '-s', `${sessionName}:${sorted[i].index}`,
+        '-t', `${sessionName}:${target.index}`,
+      ]);
+      joined++;
+    } catch {
+      // Window may have been killed already
+    }
+  }
+
+  if (joined > 0) {
+    console.log(`Rejoined ${joined} window(s) into panes in session "${sessionName}"`);
+  }
+  return joined;
+}
+
+/**
  * Filter a list of tmux session names to only those that are "orphaned" —
  * not already mapped to a DanCode project and not internal connection sessions.
  *
