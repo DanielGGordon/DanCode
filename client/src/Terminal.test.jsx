@@ -258,7 +258,8 @@ describe('Terminal', () => {
     expect(queryByTestId('terminal-error-overlay')).not.toBeNull()
     expect(getByText('Session Ended')).toBeDefined()
     expect(getByText(/code 1/)).toBeDefined()
-    expect(queryByTestId('terminal-reconnect-button')).not.toBeNull()
+    // Session-exit shows a message to re-open, NOT a reconnect button
+    expect(queryByTestId('terminal-reconnect-button')).toBeNull()
   })
 
   it('shows "Disconnected" overlay when socket disconnects unexpectedly', () => {

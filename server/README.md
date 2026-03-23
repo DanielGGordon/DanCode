@@ -4,11 +4,11 @@ Express + Socket.io backend for DanCode.
 
 ## What it does
 
-Serves the DanCode web application and manages WebSocket connections for real-time terminal communication. On startup, ensures an auth token exists at `~/.dancode/auth-token` (generating one on first run) and ensures a tmux session (`dancode-test`) exists for terminal connectivity. Currently serves a Solarized Dark placeholder page.
+Serves the DanCode web application and manages WebSocket connections for real-time terminal communication. On startup, ensures an auth token exists at `~/.dancode/auth-token` (generating one on first run) and ensures a tmux session (`dancode-test`) exists for terminal connectivity. Serves the compiled React client from `client/dist/` when available, falling back to a Solarized Dark placeholder page.
 
 ## Public interface
 
-- **`GET /`** — Serves the DanCode placeholder page (will be replaced by the React build in production)
+- **`GET /`** — Serves the React client build from `client/dist/` if available, otherwise a Solarized Dark placeholder page
 - **`GET /api/projects`** — List all configured projects, sorted alphabetically by name. Returns a JSON array of project objects.
 - **`POST /api/projects`** — Create a new project. Accepts `{ name, path }` for standard projects or `{ name, adoptSession }` to adopt an existing tmux session. Standard mode validates inputs, writes config to `~/.dancode/projects/<slug>.json`, creates the project directory if needed, and spins up a tmux session `dancode-<slug>` with two windows (CLI shell + Claude). Adopt mode links the project to the named tmux session without creating a new one. Returns 201 with the project object, 400 for validation errors, 409 for duplicates.
 - **`GET /api/projects/:slug`** — Get a single project by slug. Returns the project JSON object, or 404 if not found.

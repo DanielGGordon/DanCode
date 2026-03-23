@@ -49,23 +49,17 @@ describe('DanCode server', () => {
     expect(addr.port).toBe(TEST_PORT);
   });
 
-  it('serves a placeholder page with "DanCode" at /', async () => {
+  it('serves an HTML page with "DanCode" at /', async () => {
     const res = await fetch(`http://localhost:${TEST_PORT}/`);
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain('DanCode');
-    expect(html).toContain('<!DOCTYPE html>');
+    expect(html.toLowerCase()).toContain('<!doctype html>');
   });
 
   it('returns HTML content type for /', async () => {
     const res = await fetch(`http://localhost:${TEST_PORT}/`);
     expect(res.headers.get('content-type')).toContain('text/html');
-  });
-
-  it('uses Solarized Dark background color', async () => {
-    const res = await fetch(`http://localhost:${TEST_PORT}/`);
-    const html = await res.text();
-    expect(html).toContain('#002b36');
   });
 
   describe('POST /api/auth/validate', () => {

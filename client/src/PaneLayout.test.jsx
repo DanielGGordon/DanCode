@@ -1126,11 +1126,12 @@ describe('PaneLayout dynamic pane fetching', () => {
 
     const { getByTestId, queryByTestId } = render(<PaneLayout token="tok" slug="adopted" />)
 
-    // Wait for the fetched panes to replace defaults (pane-2 should disappear)
+    // Wait for the fetched panes to render (pane-0 appears after loading completes)
     await waitFor(() => {
-      expect(queryByTestId('pane-2')).toBeNull()
+      expect(queryByTestId('pane-0')).not.toBeNull()
     })
     // Only 2 panes with fetched labels
+    expect(queryByTestId('pane-2')).toBeNull()
     expect(getByTestId('pane-0').textContent).toContain('editor')
     expect(getByTestId('pane-1').textContent).toContain('shell')
   })

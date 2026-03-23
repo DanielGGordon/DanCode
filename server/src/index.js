@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import { Server } from 'socket.io';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { existsSync } from 'node:fs';
 import { ensureSession, createProjectSession, sessionExists, listSessions, listWindows, getOrphanedSessions } from './tmux.js';
 import { setupTerminalNamespace } from './terminal.js';
 import { ensureAuthToken, validateToken } from './auth.js';
@@ -47,6 +48,14 @@ function requireAuth(req, res, next) {
 
 app.use('/api', requireAuth);
 
+// Serve the compiled React client from client/dist/ in production
+const clientDistPath = join(__dirname, '..', '..', 'client', 'dist');
+const hasClientBuild = existsSync(join(clientDistPath, 'index.html'));
+
+if (hasClientBuild) {
+  app.use(express.static(clientDistPath));
+}
+
 const placeholderHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -87,10 +96,6 @@ const placeholderHTML = `<!DOCTYPE html>
   </div>
 </body>
 </html>`;
-
-app.get('/', (req, res) => {
-  res.type('html').send(placeholderHTML);
-});
 
 app.post('/api/auth/validate', (req, res) => {
   const { token } = req.body || {};
@@ -279,6 +284,15 @@ app.post('/api/projects', async (req, res) => {
       return res.status(409).json({ error: err.message });
     }
     res.status(500).json({ error: 'Failed to create project' });
+  }
+});
+
+// SPA fallback: serve index.html for non-API routes (client-side routing)
+app.get('{*path}', (req, res) => {
+  if (hasClientBuild) {
+    res.sendFile(join(clientDistPath, 'index.html'));
+  } else {
+    res.type('html').send(placeholderHTML);
   }
 });
 
