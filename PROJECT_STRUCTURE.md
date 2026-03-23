@@ -11,7 +11,7 @@ DanCode/
 │   │   ├── CommandPalette.test.jsx # CommandPalette unit tests (fuzzy match, filtering, open/close, selection)
 │   │   ├── LoginScreen.jsx     # Token input form with submit button
 │   │   ├── LoginScreen.test.jsx # LoginScreen component unit tests
-│   │   ├── NewProjectForm.jsx  # New project creation form (name + path inputs, calls POST /api/projects)
+│   │   ├── NewProjectForm.jsx  # New project creation form (name + path inputs, adopt-session toggle, calls POST /api/projects)
 │   │   ├── NewProjectForm.test.jsx # NewProjectForm component unit tests
 │   │   ├── PaneLayout.jsx      # Multi-pane layout: split view (side-by-side) or tabbed view with toggle
 │   │   ├── PaneLayout.test.jsx # PaneLayout component unit tests
