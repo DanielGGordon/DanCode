@@ -84,10 +84,9 @@ test.describe('Multi-pane layout', () => {
     await expect(page.getByTestId('tab-bar')).not.toBeVisible();
     await expect(page.getByTestId('layout-toggle')).toBeVisible();
 
-    // All three panes are visible
+    // Both panes are visible (CLI + Claude)
     await expect(page.getByTestId('pane-0')).toBeVisible();
     await expect(page.getByTestId('pane-1')).toBeVisible();
-    await expect(page.getByTestId('pane-2')).toBeVisible();
 
     // No tabbed-content container in split mode
     await expect(page.getByTestId('tabbed-content')).not.toBeAttached();
@@ -105,15 +104,13 @@ test.describe('Multi-pane layout', () => {
     // Tabbed content container is present
     await expect(page.getByTestId('tabbed-content')).toBeVisible();
 
-    // Tab buttons for each visible pane
+    // Tab buttons for each visible pane (CLI + Claude)
     await expect(page.getByTestId('tab-0')).toBeVisible();
     await expect(page.getByTestId('tab-1')).toBeVisible();
-    await expect(page.getByTestId('tab-2')).toBeVisible();
 
     // Only the focused pane (first by default) is visible
     await expect(page.getByTestId('pane-0')).toBeVisible();
     await expect(page.getByTestId('pane-1')).not.toBeVisible();
-    await expect(page.getByTestId('pane-2')).not.toBeVisible();
 
     // Click second tab, second pane becomes visible
     await page.getByTestId('tab-1').click();
@@ -126,14 +123,7 @@ test.describe('Multi-pane layout', () => {
     token = await login(page);
     ({ slug, projectPath } = await createProject(page, token));
 
-    // All panes start visible
-    await expect(page.getByTestId('pane-0')).toBeVisible();
-    await expect(page.getByTestId('pane-1')).toBeVisible();
-    await expect(page.getByTestId('pane-2')).toBeVisible();
-
-    // Hide the Ralph pane (index 2)
-    await page.getByTestId('visibility-2').click();
-    await expect(page.getByTestId('pane-2')).not.toBeVisible();
+    // Both panes start visible (CLI + Claude)
     await expect(page.getByTestId('pane-0')).toBeVisible();
     await expect(page.getByTestId('pane-1')).toBeVisible();
 
@@ -147,7 +137,7 @@ test.describe('Multi-pane layout', () => {
     await expect(lastToggle).toBeDisabled();
 
     // Re-show a hidden pane
-    await page.getByTestId('visibility-2').click();
-    await expect(page.getByTestId('pane-2')).toBeVisible();
+    await page.getByTestId('visibility-1').click();
+    await expect(page.getByTestId('pane-1')).toBeVisible();
   });
 });

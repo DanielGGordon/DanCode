@@ -83,12 +83,13 @@ test.describe('New Project flow', () => {
     // Submit the form
     await page.getByTestId('new-project-submit').click();
 
-    // After creation, the form disappears and the new project's terminal appears
+    // After creation, the form disappears and the new project's pane layout appears
     await expect(form).not.toBeVisible({ timeout: 15000 });
-    const terminal = page.getByTestId('terminal');
-    await expect(terminal).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId('pane-layout')).toBeVisible({ timeout: 15000 });
 
-    // Verify the terminal is connected to the newly created project's session
+    // Verify the first pane's terminal is connected to the newly created project's session
+    const terminal = page.getByTestId('pane-0').getByTestId('terminal');
+    await expect(terminal).toBeVisible({ timeout: 15000 });
     await expect(terminal).toHaveAttribute('data-slug', slug);
 
     // xterm.js renders inside the terminal container
