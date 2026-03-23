@@ -111,12 +111,13 @@ test.describe('Command palette visual', () => {
     const searchInput = page.getByTestId('command-palette-input');
     await expect(searchInput).toBeVisible();
 
-    // 3. Verify project items are listed
+    // 3. Verify project items are listed (wait for async project refresh)
     const list = page.getByTestId('command-palette-list');
     await expect(list).toBeVisible();
     const items = list.locator('li');
-    const itemCount = await items.count();
-    expect(itemCount).toBeGreaterThanOrEqual(2);
+    // handleProjectCreated triggers fetchProjects() asynchronously, so the
+    // palette may still show stale data. Use an auto-retrying assertion.
+    await expect(items.nth(1)).toBeVisible({ timeout: 10000 });
 
     // 4. Verify the palette is positioned near the top and centered
     const layout = await page.evaluate(() => {

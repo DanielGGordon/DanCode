@@ -20,9 +20,12 @@ test('placeholder page passes visual assertion', async ({ page }) => {
   await expect(heading).toContainText('DanCode');
 
   // 2. Verify dark background (Solarized Dark base03 = #002b36)
+  // When client/dist exists, Express serves the React app where the dark bg
+  // lives on the root container div, not on <body>. Fall back to <body> for
+  // the placeholder HTML page.
   const bgColor = await page.evaluate(() => {
-    const body = document.querySelector('body');
-    return window.getComputedStyle(body).backgroundColor;
+    const el = document.querySelector('#root > *') || document.body;
+    return window.getComputedStyle(el).backgroundColor;
   });
 
   // Parse RGB and verify dark solarized palette

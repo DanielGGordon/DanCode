@@ -80,11 +80,14 @@ test.describe('Layout visual', () => {
     await expect(page.getByTestId('pane-layout')).toBeVisible({ timeout: 15000 });
 
     // createProjectSession creates 2 tmux windows (CLI + Claude), not 3.
-    // Wait for both panes to render terminals.
+    // PaneLayout initially falls back to ALL_PANES (3 panes) until the
+    // /api/projects/:slug/panes fetch completes. Wait for pane-2 to disappear
+    // before asserting the 2-pane layout.
     const pane0 = page.getByTestId('pane-0');
     const pane1 = page.getByTestId('pane-1');
     await expect(pane0).toBeVisible({ timeout: 10000 });
     await expect(pane1).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('pane-2')).toBeHidden({ timeout: 10000 });
     await expect(pane0.locator('.xterm')).toBeVisible({ timeout: 10000 });
     await expect(pane1.locator('.xterm')).toBeVisible({ timeout: 10000 });
 
