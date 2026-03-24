@@ -172,6 +172,9 @@ app.get('/api/projects/:slug/panes', async (req, res) => {
       return res.status(404).json({ error: 'Project not found' });
     }
     const sessionName = project.tmuxSession || `dancode-${slug}`;
+    // Break panes into windows before listing so the client sees the
+    // correct window count (idempotent if already broken out)
+    await breakPanesIntoWindows(sessionName);
     const windows = await listWindows(sessionName);
     const panes = windows.map((w) => ({ index: w.index, label: w.name }));
     res.json(panes);

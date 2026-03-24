@@ -2,29 +2,7 @@ import pty from 'node-pty';
 import { randomBytes } from 'node:crypto';
 import { validateToken } from './auth.js';
 import { isValidSlug } from './projects.js';
-import { createConnectionSession, destroyConnectionSession, breakPanesIntoWindows, joinWindowsIntoPanes } from './tmux.js';
-
-// Track active connections per base session for break/rejoin lifecycle
-const sessionConnections = new Map();
-
-function trackConnect(baseSession) {
-  sessionConnections.set(baseSession, (sessionConnections.get(baseSession) || 0) + 1);
-}
-
-async function trackDisconnect(baseSession) {
-  const count = (sessionConnections.get(baseSession) || 1) - 1;
-  if (count <= 0) {
-    sessionConnections.delete(baseSession);
-    // Last connection gone — rejoin windows back into panes
-    try {
-      await joinWindowsIntoPanes(baseSession);
-    } catch {
-      // Non-fatal
-    }
-  } else {
-    sessionConnections.set(baseSession, count);
-  }
-}
+import { createConnectionSession, destroyConnectionSession } from './tmux.js';
 
 /**
  * Set up the Socket.io /terminal namespace.
@@ -79,16 +57,6 @@ export function setupTerminalNamespace(io, defaultSession, getAuthToken, resolve
       }
     }
 
-    // Break panes into windows on first connection to this session
-    if (!sessionConnections.has(baseSession)) {
-      try {
-        await breakPanesIntoWindows(baseSession);
-      } catch {
-        // Non-fatal
-      }
-    }
-    trackConnect(baseSession);
-
     // When a specific pane is requested, create a grouped session
     // so this connection sees only that window.
     let attachSession = baseSession;
@@ -101,13 +69,13 @@ export function setupTerminalNamespace(io, defaultSession, getAuthToken, resolve
         try {
           connSession = await createConnectionSession(baseSession, windowIndex, connId);
           attachSession = connSession;
-        } catch {
-          // If grouped session creation fails, fall back to base session
+        } catch (err) {
+          console.error(`Failed to create connection session for ${baseSession} window ${windowIndex}:`, err.message);
         }
       }
     }
 
-    const ptyProcess = pty.spawn('tmux', ['attach', '-t', attachSession], {
+    const ptyProcess = pty.spawn('tmux', ['attach', '-t', `=${attachSession}`], {
       name: 'xterm-256color',
       cols,
       rows,
@@ -146,7 +114,6 @@ export function setupTerminalNamespace(io, defaultSession, getAuthToken, resolve
       if (connSession) {
         destroyConnectionSession(connSession);
       }
-      trackDisconnect(baseSession);
     };
 
     socket.on('disconnect', cleanup);

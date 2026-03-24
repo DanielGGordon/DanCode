@@ -27,7 +27,7 @@ export async function listSessions() {
 export async function listWindows(sessionName) {
   try {
     const { stdout } = await execFileAsync('tmux', [
-      'list-windows', '-t', sessionName, '-F', '#{window_index}:#{window_name}',
+      'list-windows', '-t', `=${sessionName}`, '-F', '#{window_index}:#{window_name}',
     ]);
     return stdout.trim().split('\n').filter(Boolean).map((line) => {
       const colonIdx = line.indexOf(':');
@@ -48,7 +48,7 @@ export async function listWindows(sessionName) {
  */
 export async function sessionExists(name) {
   try {
-    await execFileAsync('tmux', ['has-session', '-t', name]);
+    await execFileAsync('tmux', ['has-session', '-t', `=${name}`]);
     return true;
   } catch {
     return false;
@@ -106,18 +106,18 @@ export async function createProjectSession(slug, projectPath) {
 
   // Create window 1 (Claude) at the project path
   await execFileAsync('tmux', [
-    'new-window', '-t', sessionName, '-n', 'claude', '-c', projectPath,
+    'new-window', '-t', `=${sessionName}`, '-n', 'claude', '-c', projectPath,
   ]);
 
   // Run claude in window 1
   await execFileAsync('tmux', [
-    'send-keys', '-t', `${sessionName}:claude`,
+    'send-keys', '-t', `=${sessionName}:claude`,
     'claude --dangerously-skip-permissions', 'Enter',
   ]);
 
   // Select window 0 so the base session defaults to CLI
   await execFileAsync('tmux', [
-    'select-window', '-t', `${sessionName}:cli`,
+    'select-window', '-t', `=${sessionName}:cli`,
   ]);
 
   return { sessionName, created: true };
@@ -139,18 +139,28 @@ export async function createProjectSession(slug, projectPath) {
 export async function createConnectionSession(targetSession, windowIndex, connId) {
   const connSession = `${targetSession}-conn-${connId}`;
 
-  // Batch all three operations into a single tmux invocation to minimise
-  // process-spawn overhead (saves ~2 fork/exec cycles per pane, significant
-  // on lower-powered hardware like Raspberry Pi).
+  // Create grouped session (shares windows with target)
   await execFileAsync('tmux', [
-    'new-session', '-d', '-t', targetSession, '-s', connSession,
-    ';',
-    'set', '-t', connSession, 'status', 'off',
-    ';',
-    'set', '-t', connSession, 'mouse', 'on',
-    ';',
-    'select-window', '-t', `${connSession}:${windowIndex}`,
+    'new-session', '-d', '-t', `=${targetSession}`, '-s', connSession,
   ]);
+
+  // Configure session — these are non-critical, don't fail if they error
+  try {
+    await execFileAsync('tmux', ['set', '-t', `=${connSession}`, 'status', 'off']);
+  } catch {}
+  try {
+    await execFileAsync('tmux', ['set', '-t', `=${connSession}`, 'mouse', 'on']);
+  } catch {}
+
+  // Select the requested window — if it doesn't exist, the session still
+  // works (just shows whatever window tmux defaults to)
+  try {
+    await execFileAsync('tmux', [
+      'select-window', '-t', `=${connSession}:${windowIndex}`,
+    ]);
+  } catch {
+    console.warn(`Window ${windowIndex} not found in session "${targetSession}", using default`);
+  }
 
   return connSession;
 }
@@ -163,7 +173,7 @@ export async function createConnectionSession(targetSession, windowIndex, connId
  */
 export async function destroyConnectionSession(connSession) {
   try {
-    await execFileAsync('tmux', ['kill-session', '-t', connSession]);
+    await execFileAsync('tmux', ['kill-session', '-t', `=${connSession}`]);
   } catch {
     // Session already gone — that's fine
   }
@@ -178,7 +188,7 @@ export async function destroyConnectionSession(connSession) {
 export async function listPanes(sessionName, windowIndex) {
   try {
     const { stdout } = await execFileAsync('tmux', [
-      'list-panes', '-t', `${sessionName}:${windowIndex}`,
+      'list-panes', '-t', `=${sessionName}:${windowIndex}`,
       '-F', '#{pane_index}:#{pane_current_command}',
     ]);
     return stdout.trim().split('\n').filter(Boolean).map((line) => {
@@ -216,7 +226,7 @@ export async function breakPanesIntoWindows(sessionName) {
       const pane = panes[i];
       await execFileAsync('tmux', [
         'break-pane', '-d',
-        '-s', `${sessionName}:${win.index}.${pane.index}`,
+        '-s', `=${sessionName}:${win.index}.${pane.index}`,
         '-n', pane.command,
       ]);
       brokenOut++;
@@ -250,8 +260,8 @@ export async function joinWindowsIntoPanes(sessionName) {
     try {
       await execFileAsync('tmux', [
         'join-pane', '-d', '-h',
-        '-s', `${sessionName}:${sorted[i].index}`,
-        '-t', `${sessionName}:${target.index}`,
+        '-s', `=${sessionName}:${sorted[i].index}`,
+        '-t', `=${sessionName}:${target.index}`,
       ]);
       joined++;
     } catch {
