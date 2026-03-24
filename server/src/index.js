@@ -4,7 +4,7 @@ import { Server } from 'socket.io';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
-import { ensureSession, createProjectSession, sessionExists, listSessions, listWindows, getOrphanedSessions, breakPanesIntoWindows } from './tmux.js';
+import { ensureSession, createProjectSession, sessionExists, listSessions, listWindows, getOrphanedSessions, breakPanesIntoWindows, enableMouse } from './tmux.js';
 import { setupTerminalNamespace } from './terminal.js';
 import { ensureAuthToken, validateToken } from './auth.js';
 import { validateProjectInput, createProject, createAdoptedProject, listProjects, getProject, updateProject, deleteProject, getProjectsDir, slugify, isValidSlug } from './projects.js';
@@ -172,9 +172,6 @@ app.get('/api/projects/:slug/panes', async (req, res) => {
       return res.status(404).json({ error: 'Project not found' });
     }
     const sessionName = project.tmuxSession || `dancode-${slug}`;
-    // Break panes into windows before listing so the client sees the
-    // correct window count (idempotent if already broken out)
-    await breakPanesIntoWindows(sessionName);
     const windows = await listWindows(sessionName);
     const panes = windows.map((w) => ({ index: w.index, label: w.name }));
     res.json(panes);
@@ -320,6 +317,11 @@ export async function startServer(port = PORT, { tokenPath, projectsDir: projDir
   const { token } = await ensureAuthToken(tokenPath);
   authToken = token;
   projectsDir = projDir || getProjectsDir();
+
+  // Enable mouse support globally so scroll works in all sessions
+  try {
+    await enableMouse();
+  } catch {}
 
   try {
     await ensureSession(TMUX_SESSION);

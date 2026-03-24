@@ -4,6 +4,13 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 
 /**
+ * Enable mouse support globally so scroll-wheel works in all sessions.
+ */
+export async function enableMouse() {
+  await execFileAsync('tmux', ['set', '-g', 'mouse', 'on']);
+}
+
+/**
  * List all tmux session names.
  * @returns {Promise<string[]>} array of session names (empty if no tmux server)
  */
@@ -144,12 +151,9 @@ export async function createConnectionSession(targetSession, windowIndex, connId
     'new-session', '-d', '-t', `=${targetSession}`, '-s', connSession,
   ]);
 
-  // Configure session — these are non-critical, don't fail if they error
+  // Hide status bar on connection sessions
   try {
     await execFileAsync('tmux', ['set', '-t', `=${connSession}`, 'status', 'off']);
-  } catch {}
-  try {
-    await execFileAsync('tmux', ['set', '-t', `=${connSession}`, 'mouse', 'on']);
   } catch {}
 
   // Select the requested window — if it doesn't exist, the session still
