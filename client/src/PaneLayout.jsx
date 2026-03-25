@@ -145,6 +145,13 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
     setFocusedPane(index)
   }, [])
 
+  // Prevent Ctrl+click from triggering native multi-selection across panes
+  const handlePaneMouseDown = useCallback((e) => {
+    if (e.ctrlKey) {
+      e.preventDefault()
+    }
+  }, [])
+
   const toggleLayout = useCallback(() => {
     setLayoutMode((prev) => (prev === 'split' ? 'tabs' : 'split'))
   }, [])
@@ -302,6 +309,7 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
                     : 'border-base01/30 border-l-8 border-l-transparent opacity-60'
                 } ${isHidden ? 'hidden' : ''}`}
                 onClick={() => handlePaneClick(index)}
+                onMouseDown={handlePaneMouseDown}
               >
                 <div
                   className={`px-3 py-1 text-xs font-medium border-b select-none flex items-center justify-between transition-colors duration-150 ${

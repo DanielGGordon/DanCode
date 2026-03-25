@@ -159,9 +159,12 @@ export async function createConnectionSession(targetSession, windowIndex, connId
     'new-session', '-d', '-t', `=${targetSession}`, '-s', connSession,
   ]);
 
-  // Hide status bar on connection sessions
+  // Override status-left to show the base session name instead of the conn session name
   try {
-    await execFileAsync('tmux', ['set', '-t', `=${connSession}`, 'status', 'off']);
+    await execFileAsync('tmux', [
+      'set', '-t', `=${connSession}`, 'status-left',
+      `#[bg=colour208,fg=black,bold] ${targetSession} #[default] `,
+    ]);
   } catch {}
 
   // Select the requested window — if it doesn't exist, the session still
