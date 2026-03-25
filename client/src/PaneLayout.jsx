@@ -296,15 +296,17 @@ export default function PaneLayout({ token, slug, panes: panesProp }) {
               <div
                 key={index}
                 data-testid={`pane-${index}`}
-                className={`flex-1 min-w-0 flex flex-col border-r last:border-r-0 transition-[border-color] duration-150 ${
-                  isFocused ? 'border-blue/50' : 'border-base01/30'
+                className={`flex-1 min-w-0 flex flex-col border-r last:border-r-0 transition-all duration-150 ${
+                  isFocused
+                    ? 'border-blue/50 border-l-8 border-l-blue'
+                    : 'border-base01/30 border-l-8 border-l-transparent opacity-60'
                 } ${isHidden ? 'hidden' : ''}`}
                 onClick={() => handlePaneClick(index)}
               >
                 <div
                   className={`px-3 py-1 text-xs font-medium border-b select-none flex items-center justify-between transition-colors duration-150 ${
                     isFocused
-                      ? 'text-base1 bg-base02 border-blue/50'
+                      ? 'text-base1 bg-blue/10 border-blue/50'
                       : 'text-base01 bg-base02 border-base01/30'
                   }`}
                 >

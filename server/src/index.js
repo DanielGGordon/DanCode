@@ -4,7 +4,7 @@ import { Server } from 'socket.io';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
-import { ensureSession, createProjectSession, sessionExists, listSessions, listWindows, getOrphanedSessions, breakPanesIntoWindows, enableMouse } from './tmux.js';
+import { ensureSession, createProjectSession, sessionExists, listSessions, listWindows, getOrphanedSessions, breakPanesIntoWindows, enableMouse, renameSession, cleanupStaleConnSessions } from './tmux.js';
 import { setupTerminalNamespace } from './terminal.js';
 import { ensureAuthToken, validateToken } from './auth.js';
 import { validateProjectInput, createProject, createAdoptedProject, listProjects, getProject, updateProject, deleteProject, getProjectsDir, slugify, isValidSlug } from './projects.js';
@@ -120,7 +120,7 @@ app.get('/api/tmux-status', async (req, res) => {
     const status = {};
     await Promise.all(
       projects.map(async (p) => {
-        const sessionName = p.tmuxSession || `dancode-${p.slug}`;
+        const sessionName = p.tmuxSession || p.slug;
         status[p.slug] = await sessionExists(sessionName);
       })
     );
@@ -193,8 +193,32 @@ app.patch('/api/projects/:slug', async (req, res) => {
   if (typeof body.showTmuxCommands === 'boolean') {
     updates.showTmuxCommands = body.showTmuxCommands;
   }
+
+  // Rename the project and its tmux session
+  if (typeof body.name === 'string' && body.name.trim()) {
+    const newName = body.name.trim();
+    updates.name = newName;
+
+    // Also rename the tmux session if requested
+    if (typeof body.tmuxSession === 'string' && body.tmuxSession.trim()) {
+      const newTmuxName = body.tmuxSession.trim();
+      try {
+        const project = await getProject(slug, projectsDir);
+        if (project) {
+          const currentSession = project.tmuxSession || slug;
+          if (currentSession !== newTmuxName && await sessionExists(currentSession)) {
+            await renameSession(currentSession, newTmuxName);
+          }
+          updates.tmuxSession = newTmuxName;
+        }
+      } catch (err) {
+        return res.status(400).json({ error: `Failed to rename tmux session: ${err.message}` });
+      }
+    }
+  }
+
   if (Object.keys(updates).length === 0) {
-    return res.status(400).json({ error: 'Request body must include layout or showTmuxCommands' });
+    return res.status(400).json({ error: 'No valid fields to update' });
   }
   try {
     const updated = await updateProject(slug, updates, projectsDir);
@@ -235,7 +259,7 @@ app.post('/api/projects', async (req, res) => {
     if (!slug) {
       return res.status(400).json({ error: 'Project name must contain at least one alphanumeric character' });
     }
-    if (`dancode-${slug}` === TMUX_SESSION) {
+    if (slug === TMUX_SESSION) {
       return res.status(400).json({ error: 'Project name conflicts with a reserved session name' });
     }
 
@@ -265,7 +289,7 @@ app.post('/api/projects', async (req, res) => {
 
   // Reject slugs that would collide with the server's bootstrap tmux session
   const slug = slugify(name.trim());
-  if (`dancode-${slug}` === TMUX_SESSION) {
+  if (slug === TMUX_SESSION) {
     return res.status(400).json({ error: `Project name conflicts with a reserved session name` });
   }
 
@@ -323,6 +347,11 @@ export async function startServer(port = PORT, { tokenPath, projectsDir: projDir
     await enableMouse();
   } catch {}
 
+  // Clean up stale connection sessions from previous ungraceful shutdowns
+  try {
+    await cleanupStaleConnSessions();
+  } catch {}
+
   try {
     await ensureSession(TMUX_SESSION);
   } catch (err) {
@@ -332,7 +361,7 @@ export async function startServer(port = PORT, { tokenPath, projectsDir: projDir
   if (!terminalNamespaceRegistered) {
     async function resolveSession(slug) {
       const project = await getProject(slug, projectsDir);
-      return project?.tmuxSession || `dancode-${slug}`;
+      return project?.tmuxSession || slug;
     }
     setupTerminalNamespace(io, TMUX_SESSION, () => authToken, resolveSession);
     terminalNamespaceRegistered = true;

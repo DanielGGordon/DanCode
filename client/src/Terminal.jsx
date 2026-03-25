@@ -16,6 +16,16 @@ const DEFAULT_FONT_SIZE = 14
 const MIN_FONT_SIZE = 8
 const MAX_FONT_SIZE = 32
 
+function fallbackCopy(text) {
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.style.cssText = 'position:fixed;opacity:0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  document.execCommand('copy')
+  document.body.removeChild(textarea)
+}
+
 export default function Terminal({ token, slug, pane, focused, onFocus }) {
   const containerRef = useRef(null)
   const termRef = useRef(null)
@@ -50,7 +60,7 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
         background: '#002b36',
         foreground: '#839496',
         cursor: '#93a1a1',
-        selectionBackground: '#073642',
+        selectionBackground: '#264f78',
         black: '#073642',
         red: '#dc322f',
         green: '#859900',
@@ -76,6 +86,29 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
 
     termRef.current = term
     fitAddonRef.current = fitAddon
+
+    // Intercept Ctrl+C/V before xterm processes them as terminal input.
+    // Returning false tells xterm to ignore the key and not call preventDefault,
+    // so the browser's native behavior (paste event) can fire.
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.type !== 'keydown' || !(e.ctrlKey || e.metaKey)) return true
+
+      if (e.key === 'c') {
+        const selection = term.getSelection()
+        if (selection) {
+          fallbackCopy(selection)
+          term.clearSelection()
+          return false
+        }
+        return true // no selection — send SIGINT
+      }
+
+      if (e.key === 'v') {
+        return false // let browser fire native paste event
+      }
+
+      return true
+    })
 
     // Defer socket connection so StrictMode cleanup can cancel it
     // before a backend pty/tmux session is spawned.
@@ -199,24 +232,18 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
     return () => container.removeEventListener('wheel', handler, { capture: true })
   }, [])
 
-  // Ctrl+V to paste from clipboard — capture phase to intercept before xterm/tmux
+  // Handle native paste events (fired by browser when Ctrl+V is not consumed by xterm)
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
     const handler = (e) => {
-      if (!(e.ctrlKey || e.metaKey) || e.key !== 'v') return
+      const text = e.clipboardData?.getData('text')
+      if (!text || !termRef.current) return
       e.preventDefault()
-      e.stopPropagation()
-      const term = termRef.current
-      if (!term) return
-      navigator.clipboard.readText().then((text) => {
-        if (text) term.paste(text)
-      }).catch(() => {
-        // Clipboard access denied — fall through silently
-      })
+      termRef.current.paste(text)
     }
-    container.addEventListener('keydown', handler, { capture: true })
-    return () => container.removeEventListener('keydown', handler, { capture: true })
+    container.addEventListener('paste', handler)
+    return () => container.removeEventListener('paste', handler)
   }, [])
 
   const handleReconnect = useCallback(() => {

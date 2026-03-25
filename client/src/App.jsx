@@ -198,6 +198,42 @@ function App() {
     setShowNewProject(false)
   }
 
+  async function handleRenameProject(slug, newName) {
+    try {
+      const res = await fetch(`/api/projects/${slug}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ name: newName, tmuxSession: newName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') }),
+      })
+      if (res.ok) {
+        if (selectedSlug === slug) {
+          setSelectedProjectName(newName)
+        }
+        fetchProjects()
+      }
+    } catch {}
+  }
+
+  async function handleDeleteProject(slug) {
+    try {
+      const res = await fetch(`/api/projects/${slug}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        if (selectedSlug === slug) {
+          setSelectedSlug(null)
+          setSelectedProjectName(null)
+        }
+        fetchProjects()
+        fetchTmuxStatus()
+      }
+    } catch {}
+  }
+
   return (
     <div className="w-screen h-screen flex flex-col">
       <CommandPalette
@@ -261,6 +297,8 @@ function App() {
           projects={projects}
           currentSlug={selectedSlug}
           onSelect={handleSidebarSelect}
+          onDelete={handleDeleteProject}
+          onRename={handleRenameProject}
           tmuxStatus={tmuxStatus}
           collapsed={sidebarCollapsed}
           onToggle={() => setSidebarCollapsed((prev) => {

@@ -10,7 +10,7 @@ import { createConnectionSession, destroyConnectionSession } from './tmux.js';
  * `tmux attach -t <session>`.
  *
  * Clients may pass a `slug` query parameter to connect to a project-specific
- * tmux session (`dancode-<slug>`) instead of the default bootstrap session.
+ * tmux session instead of the default bootstrap session.
  *
  * When a `pane` query parameter is provided (0-based window index), a grouped
  * tmux session is created so this connection sees only that window.
@@ -50,10 +50,10 @@ export function setupTerminalNamespace(io, defaultSession, getAuthToken, resolve
         try {
           baseSession = await resolveSession(slug);
         } catch {
-          baseSession = `dancode-${slug}`;
+          baseSession = slug;
         }
       } else {
-        baseSession = `dancode-${slug}`;
+        baseSession = slug;
       }
     }
 

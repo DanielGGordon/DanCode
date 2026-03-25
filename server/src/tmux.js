@@ -93,14 +93,13 @@ export async function ensureSession(name) {
  * Uses separate windows (not panes) so each can be independently attached
  * via grouped sessions for the multi-pane web UI.
  *
- * If a session with the name `dancode-<slug>` already exists, it is reused.
+ * If a session with the given name already exists, it is reused.
  *
- * @param {string} slug - project slug (session will be named `dancode-<slug>`)
+ * @param {string} sessionName - tmux session name
  * @param {string} projectPath - absolute path to the project directory
  * @returns {Promise<{sessionName: string, created: boolean}>}
  */
-export async function createProjectSession(slug, projectPath) {
-  const sessionName = `dancode-${slug}`;
+export async function createProjectSession(sessionName, projectPath) {
 
   if (await sessionExists(sessionName)) {
     return { sessionName, created: false };
@@ -131,6 +130,15 @@ export async function createProjectSession(slug, projectPath) {
 }
 
 /**
+ * Rename an existing tmux session.
+ * @param {string} oldName - current session name
+ * @param {string} newName - desired new session name
+ */
+export async function renameSession(oldName, newName) {
+  await execFileAsync('tmux', ['rename-session', '-t', `=${oldName}`, newName]);
+}
+
+/**
  * Create a grouped tmux session for a single-window connection.
  *
  * Grouped sessions share the same windows as the target session but have
@@ -138,7 +146,7 @@ export async function createProjectSession(slug, projectPath) {
  * multiple browser terminals each display a different window from the same
  * underlying tmux session.
  *
- * @param {string} targetSession - the base session to group with (e.g. `dancode-myproj`)
+ * @param {string} targetSession - the base session to group with (e.g. `myproj`)
  * @param {number} windowIndex - which window to display (0-based)
  * @param {string} connId - unique connection identifier for the grouped session name
  * @returns {Promise<string>} the grouped session name
@@ -289,9 +297,43 @@ export async function joinWindowsIntoPanes(sessionName) {
  */
 export function getOrphanedSessions(allSessions, projects) {
   const mappedSessions = new Set(
-    projects.map((p) => p.tmuxSession || `dancode-${p.slug}`)
+    projects.map((p) => p.tmuxSession || p.slug)
   );
   return allSessions.filter(
     (name) => !mappedSessions.has(name) && !name.includes('-conn-')
   );
+}
+
+/**
+ * Destroy all stale connection sessions (unattached -conn- sessions).
+ * Called on server startup to clean up leftovers from ungraceful shutdowns.
+ *
+ * @returns {Promise<number>} number of sessions cleaned up
+ */
+export async function cleanupStaleConnSessions() {
+  let cleaned = 0;
+  try {
+    const { stdout } = await execFileAsync('tmux', [
+      'list-sessions', '-F', '#{session_name} #{session_attached}',
+    ]);
+    const stale = stdout.trim().split('\n').filter(Boolean)
+      .filter((line) => {
+        const [name, attached] = line.split(' ');
+        return name.includes('-conn-') && attached === '0';
+      })
+      .map((line) => line.split(' ')[0]);
+
+    for (const name of stale) {
+      try {
+        await execFileAsync('tmux', ['kill-session', '-t', `=${name}`]);
+        cleaned++;
+      } catch {}
+    }
+  } catch {
+    // No tmux server or no sessions
+  }
+  if (cleaned > 0) {
+    console.log(`Cleaned up ${cleaned} stale connection session(s)`);
+  }
+  return cleaned;
 }

@@ -27,6 +27,16 @@ npm install          # Install all workspace dependencies
 npm run dev          # Start server + client concurrently
 ```
 
+## Features
+
+- **Multi-pane split view** of tmux windows (CLI, Claude, etc.) in the browser
+- **Clipboard support** over plain HTTP — Ctrl+C copies selected text, Ctrl+V pastes (uses `execCommand` fallback for non-HTTPS)
+- **Focused pane indicator** — 8px blue accent bar + dimmed unfocused panes
+- **Right-click context menu** on sidebar projects — Rename, Copy tmux command, Delete
+- **Tmux session naming** — sessions use human-readable names (no `dancode-` prefix), renameable from the UI
+- **Stale session cleanup** — orphaned connection sessions are automatically cleaned up on server startup
+- **Keyboard shortcuts** — Ctrl+K command palette, Alt+arrows project switching, Ctrl+wheel font sizing
+
 ## Development
 
 ```bash
