@@ -291,6 +291,23 @@ export async function joinWindowsIntoPanes(sessionName) {
 }
 
 /**
+ * Kill a specific window in a tmux session.
+ * @param {string} sessionName - tmux session name
+ * @param {number} windowIndex - window index to kill
+ */
+export async function killWindow(sessionName, windowIndex) {
+  await execFileAsync('tmux', ['kill-window', '-t', `=${sessionName}:${windowIndex}`]);
+}
+
+/**
+ * Kill an entire tmux session.
+ * @param {string} sessionName - tmux session name
+ */
+export async function killSession(sessionName) {
+  await execFileAsync('tmux', ['kill-session', '-t', `=${sessionName}`]);
+}
+
+/**
  * Filter a list of tmux session names to only those that are "orphaned" —
  * not already mapped to a DanCode project and not internal connection sessions.
  *

@@ -1,6 +1,6 @@
 import pty from 'node-pty';
 import { randomBytes } from 'node:crypto';
-import { validateToken } from './auth.js';
+import { validateSession } from './auth.js';
 import { isValidSlug } from './projects.js';
 import { createConnectionSession, destroyConnectionSession } from './tmux.js';
 
@@ -17,18 +17,16 @@ import { createConnectionSession, destroyConnectionSession } from './tmux.js';
  *
  * @param {import('socket.io').Server} io - Socket.io server instance
  * @param {string} defaultSession - default tmux session to attach to
- * @param {() => string} getAuthToken - function returning the current auth token
  * @param {(slug: string) => Promise<string>} [resolveSession] - optional async function
  *   that resolves a project slug to its tmux session name (supports adopted sessions)
  * @returns {import('socket.io').Namespace} the /terminal namespace
  */
-export function setupTerminalNamespace(io, defaultSession, getAuthToken, resolveSession) {
+export function setupTerminalNamespace(io, defaultSession, resolveSession) {
   const ns = io.of('/terminal');
 
   ns.use((socket, next) => {
     const token = socket.handshake.auth?.token;
-    const authToken = getAuthToken();
-    if (!authToken || !validateToken(token, authToken)) {
+    if (!validateSession(token)) {
       return next(new Error('Authentication failed'));
     }
     next();

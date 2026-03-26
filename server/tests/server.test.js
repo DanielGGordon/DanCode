@@ -5,23 +5,28 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { generate } from 'otplib';
 import { app, httpServer, startServer } from '../src/index.js';
+import { clearSessions } from '../src/auth.js';
 
 const execFileAsync = promisify(execFile);
 
 const TEST_PORT = 3099;
+const TEST_USERNAME = 'testadmin';
+const TEST_PASSWORD = 'testpassword123';
 
 describe('DanCode server', () => {
   let server;
   let tempDir;
-  let tokenPath;
+  let credentialsPath;
   let projectsDir;
-  let storedToken;
+  let storedToken; // session token from login
+  let totpSecret; // TOTP secret for generating codes
   const createdSessions = [];
 
   beforeAll(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'dancode-server-test-'));
-    tokenPath = join(tempDir, 'auth-token');
+    credentialsPath = join(tempDir, 'credentials.json');
     projectsDir = join(tempDir, 'projects');
   });
 
@@ -29,6 +34,7 @@ describe('DanCode server', () => {
     if (server) {
       await new Promise((resolve) => server.close(resolve));
     }
+    clearSessions();
     // Clean up tmux sessions created during project creation tests
     for (const name of createdSessions) {
       try {
@@ -43,10 +49,35 @@ describe('DanCode server', () => {
   });
 
   it('starts and listens on the specified port', async () => {
-    server = await startServer(TEST_PORT, { tokenPath, projectsDir });
-    storedToken = (await readFile(tokenPath, 'utf-8')).trim();
+    server = await startServer(TEST_PORT, { credentialsPath, projectsDir });
     const addr = server.address();
     expect(addr.port).toBe(TEST_PORT);
+  });
+
+  it('allows account setup and login', async () => {
+    // Setup account
+    const setupRes = await fetch(`http://localhost:${TEST_PORT}/api/auth/setup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: TEST_USERNAME, password: TEST_PASSWORD }),
+    });
+    expect(setupRes.status).toBe(200);
+    const setupData = await setupRes.json();
+    totpSecret = setupData.totpSecret;
+    expect(totpSecret).toBeDefined();
+    expect(setupData.qrCodeDataUrl).toMatch(/^data:image\/png;base64,/);
+
+    // Login
+    const totpCode = await generate({ secret: totpSecret });
+    const loginRes = await fetch(`http://localhost:${TEST_PORT}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: TEST_USERNAME, password: TEST_PASSWORD, totpCode }),
+    });
+    expect(loginRes.status).toBe(200);
+    const loginData = await loginRes.json();
+    storedToken = loginData.token;
+    expect(storedToken).toBeDefined();
   });
 
   it('serves an HTML page with "DanCode" at /', async () => {
@@ -62,8 +93,58 @@ describe('DanCode server', () => {
     expect(res.headers.get('content-type')).toContain('text/html');
   });
 
+  describe('GET /api/auth/setup/status', () => {
+    it('returns setupComplete true after account creation', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/auth/setup/status`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.setupComplete).toBe(true);
+    });
+  });
+
+  describe('POST /api/auth/setup', () => {
+    it('returns 409 when account already exists', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/auth/setup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'another', password: 'password123' }),
+      });
+      expect(res.status).toBe(409);
+    });
+  });
+
+  describe('POST /api/auth/login', () => {
+    it('returns 401 with wrong password', async () => {
+      const code = await generate({ secret: totpSecret });
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: TEST_USERNAME, password: 'wrongpass', totpCode: code }),
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 401 with wrong TOTP code', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: TEST_USERNAME, password: TEST_PASSWORD, totpCode: '000000' }),
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 400 with missing fields', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: TEST_USERNAME }),
+      });
+      expect(res.status).toBe(400);
+    });
+  });
+
   describe('POST /api/auth/validate', () => {
-    it('returns 200 with valid token', async () => {
+    it('returns 200 with valid session token', async () => {
       const res = await fetch(`http://localhost:${TEST_PORT}/api/auth/validate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -74,22 +155,11 @@ describe('DanCode server', () => {
       expect(body.valid).toBe(true);
     });
 
-    it('returns 401 with invalid token', async () => {
+    it('returns 401 with invalid session token', async () => {
       const res = await fetch(`http://localhost:${TEST_PORT}/api/auth/validate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: 'wrong-token' }),
-      });
-      expect(res.status).toBe(401);
-      const body = await res.json();
-      expect(body.error).toBe('Invalid token');
-    });
-
-    it('returns 401 with missing token', async () => {
-      const res = await fetch(`http://localhost:${TEST_PORT}/api/auth/validate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ token: 'not-a-real-session' }),
       });
       expect(res.status).toBe(401);
     });
@@ -121,12 +191,8 @@ describe('DanCode server', () => {
       expect(body.error).toBe('Invalid token');
     });
 
-    it('allows /api/auth/validate without Bearer token', async () => {
-      const res = await fetch(`http://localhost:${TEST_PORT}/api/auth/validate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: storedToken }),
-      });
+    it('allows auth endpoints without Bearer token', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/auth/setup/status`);
       expect(res.status).toBe(200);
     });
 
