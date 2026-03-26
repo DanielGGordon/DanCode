@@ -8,7 +8,7 @@ Built for Raspberry Pi 5, accessed via Tailscale.
 
 - **Backend:** Node.js + Express + Socket.io
 - **Frontend:** React + Vite + Tailwind CSS
-- **Terminal:** xterm.js + node-pty + tmux
+- **Terminal:** xterm.js + node-pty (direct PTY or tmux-backed)
 - **Theme:** Solarized Dark (#002b36)
 - **Testing:** Vitest + Playwright + Midscene.js
 
@@ -36,6 +36,7 @@ npm run dev          # Start server + client concurrently
 - **Tmux session naming** — sessions use human-readable names (no `dancode-` prefix), renameable from the UI
 - **Stale session cleanup** — orphaned connection sessions are automatically cleaned up on server startup
 - **Keyboard shortcuts** — Ctrl+K command palette, Alt+arrows project switching, Ctrl+wheel font sizing
+- **Direct PTY terminals** — New terminal API spawns shells directly (no tmux), with WebSocket per terminal, ~50KB output ring buffer for reconnection replay, and metadata persistence
 
 ## Development
 

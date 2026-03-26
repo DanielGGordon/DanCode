@@ -19,9 +19,11 @@ DanCode/
 │   │   ├── Sidebar.test.jsx    # Sidebar component unit tests
 │   │   ├── Terminal.jsx        # xterm.js terminal connected via Socket.io (supports per-pane connections)
 │   │   ├── Terminal.test.jsx   # Terminal component unit tests
+│   │   ├── poc-terminal.js     # POC: standalone xterm.js page for new terminal API (E2E testing)
 │   │   ├── index.css           # Tailwind + Solarized Dark theme
 │   │   └── main.jsx            # Entry point
 │   ├── index.html              # HTML shell
+│   ├── poc-terminal.html       # POC: HTML entry point for standalone terminal page
 │   ├── vite.config.js          # Vite config (proxy, Tailwind plugin)
 │   ├── package.json            # Includes vitest test scripts
 │   └── README.md
@@ -32,10 +34,11 @@ DanCode/
 │   └── dancode-future-phases.md
 ├── server/                     # Express + Socket.io backend
 │   ├── src/
-│   │   ├── auth.js             # Auth token generation and file management (~/.dancode/auth-token)
-│   │   ├── index.js            # Server entry point (Express, Socket.io, REST API routes)
+│   │   ├── auth.js             # TOTP-based auth: account setup, login, session management (~/.dancode/credentials.json)
+│   │   ├── index.js            # Server entry point (Express, Socket.io, REST API routes, terminal CRUD)
 │   │   ├── projects.js         # Project config CRUD (create, list, get, delete) in ~/.dancode/projects/
-│   │   ├── terminal.js         # Socket.io /terminal namespace (node-pty → tmux attach)
+│   │   ├── terminal.js         # Socket.io /terminal namespace (node-pty → tmux attach, legacy path)
+│   │   ├── terminal-manager.js # TerminalManager: direct PTY spawning, CRUD, ring buffer, WebSocket /terminal/{uuid}
 │   │   └── tmux.js             # Tmux session management (ensure, create, check)
 │   ├── tests/
 │   │   ├── e2e/
@@ -55,11 +58,13 @@ DanCode/
 │   │   │   ├── sidebar.spec.js          # Playwright E2E test (sidebar project switching: click project, terminals update)
 │   │   │   ├── sidebar-visual.spec.js   # Midscene AI visual assertion test (collapsible sidebar with project list and active highlight)
 │   │   │   ├── header-dropdown.spec.js  # Playwright E2E test (header dropdown: click project name, dropdown appears, select project, terminals switch)
+│   │   │   ├── terminal-poc.spec.js     # Playwright E2E test (create terminal via API, type in xterm, see output)
 │   │   │   └── visual.spec.js  # Midscene AI visual assertion test (DOM-based on Pi 5)
-│   │   ├── auth.test.js        # Auth token generation and management tests
+│   │   ├── auth.test.js        # Auth account setup, login, session management tests
 │   │   ├── projects.test.js    # Project config CRUD, slug generation, validation tests
 │   │   ├── server.test.js      # Server unit tests (routes, auth middleware, project API)
-│   │   ├── terminal.test.js    # Socket.io /terminal namespace lifecycle tests
+│   │   ├── terminal.test.js    # Socket.io /terminal namespace lifecycle tests (legacy tmux path)
+│   │   ├── terminal-manager.test.js  # TerminalManager integration tests (CRUD, metadata, WebSocket, reconnection, auth)
 │   │   └── tmux.test.js        # Tmux session management tests
 │   ├── .env                    # Midscene.js config (git-ignored): Ollama endpoint, model settings
 │   ├── package.json
