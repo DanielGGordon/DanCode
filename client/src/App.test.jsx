@@ -95,11 +95,13 @@ function mockFetch(status, body = {}) {
   })
 }
 
-// Mock window.matchMedia for useIsMobile hook (desktop by default)
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: vi.fn().mockImplementation((query) => ({
-    matches: false, // desktop by default
+beforeEach(() => {
+  localStorageMock.clear()
+  vi.clearAllMocks()
+  cleanup()
+  // Mock window.matchMedia for useIsMobile hook (desktop by default)
+  window.matchMedia = vi.fn().mockImplementation((query) => ({
+    matches: false,
     media: query,
     onchange: null,
     addEventListener: vi.fn(),
@@ -107,13 +109,7 @@ Object.defineProperty(window, 'matchMedia', {
     addListener: vi.fn(),
     removeListener: vi.fn(),
     dispatchEvent: vi.fn(),
-  })),
-})
-
-beforeEach(() => {
-  localStorageMock.clear()
-  vi.clearAllMocks()
-  cleanup()
+  }))
 })
 
 describe('App', () => {
