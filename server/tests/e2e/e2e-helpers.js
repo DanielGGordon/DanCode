@@ -25,11 +25,15 @@ export async function login(page) {
   const credPath = join(homedir(), '.dancode', 'credentials.json');
   const creds = JSON.parse(await readFile(credPath, 'utf-8'));
 
-  // Read password from env var or file
+  // Read password from env var or file (fall back to test default)
   let password = process.env.DANCODE_PASSWORD;
   if (!password) {
-    const pwPath = join(homedir(), '.dancode', 'e2e-password');
-    password = (await readFile(pwPath, 'utf-8')).trim();
+    try {
+      const pwPath = join(homedir(), '.dancode', 'e2e-password');
+      password = (await readFile(pwPath, 'utf-8')).trim();
+    } catch {
+      password = 'testpassword123';
+    }
   }
 
   // Generate TOTP code
