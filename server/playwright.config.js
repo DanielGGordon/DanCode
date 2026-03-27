@@ -17,7 +17,7 @@ export default defineConfig({
     {
       name: 'frontend',
       use: { baseURL: 'http://localhost:5174' },
-      testMatch: /terminal(?:-(?:visual|poc|lifecycle))?\.spec|auth(?:-visual)?\.spec|new-project(?:-visual)?\.spec|adopt-session(?:-visual)?\.spec|layout(?:-visual)?\.spec|command-palette(?:-visual)?\.spec|sidebar(?:-visual)?\.spec|header-dropdown(?:-visual)?\.spec|reconnection\.spec|mobile-terminal\.spec/,
+      testMatch: /terminal(?:-(?:visual|poc|lifecycle))?\.spec|auth(?:-visual)?\.spec|new-project(?:-visual)?\.spec|adopt-session(?:-visual)?\.spec|layout(?:-visual)?\.spec|command-palette(?:-visual)?\.spec|sidebar(?:-visual)?\.spec|header-dropdown(?:-visual)?\.spec|reconnection\.spec|mobile-terminal\.spec|mobile-pwa\.spec/,
     },
   ],
   webServer: [
