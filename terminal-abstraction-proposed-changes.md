@@ -7,3 +7,13 @@
 - **Ring buffer size tuning**: The 50KB ring buffer uses string concatenation and slicing. For terminals with heavy output (e.g., build logs), this could cause GC pressure. If this becomes an issue, consider using a Buffer-based circular buffer with fixed allocation instead of string operations.
 
 - **Pre-existing test failures**: `terminal.test.js` has 14 failing tests (all timeouts) because the mock setup doesn't account for the auth session store — `validateSession` rejects the test token since it's never registered as a session. `tmux.test.js` has 4 failures related to `getOrphanedSessions` filtering logic. These are pre-existing and unrelated to Phase 1 but should be fixed before Phase 2.
+
+## After Phase 4 (proposed by Phase 4 generator)
+
+- **Tmux pane-border-status override**: The user's `~/.tmux.conf` has `set -g pane-border-status top` which reserves a row per pane. DanCode sessions override this with `set-window-option -t name pane-border-status off`, but this must be re-applied on every resize via `resizePane()`. If the user changes their tmux config, this override stays in sync. However, future phases adding multi-pane support within a single tmux session would need to re-enable borders.
+
+- **Tmux rendering and raw output**: The node-pty attachment to tmux produces tmux-rendered terminal output (escape sequences for cursor positioning, screen redraws), not raw shell output. This means simple string matching on the output stream (e.g., `buffer.includes('text')`) is unreliable. xterm.js in the browser processes these escape sequences correctly, so the user experience is fine. Tests that need to verify output content should use `tmux capture-pane` or check the ring buffer directly after `capturePane` populates it.
+
+- **Resize requires tmux pane resize**: When the browser resizes a terminal, both the node-pty and the tmux pane must be resized. The pty resize triggers a SIGWINCH to the tmux client, but the pane doesn't auto-expand to fill the window (especially after disabling status/borders). `resizePane()` must be called explicitly alongside `pty.resize()`.
+
+- **Server restart reconcile timing**: The `reconcile()` method captures tmux scrollback before spawning the new node-pty attachment. This ordering is critical — if reversed, the tmux client's initial rendering output floods the ring buffer before the scrollback can be captured. Future changes to reconcile must preserve this order.
