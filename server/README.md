@@ -16,7 +16,13 @@ Terminals are managed via the TerminalManager: REST CRUD at `/api/terminals` + S
 - **`GET /api/projects/:slug`** — Get a single project by slug. Returns the project JSON object, or 404 if not found.
 - **`PATCH /api/projects/:slug`** — Update a project's config (layout preferences, terminal order). Accepts `{ layout: { mode, activeTab }, terminals: [...ids] }`. Returns the updated project object.
 - **`DELETE /api/projects/:slug`** — Delete a project's config file and its associated terminals. Returns 204 on success, 404 if the project does not exist.
-- **`POST /api/terminals`** — Create a direct PTY terminal. Accepts `{ projectSlug, label, command }`. Spawns `$SHELL` (or `/bin/bash`) with cwd set to the project's path. Returns 201 with `{ id, projectSlug, label, createdAt }`. Metadata persisted to `~/.dancode/terminals/{id}.json`.
+- **`GET /api/files?path=<dir>&project=<slug>`** — List directory contents. Returns `[{ name, type, size, modified }]`. Supports `showHidden` and `showIgnored` query params.
+- **`GET /api/files/read?path=<file>&project=<slug>`** — Read file contents (up to 1MB). Returns `{ content }`.
+- **`PUT /api/files/write`** — Write file. Accepts `{ path, content, project }`. Creates parent dirs if needed.
+- **`POST /api/files/mkdir`** — Create directory. Accepts `{ path, project }`.
+- **`POST /api/files/rename`** — Rename/move. Accepts `{ oldPath, newPath, project }`.
+- **`DELETE /api/files?path=<path>&project=<slug>`** — Delete file or directory.
+- **`POST /api/terminals`** — Create a direct PTY terminal. Accepts `{ projectSlug, label, command, cwd }`. Spawns `$SHELL` (or `/bin/bash`) with cwd set to the project's path (or custom cwd). Returns 201 with `{ id, projectSlug, label, createdAt }`. Metadata persisted to `~/.dancode/terminals/{id}.json`.
 - **`GET /api/terminals?project=<slug>`** — List terminals, optionally filtered by project slug. Returns a JSON array.
 - **`GET /api/terminals/:id`** — Get a single terminal by UUID. Returns 404 if not found.
 - **`PATCH /api/terminals/:id`** — Update a terminal's label. Accepts `{ label }`. Returns the updated terminal object.
@@ -55,6 +61,16 @@ Terminals are managed via the TerminalManager: REST CRUD at `/api/terminals` + S
 - `getProject(slug, projectsDir?)` — Get a project by slug. Returns null if not found.
 - `updateProject(slug, updates, projectsDir?)` — Merge updates into an existing project config. Returns the updated object, or null if not found.
 - `deleteProject(slug, projectsDir?)` — Delete a project config. Returns boolean.
+
+## Exports (src/files.js)
+
+- `safePath(projectRoot, requestedPath)` — Resolve and validate a path stays within the project directory. Resolves symlinks.
+- `listDirectory(projectRoot, relativePath, options?)` — List directory contents with metadata. Options: `showHidden`, `showIgnored`. Returns `[{ name, type, size, modified }]`.
+- `readFileContent(projectRoot, relativePath)` — Read file as UTF-8 text (max 1MB).
+- `writeFileContent(projectRoot, relativePath, content)` — Write content to a file. Creates parent dirs.
+- `createDirectory(projectRoot, relativePath)` — Create a directory (recursive).
+- `renameFile(projectRoot, oldRelPath, newRelPath)` — Rename or move a file/directory.
+- `deleteFile(projectRoot, relativePath)` — Delete a file or directory recursively.
 
 ## Exports (src/tmux.js) — Legacy, emptied
 

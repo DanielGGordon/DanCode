@@ -42,6 +42,7 @@ npm run dev          # Start server + client concurrently
 - **Mobile dashboard** — Project card grid with long-press quick actions (open CLI/Claude terminal)
 - **Pinch-to-zoom** — Touch gesture for terminal font size on mobile
 - **Tablet support** — Optional side-by-side terminals (768-1024px) with shortcut bar toggle
+- **File explorer** — Collapsible tree-view panel with lazy-loaded directories, file type icons, right-click context menu (rename, delete, copy path, new file, new folder, open terminal here), drag files onto terminals to insert paths, .gitignore filtering with toggle, hidden file toggle
 - **TOTP authentication** — Username/password + TOTP-based login with QR code setup
 
 ## Development
