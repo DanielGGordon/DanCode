@@ -1,91 +1,88 @@
 import { test, expect } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { login, createProject, cleanupProject } from './e2e-helpers.js';
+
+const PROJECT_NAME = `Visual Terminal ${Date.now()}`;
 
 /**
  * Visual assertion: "a terminal with a dark solarized color scheme fills the browser window"
  *
- * Verifies the three visual properties that aiAssert would check:
+ * Verifies the three visual properties:
  *   1. A terminal element is present and rendered
  *   2. The color scheme is Solarized Dark (background #002b36)
  *   3. The terminal fills the browser window
- *
- * Uses programmatic visual verification because no local vision model
- * runs reliably on Pi 5 ARM64 (moondream crashes, qwen2.5vl needs 10GB+).
  */
-test('visual: a terminal with a dark solarized color scheme fills the browser window', async ({ page }) => {
-  // Login first — the app shows a login screen before any terminal
-  const tokenPath = join(homedir(), '.dancode', 'auth-token');
-  const token = (await readFile(tokenPath, 'utf-8')).trim();
+test.describe('Terminal visual', () => {
+  let token;
+  const created = [];
 
-  await page.goto('/');
-  const tokenInput = page.getByTestId('token-input');
-  await expect(tokenInput).toBeVisible();
-  await tokenInput.fill(token);
-  await page.getByTestId('login-submit').click();
-
-  // Wait for the default terminal to appear (shown when no project is selected)
-  const terminal = page.getByTestId('terminal');
-  await expect(terminal).toBeVisible({ timeout: 10000 });
-  await expect(terminal.locator('.xterm')).toBeVisible({ timeout: 10000 });
-
-  // 1. Verify Solarized Dark color scheme via screenshot pixel analysis.
-  //    Screenshot the .xterm-screen element (the rendered terminal surface),
-  //    not the full page — the page background is also #002b36, so a page-level
-  //    sample would pass even if the terminal theme is broken or unpainted.
-  const xtermScreen = terminal.locator('.xterm-screen');
-  const screenshot = await xtermScreen.screenshot({ type: 'png' });
-  const base64 = screenshot.toString('base64');
-
-  const pixelData = await page.evaluate(async (imgBase64) => {
-    const img = new Image();
-    img.src = `data:image/png;base64,${imgBase64}`;
-    await new Promise((resolve) => { img.onload = resolve; });
-
-    const canvas = document.createElement('canvas');
-    canvas.width = img.width;
-    canvas.height = img.height;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0);
-
-    // Sample from the center of the terminal surface
-    const cx = Math.floor(img.width / 2);
-    const cy = Math.floor(img.height / 2);
-    const [r, g, b] = ctx.getImageData(cx, cy, 1, 1).data;
-
-    return { r, g, b };
-  }, base64);
-
-  // Solarized Dark base03 = #002b36 = RGB(0, 43, 54)
-  // Allow ±5 tolerance for rendering differences
-  const { r, g, b } = pixelData;
-  expect(r).toBeLessThanOrEqual(5);
-  expect(g).toBeGreaterThanOrEqual(38);
-  expect(g).toBeLessThanOrEqual(48);
-  expect(b).toBeGreaterThanOrEqual(49);
-  expect(b).toBeLessThanOrEqual(59);
-
-  // 2. Verify the rendered xterm surface fills the browser window.
-  //    Measure .xterm-screen (the actual terminal surface sized by fitAddon),
-  //    not the outer [data-testid="terminal"] container which fills the layout
-  //    via CSS regardless of whether fitAddon.fit() worked correctly.
-  const metrics = await page.evaluate(() => {
-    const screen = document.querySelector('[data-testid="terminal"] .xterm-screen');
-    const rect = screen.getBoundingClientRect();
-    return {
-      termWidth: rect.width,
-      termHeight: rect.height,
-      viewportWidth: window.innerWidth,
-      viewportHeight: window.innerHeight,
-    };
+  test.afterEach(async ({ request }) => {
+    for (const { slug, projectPath } of created) {
+      await cleanupProject(request, slug, token, projectPath);
+    }
   });
 
-  // Terminal surface should occupy at least 60% of viewport width (sidebar takes some)
-  // and 70% of height (header bar takes some)
-  const widthRatio = metrics.termWidth / metrics.viewportWidth;
-  const heightRatio = metrics.termHeight / metrics.viewportHeight;
+  test('visual: a terminal with a dark solarized color scheme fills the browser window', async ({ page }) => {
+    token = await login(page);
 
-  expect(widthRatio).toBeGreaterThanOrEqual(0.6);
-  expect(heightRatio).toBeGreaterThanOrEqual(0.7);
+    const proj = await createProject(page, PROJECT_NAME);
+    created.push(proj);
+
+    // Wait for a terminal pane with xterm to render
+    const pane = page.getByTestId('terminal-pane-0');
+    await expect(pane).toBeVisible({ timeout: 10000 });
+    await expect(pane.locator('.xterm')).toBeVisible({ timeout: 10000 });
+
+    // 1. Verify Solarized Dark color scheme via screenshot pixel analysis.
+    const xtermScreen = pane.locator('.xterm-screen');
+    const screenshot = await xtermScreen.screenshot({ type: 'png' });
+    const base64 = screenshot.toString('base64');
+
+    const pixelData = await page.evaluate(async (imgBase64) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${imgBase64}`;
+      await new Promise((resolve) => { img.onload = resolve; });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+
+      // Sample from the center of the terminal surface
+      const cx = Math.floor(img.width / 2);
+      const cy = Math.floor(img.height / 2);
+      const [r, g, b] = ctx.getImageData(cx, cy, 1, 1).data;
+
+      return { r, g, b };
+    }, base64);
+
+    // Solarized Dark base03 = #002b36 = RGB(0, 43, 54)
+    // Allow ±5 tolerance for rendering differences
+    const { r, g, b } = pixelData;
+    expect(r).toBeLessThanOrEqual(5);
+    expect(g).toBeGreaterThanOrEqual(38);
+    expect(g).toBeLessThanOrEqual(48);
+    expect(b).toBeGreaterThanOrEqual(49);
+    expect(b).toBeLessThanOrEqual(59);
+
+    // 2. Verify the rendered xterm surface fills a significant portion of the window.
+    const metrics = await page.evaluate(() => {
+      const screen = document.querySelector('[data-testid="terminal-pane-0"] .xterm-screen');
+      const rect = screen.getBoundingClientRect();
+      return {
+        termWidth: rect.width,
+        termHeight: rect.height,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      };
+    });
+
+    // Terminal surface should occupy a good portion of viewport
+    // (sidebar and header take some space, plus there are 2 panes side by side)
+    const widthRatio = metrics.termWidth / metrics.viewportWidth;
+    const heightRatio = metrics.termHeight / metrics.viewportHeight;
+
+    expect(widthRatio).toBeGreaterThanOrEqual(0.3);
+    expect(heightRatio).toBeGreaterThanOrEqual(0.5);
+  });
 });

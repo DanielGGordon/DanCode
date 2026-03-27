@@ -1,67 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { readFile, rm } from 'node:fs/promises';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-
-const execFileAsync = promisify(execFile);
+import { login, createProject, cleanupProject } from './e2e-helpers.js';
 
 const PROJECT_A = `Visual Dropdown A ${Date.now()}`;
 const PROJECT_B = `Visual Dropdown B ${Date.now()}`;
 
-function slugify(name) {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-async function login(page) {
-  const tokenPath = join(homedir(), '.dancode', 'auth-token');
-  const token = (await readFile(tokenPath, 'utf-8')).trim();
-
-  await page.goto('/');
-  const tokenInput = page.getByTestId('token-input');
-  await expect(tokenInput).toBeVisible();
-  await tokenInput.fill(token);
-  await page.getByTestId('login-submit').click();
-  await expect(page.getByTestId('new-project-button')).toBeVisible();
-
-  return token;
-}
-
-async function createProject(page, name) {
-  const slug = slugify(name);
-  const projectPath = `/tmp/dancode-visual-dropdown-${slug}-${Date.now()}`;
-
-  await page.getByTestId('new-project-button').click();
-  const form = page.getByTestId('new-project-form');
-  await expect(form).toBeVisible();
-
-  await page.getByTestId('project-name-input').fill(name);
-  const pathInput = page.getByTestId('project-path-input');
-  await pathInput.clear();
-  await pathInput.fill(projectPath);
-  await page.getByTestId('new-project-submit').click();
-
-  await expect(page.locator(`[data-testid="terminal"][data-slug="${slug}"]`).first()).toBeVisible({ timeout: 15000 });
-
-  return { slug, projectPath };
-}
-
 /**
  * Visual assertion: "a top header bar shows the project name, with a dropdown list of other projects open below it"
- *
- * Uses programmatic visual verification because no local vision model
- * runs reliably on Pi 5 ARM64 (phi3.5 context window too small for DOM prompts).
- *
- * Verifies:
- *   1. A header bar spans the top of the page
- *   2. The current project name is displayed in the header
- *   3. A dropdown list appears below with all projects listed
- *   4. The active project has a checkmark indicator
- *   5. Styling matches Solarized Dark theme
  */
 test.describe('Header dropdown visual', () => {
   let token;
@@ -69,19 +13,7 @@ test.describe('Header dropdown visual', () => {
 
   test.afterEach(async ({ request }) => {
     for (const { slug, projectPath } of created) {
-      try {
-        await request.delete(`/api/projects/${slug}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      } catch { /* best-effort */ }
-      try {
-        await execFileAsync('tmux', ['kill-session', '-t', `dancode-${slug}`]);
-      } catch { /* session may not exist */ }
-      if (projectPath) {
-        try {
-          await rm(projectPath, { recursive: true, force: true });
-        } catch { /* best-effort */ }
-      }
+      await cleanupProject(request, slug, token, projectPath);
     }
   });
 
@@ -94,14 +26,7 @@ test.describe('Header dropdown visual', () => {
     });
     const existing = await res.json();
     for (const proj of existing) {
-      try {
-        await request.delete(`/api/projects/${proj.slug}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      } catch { /* best-effort */ }
-      try {
-        await execFileAsync('tmux', ['kill-session', '-t', `dancode-${proj.slug}`]);
-      } catch { /* session may not exist */ }
+      await cleanupProject(request, proj.slug, token, null);
     }
     await page.reload();
     await expect(page.getByTestId('new-project-button')).toBeVisible();
@@ -118,15 +43,9 @@ test.describe('Header dropdown visual', () => {
 
     const headerMetrics = await header.evaluate((el) => {
       const rect = el.getBoundingClientRect();
-      return {
-        top: rect.top,
-        left: rect.left,
-        width: rect.width,
-        viewportWidth: window.innerWidth,
-      };
+      return { top: rect.top, left: rect.left, width: rect.width, viewportWidth: window.innerWidth };
     });
 
-    // Header should be at the very top and span full width
     expect(headerMetrics.top).toBeLessThanOrEqual(2);
     expect(headerMetrics.left).toBeLessThanOrEqual(2);
     expect(headerMetrics.width / headerMetrics.viewportWidth).toBeGreaterThanOrEqual(0.95);
@@ -144,18 +63,14 @@ test.describe('Header dropdown visual', () => {
     const positions = await page.evaluate(() => {
       const header = document.querySelector('header');
       const dd = document.querySelector('[data-testid="header-dropdown"]');
-      const headerRect = header.getBoundingClientRect();
-      const ddRect = dd.getBoundingClientRect();
       return {
-        headerBottom: headerRect.bottom,
-        dropdownTop: ddRect.top,
+        headerBottom: header.getBoundingClientRect().bottom,
+        dropdownTop: dd.getBoundingClientRect().top,
         dropdownItems: dd.querySelectorAll('li').length,
       };
     });
 
-    // Dropdown should appear below the header
     expect(positions.dropdownTop).toBeGreaterThanOrEqual(positions.headerBottom - 5);
-    // Both projects should be listed
     expect(positions.dropdownItems).toBeGreaterThanOrEqual(2);
 
     // 4. Verify both project items are visible in the dropdown
@@ -165,29 +80,23 @@ test.describe('Header dropdown visual', () => {
     await expect(itemB).toBeVisible();
 
     // Active project (B) should have a checkmark
-    await expect(itemB).toContainText('✓');
-    await expect(itemA).not.toContainText('✓');
+    await expect(itemB).toContainText('\u2713');
+    await expect(itemA).not.toContainText('\u2713');
 
-    // 5. Verify Solarized Dark styling on header and dropdown
+    // 5. Verify Solarized Dark styling
     const styles = await page.evaluate(() => {
       const header = document.querySelector('header');
       const dd = document.querySelector('[data-testid="header-dropdown"]');
-      const headerStyle = window.getComputedStyle(header);
-      const ddStyle = window.getComputedStyle(dd);
       return {
-        headerBg: headerStyle.backgroundColor,
-        dropdownBg: ddStyle.backgroundColor,
-        dropdownBorder: ddStyle.borderColor || ddStyle.borderTopColor,
+        headerBg: window.getComputedStyle(header).backgroundColor,
+        dropdownBg: window.getComputedStyle(dd).backgroundColor,
       };
     });
 
-    // Header and dropdown backgrounds should be dark (Solarized Dark palette)
-    // base02 = #073642 = rgb(7, 54, 66) or base03 = #002b36 = rgb(0, 43, 54)
     function isDarkSolarized(rgb) {
       const match = rgb.match(/(\d+),\s*(\d+),\s*(\d+)/);
       if (!match) return false;
       const [, r, g, b] = match.map(Number);
-      // Dark solarized backgrounds have low R, moderate G and B
       return r <= 20 && g <= 70 && b <= 80;
     }
 

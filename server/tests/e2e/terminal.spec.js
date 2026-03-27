@@ -1,25 +1,21 @@
 import { test, expect } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { login, createProject, cleanupProject, slugify } from './e2e-helpers.js';
 
-test('xterm.js terminal element is visible', async ({ page }) => {
-  const tokenPath = join(homedir(), '.dancode', 'auth-token');
-  const token = (await readFile(tokenPath, 'utf-8')).trim();
+const PROJECT_NAME = `Terminal E2E ${Date.now()}`;
 
-  await page.goto('/');
+test('xterm.js terminal element is visible after creating a project', async ({ page, request }) => {
+  const token = await login(page);
+  const { slug, projectPath } = await createProject(page, PROJECT_NAME);
 
-  // Login first
-  const tokenInput = page.getByTestId('token-input');
-  await expect(tokenInput).toBeVisible();
-  await tokenInput.fill(token);
-  await page.getByTestId('login-submit').click();
+  try {
+    // Wait for the terminal container (React component) to be visible
+    const terminal = page.getByTestId('terminal');
+    await expect(terminal.first()).toBeVisible({ timeout: 10000 });
 
-  // Wait for the terminal container (React component) to be visible
-  const terminal = page.getByTestId('terminal');
-  await expect(terminal).toBeVisible();
-
-  // Wait for xterm.js to render its canvas inside the container
-  const xtermElement = terminal.locator('.xterm');
-  await expect(xtermElement).toBeVisible();
+    // Wait for xterm.js to render its canvas inside the container
+    const xtermElement = terminal.first().locator('.xterm');
+    await expect(xtermElement).toBeVisible({ timeout: 10000 });
+  } finally {
+    await cleanupProject(request, slug, token, projectPath);
+  }
 });

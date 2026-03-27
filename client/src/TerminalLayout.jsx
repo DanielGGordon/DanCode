@@ -265,7 +265,7 @@ export default function TerminalLayout({ token, slug }) {
   }
 
   return (
-    <div data-testid="terminal-layout" className="flex flex-col w-full h-full animate-fade-in">
+    <div data-testid="terminal-layout" data-slug={slug} className="flex flex-col w-full h-full animate-fade-in">
       {/* Layout toolbar */}
       <div className="flex items-center px-2 py-1 bg-base02 border-b border-base01/30">
         {effectiveLayout === 'tabs' && (

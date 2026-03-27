@@ -1,15 +1,12 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { generate } from 'otplib';
+import { authenticator } from 'otplib';
 
 const BACKEND_URL = 'http://localhost:3001';
 const FRONTEND_URL = 'http://localhost:5174';
 const CRED_PATH = join(homedir(), '.dancode', 'credentials.json');
-const TEST_USERNAME = 'testuser';
-const TEST_PASSWORD = 'testpassword123';
 
 let authToken;
 
@@ -18,31 +15,42 @@ async function getAuthToken() {
   const { setupComplete } = await statusRes.json();
 
   let totpSecret;
-  let username = TEST_USERNAME;
+  let username;
 
   if (!setupComplete) {
     const setupRes = await fetch(`${BACKEND_URL}/api/auth/setup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: TEST_USERNAME, password: TEST_PASSWORD }),
+      body: JSON.stringify({ username: 'testuser', password: 'testpassword123' }),
     });
     const data = await setupRes.json();
     totpSecret = data.totpSecret;
+    username = 'testuser';
   } else {
     const creds = JSON.parse(await readFile(CRED_PATH, 'utf-8'));
     totpSecret = creds.totpSecret;
     username = creds.username;
   }
 
-  const totpCode = generate({ secret: totpSecret });
+  // Read password from env or file
+  let password = process.env.DANCODE_PASSWORD;
+  if (!password) {
+    try {
+      password = (await readFile(join(homedir(), '.dancode', 'e2e-password'), 'utf-8')).trim();
+    } catch {
+      password = 'testpassword123';
+    }
+  }
+
+  const totpCode = authenticator.generate(totpSecret);
   const loginRes = await fetch(`${BACKEND_URL}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password: TEST_PASSWORD, totpCode }),
+    body: JSON.stringify({ username, password, totpCode }),
   });
 
   if (!loginRes.ok) {
-    throw new Error(`Login failed with status ${loginRes.status} — account may have different password`);
+    throw new Error(`Login failed with status ${loginRes.status}`);
   }
 
   const { token } = await loginRes.json();
