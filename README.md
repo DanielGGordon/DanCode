@@ -1,6 +1,6 @@
 # DanCode
 
-Web-based project terminal manager. Presents a browser-based view of tmux sessions, letting you manage multiple coding projects from any device on your network.
+Web-based project terminal manager. Provides browser-based terminal access with direct PTY spawning, letting you manage multiple coding projects from any device on your network.
 
 Built for Raspberry Pi 5, accessed via Tailscale.
 
@@ -8,7 +8,7 @@ Built for Raspberry Pi 5, accessed via Tailscale.
 
 - **Backend:** Node.js + Express + Socket.io
 - **Frontend:** React + Vite + Tailwind CSS
-- **Terminal:** xterm.js + node-pty (direct PTY or tmux-backed)
+- **Terminal:** xterm.js + node-pty (direct PTY via TerminalManager)
 - **Theme:** Solarized Dark (#002b36)
 - **Testing:** Vitest + Playwright + Midscene.js
 
@@ -29,14 +29,14 @@ npm run dev          # Start server + client concurrently
 
 ## Features
 
-- **Multi-pane split view** of tmux windows (CLI, Claude, etc.) in the browser
+- **Multi-terminal layout** — Split (side-by-side) or tabbed view with dynamic terminal creation, close, and rename
+- **Direct PTY terminals** — TerminalManager spawns shells directly via node-pty, with per-terminal WebSocket namespace, ~50KB output ring buffer for reconnection replay, and metadata persistence
+- **Project creation** — Automatically creates 2 terminals (CLI + Claude) per project
 - **Clipboard support** over plain HTTP — Ctrl+C copies selected text, Ctrl+V pastes (uses `execCommand` fallback for non-HTTPS)
 - **Focused pane indicator** — 8px blue accent bar + dimmed unfocused panes
-- **Right-click context menu** on sidebar projects — Rename, Copy tmux command, Delete
-- **Tmux session naming** — sessions use human-readable names (no `dancode-` prefix), renameable from the UI
-- **Stale session cleanup** — orphaned connection sessions are automatically cleaned up on server startup
+- **Right-click context menu** on sidebar projects — Rename, Delete
 - **Keyboard shortcuts** — Ctrl+K command palette, Alt+arrows project switching, Ctrl+wheel font sizing
-- **Direct PTY terminals** — New terminal API spawns shells directly (no tmux), with WebSocket per terminal, ~50KB output ring buffer for reconnection replay, and metadata persistence
+- **TOTP authentication** — Username/password + TOTP-based login with QR code setup
 
 ## Development
 

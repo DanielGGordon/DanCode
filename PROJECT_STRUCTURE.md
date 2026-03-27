@@ -9,15 +9,15 @@ DanCode/
 │   │   ├── App.test.jsx        # App unit tests (login/terminal/new-project/command-palette/sidebar/header-dropdown conditional rendering)
 │   │   ├── CommandPalette.jsx  # Command palette overlay with fuzzy search for project switching (Ctrl+K)
 │   │   ├── CommandPalette.test.jsx # CommandPalette unit tests (fuzzy match, filtering, open/close, selection)
-│   │   ├── LoginScreen.jsx     # Token input form with submit button
+│   │   ├── LoginScreen.jsx     # Username/password + TOTP login form
 │   │   ├── LoginScreen.test.jsx # LoginScreen component unit tests
-│   │   ├── NewProjectForm.jsx  # New project creation form (name + path inputs, adopt-session toggle, calls POST /api/projects)
+│   │   ├── NewProjectForm.jsx  # New project creation form (name + path inputs, calls POST /api/projects)
 │   │   ├── NewProjectForm.test.jsx # NewProjectForm component unit tests
-│   │   ├── PaneLayout.jsx      # Multi-pane layout: split view (side-by-side) or tabbed view with toggle
-│   │   ├── PaneLayout.test.jsx # PaneLayout component unit tests
-│   │   ├── Sidebar.jsx         # Collapsible left sidebar listing all projects by name with active highlight and tmux status dot
+│   │   ├── TerminalLayout.jsx  # Multi-terminal layout: split (side-by-side) or tabbed view with add/close/rename
+│   │   ├── TerminalLayout.test.jsx # TerminalLayout component unit tests
+│   │   ├── Sidebar.jsx         # Collapsible left sidebar listing all projects by name with active highlight
 │   │   ├── Sidebar.test.jsx    # Sidebar component unit tests
-│   │   ├── Terminal.jsx        # xterm.js terminal connected via Socket.io (supports per-pane connections)
+│   │   ├── Terminal.jsx        # xterm.js terminal connected via Socket.io /terminal/{uuid} namespace
 │   │   ├── Terminal.test.jsx   # Terminal component unit tests
 │   │   ├── poc-terminal.js     # POC: standalone xterm.js page for new terminal API (E2E testing)
 │   │   ├── index.css           # Tailwind + Solarized Dark theme
@@ -37,35 +37,37 @@ DanCode/
 │   │   ├── auth.js             # TOTP-based auth: account setup, login, session management (~/.dancode/credentials.json)
 │   │   ├── index.js            # Server entry point (Express, Socket.io, REST API routes, terminal CRUD)
 │   │   ├── projects.js         # Project config CRUD (create, list, get, delete) in ~/.dancode/projects/
-│   │   ├── terminal.js         # Socket.io /terminal namespace (node-pty → tmux attach, legacy path)
 │   │   ├── terminal-manager.js # TerminalManager: direct PTY spawning, CRUD, ring buffer, WebSocket /terminal/{uuid}
-│   │   └── tmux.js             # Tmux session management (ensure, create, check)
+│   │   ├── terminal.js         # (Legacy, emptied) Socket.io /terminal namespace — preserved for Phase 4
+│   │   └── tmux.js             # (Legacy, emptied) Tmux session management — preserved for Phase 4
 │   ├── tests/
 │   │   ├── e2e/
 │   │   │   ├── fixture.js      # Playwright + Midscene.js AI fixture (provides aiAssert, etc.)
 │   │   │   ├── placeholder.spec.js  # Playwright E2E test (server placeholder page)
-│   │   │   ├── auth.spec.js          # Playwright E2E test (login flow: login screen → enter token → terminal appears)
-│   │   │   ├── auth-visual.spec.js   # Midscene AI visual assertion test (login form on dark background)
+│   │   │   ├── e2e-helpers.js         # Shared helpers: login (TOTP), createProject, cleanupProject
+│   │   │   ├── auth.spec.js          # Playwright E2E test (login flow)
+│   │   │   ├── auth-visual.spec.js   # Visual assertion: login form on dark background
 │   │   │   ├── terminal.spec.js     # Playwright E2E test (xterm.js terminal visibility)
-│   │   │   ├── terminal-visual.spec.js  # Visual assertion: Solarized Dark theme + fills viewport (screenshot pixel analysis)
-│   │   │   ├── new-project.spec.js    # Playwright E2E test (new project creation flow: form → submit → terminal panes)
-│   │   │   ├── new-project-visual.spec.js  # Midscene AI visual assertion test (new project form on dark background)
-│   │   │   ├── adopt-session.spec.js  # Playwright E2E test (adopt existing tmux session: create session, adopt via form, verify panes)
-│   │   │   ├── layout.spec.js        # Playwright E2E test (multi-pane layout: split/tabs, mobile viewport, pane visibility)
-│   │   │   ├── layout-visual.spec.js # Midscene AI visual assertion test (two panes side by side with labels)
-│   │   │   ├── command-palette.spec.js  # Playwright E2E test (Ctrl+K opens palette, search, switch project, terminals update)
-│   │   │   ├── command-palette-visual.spec.js  # Midscene AI visual assertion test (palette overlay centered with search input and project list)
-│   │   │   ├── sidebar.spec.js          # Playwright E2E test (sidebar project switching: click project, terminals update)
-│   │   │   ├── sidebar-visual.spec.js   # Midscene AI visual assertion test (collapsible sidebar with project list and active highlight)
-│   │   │   ├── header-dropdown.spec.js  # Playwright E2E test (header dropdown: click project name, dropdown appears, select project, terminals switch)
+│   │   │   ├── terminal-visual.spec.js  # Visual assertion: Solarized Dark theme + fills viewport
+│   │   │   ├── terminal-lifecycle.spec.js # E2E test: create/add/rename/close terminals, split/tabs modes
 │   │   │   ├── terminal-poc.spec.js     # Playwright E2E test (create terminal via API, type in xterm, see output)
+│   │   │   ├── new-project.spec.js    # Playwright E2E test (new project creation → terminal layout)
+│   │   │   ├── new-project-visual.spec.js  # Visual assertion: new project form on dark background
+│   │   │   ├── adopt-session.spec.js  # Placeholder (adopt flow removed in Phase 2)
+│   │   │   ├── layout.spec.js        # Playwright E2E test (multi-terminal layout: split/tabs, close with confirm)
+│   │   │   ├── layout-visual.spec.js # Visual assertion: two panes side by side with labels
+│   │   │   ├── command-palette.spec.js  # Playwright E2E test (Ctrl+K palette, search, switch project)
+│   │   │   ├── command-palette-visual.spec.js  # Visual assertion: palette overlay centered
+│   │   │   ├── sidebar.spec.js          # Playwright E2E test (sidebar project switching)
+│   │   │   ├── sidebar-visual.spec.js   # Visual assertion: sidebar with project list and active highlight
+│   │   │   ├── header-dropdown.spec.js  # Playwright E2E test (header dropdown project switching)
 │   │   │   └── visual.spec.js  # Midscene AI visual assertion test (DOM-based on Pi 5)
 │   │   ├── auth.test.js        # Auth account setup, login, session management tests
 │   │   ├── projects.test.js    # Project config CRUD, slug generation, validation tests
 │   │   ├── server.test.js      # Server unit tests (routes, auth middleware, project API)
-│   │   ├── terminal.test.js    # Socket.io /terminal namespace lifecycle tests (legacy tmux path)
+│   │   ├── terminal.test.js    # Socket.io /terminal namespace lifecycle tests (legacy, preserved)
 │   │   ├── terminal-manager.test.js  # TerminalManager integration tests (CRUD, metadata, WebSocket, reconnection, auth)
-│   │   └── tmux.test.js        # Tmux session management tests
+│   │   └── tmux.test.js        # Tmux session management tests (legacy, preserved)
 │   ├── .env                    # Midscene.js config (git-ignored): Ollama endpoint, model settings
 │   ├── package.json
 │   ├── playwright.config.js    # Playwright config (Midscene reporter, system Chromium, webServer on :3001)

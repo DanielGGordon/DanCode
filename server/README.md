@@ -4,31 +4,25 @@ Express + Socket.io backend for DanCode.
 
 ## What it does
 
-Serves the DanCode web application and manages WebSocket connections for real-time terminal communication. On startup, ensures a tmux session (`dancode-test`) exists for legacy terminal connectivity and initializes the TerminalManager for direct PTY terminals. Serves the compiled React client from `client/dist/` when available, falling back to a Solarized Dark placeholder page.
+Serves the DanCode web application and manages WebSocket connections for real-time terminal communication. On startup, initializes the TerminalManager for direct PTY terminal spawning. Serves the compiled React client from `client/dist/` when available, falling back to a Solarized Dark placeholder page.
 
-Two terminal paths coexist:
-- **Legacy (tmux-backed):** Socket.io `/terminal` namespace attaches to tmux sessions via node-pty
-- **New (direct PTY):** REST CRUD at `/api/terminals` + Socket.io `/terminal/{uuid}` namespace spawns shells directly with ring buffer replay
+Terminals are managed via the TerminalManager: REST CRUD at `/api/terminals` + Socket.io `/terminal/{uuid}` namespace spawns shells directly with ~50KB ring buffer replay for reconnection.
 
 ## Public interface
 
 - **`GET /`** — Serves the React client build from `client/dist/` if available, otherwise a Solarized Dark placeholder page
 - **`GET /api/projects`** — List all configured projects, sorted alphabetically by name. Returns a JSON array of project objects.
-- **`POST /api/projects`** — Create a new project. Accepts `{ name, path }` for standard projects or `{ name, adoptSession }` to adopt an existing tmux session. Standard mode validates inputs, writes config to `~/.dancode/projects/<slug>.json`, creates the project directory if needed, and spins up a tmux session `dancode-<slug>` with two windows (CLI shell + Claude). Adopt mode links the project to the named tmux session without creating a new one. Returns 201 with the project object, 400 for validation errors, 409 for duplicates.
+- **`POST /api/projects`** — Create a new project. Accepts `{ name, path }`. Validates inputs, writes config to `~/.dancode/projects/<slug>.json`, creates the project directory if needed, and creates 2 terminals (CLI + Claude) via TerminalManager. Returns 201 with the project object, 400 for validation errors, 409 for duplicates.
 - **`GET /api/projects/:slug`** — Get a single project by slug. Returns the project JSON object, or 404 if not found.
-- **`GET /api/projects/:slug/panes`** — List the tmux windows (panes) for a project's session. Returns a JSON array of `{ index, label }` objects. For adopted sessions, reflects the actual windows in the adopted tmux session. For standard projects, returns the `dancode-<slug>` session's windows.
-- **`PATCH /api/projects/:slug`** — Update a project's layout preferences. Accepts `{ layout: { mode, hiddenPanes } }`. Returns the updated project object. Used by the frontend to persist split/tabs mode and pane visibility.
-- **`GET /api/tmux-status`** — Returns a JSON object mapping each project slug to a boolean indicating whether its tmux session (`dancode-<slug>`) is currently running. Used by the sidebar to show status dots.
-- **`GET /api/tmux/sessions`** — Returns a JSON array of tmux sessions that are NOT already mapped to a DanCode project. Each entry is `{ name }`. Filters out project sessions (`dancode-<slug>` for configured projects) and internal connection sessions (containing `-conn-`). Used by the "Adopt existing tmux session" feature.
-- **`DELETE /api/projects/:slug`** — Delete a project's config file. Optionally kills the tmux session with `?killSession=true`. Returns 204 on success, 404 if the project does not exist.
+- **`PATCH /api/projects/:slug`** — Update a project's config (layout preferences, terminal order). Accepts `{ layout: { mode, activeTab }, terminals: [...ids] }`. Returns the updated project object.
+- **`DELETE /api/projects/:slug`** — Delete a project's config file and its associated terminals. Returns 204 on success, 404 if the project does not exist.
 - **`POST /api/terminals`** — Create a direct PTY terminal. Accepts `{ projectSlug, label, command }`. Spawns `$SHELL` (or `/bin/bash`) with cwd set to the project's path. Returns 201 with `{ id, projectSlug, label, createdAt }`. Metadata persisted to `~/.dancode/terminals/{id}.json`.
 - **`GET /api/terminals?project=<slug>`** — List terminals, optionally filtered by project slug. Returns a JSON array.
 - **`GET /api/terminals/:id`** — Get a single terminal by UUID. Returns 404 if not found.
 - **`PATCH /api/terminals/:id`** — Update a terminal's label. Accepts `{ label }`. Returns the updated terminal object.
 - **`DELETE /api/terminals/:id`** — Kill the PTY process and remove metadata. Returns 204.
 - **Socket.io** — Listens for WebSocket connections on the default namespace
-- **Socket.io `/terminal`** — (Legacy) Accepts connections and spawns a node-pty process attached to `tmux attach -t <session>`. Supports optional `pane` query parameter to connect to a specific tmux window via grouped sessions. Emits `output` events with terminal data; accepts `input` (keystrokes) and `resize` ({ cols, rows }) events.
-- **Socket.io `/terminal/{uuid}`** — (New) Per-terminal WebSocket namespace. On connect, replays ~50KB ring buffer of past output. Accepts `input` and `resize` events. PTY stays alive when all sockets disconnect; output is buffered for replay on reconnect.
+- **Socket.io `/terminal/{uuid}`** — Per-terminal WebSocket namespace. On connect, replays ~50KB ring buffer of past output. Accepts `input` and `resize` events. PTY stays alive when all sockets disconnect; output is buffered for replay on reconnect.
 
 ## Exports (src/index.js)
 
@@ -36,7 +30,7 @@ Two terminal paths coexist:
 - `httpServer` — Node.js HTTP server
 - `io` — Socket.io server instance
 - `terminalManager` — TerminalManager instance (null until `startServer` is called)
-- `startServer(port?, { credentialsPath?, projectsDir?, terminalsDir? })` — Starts the server on the given port (default: 3000). Initializes tmux session, TerminalManager, and WebSocket namespaces. Returns a promise that resolves with the HTTP server.
+- `startServer(port?, { credentialsPath?, projectsDir?, terminalsDir? })` — Starts the server on the given port (default: 3000). Initializes TerminalManager and WebSocket namespaces. Returns a promise that resolves with the HTTP server.
 
 ## Exports (src/auth.js)
 
@@ -62,20 +56,13 @@ Two terminal paths coexist:
 - `updateProject(slug, updates, projectsDir?)` — Merge updates into an existing project config. Returns the updated object, or null if not found.
 - `deleteProject(slug, projectsDir?)` — Delete a project config. Returns boolean.
 
-## Exports (src/tmux.js)
+## Exports (src/tmux.js) — Legacy, emptied
 
-- `listSessions()` — List all tmux session names. Returns `Promise<string[]>` (empty if no tmux server).
-- `listWindows(sessionName)` — List all windows in a tmux session. Returns `Promise<Array<{index, name}>>` (empty if session doesn't exist).
-- `sessionExists(name)` — Check whether a tmux session exists. Returns `Promise<boolean>`.
-- `createSession(name)` — Create a detached tmux session.
-- `ensureSession(name)` — Ensure a tmux session exists, creating it if needed. Returns `Promise<{created: boolean}>`.
-- `createProjectSession(slug, projectPath)` — Create a tmux session `dancode-<slug>` with two windows: window 0 (`cli`) is a shell at the project directory, window 1 (`claude`) runs `claude --dangerously-skip-permissions` at the project directory. Returns `Promise<{sessionName, created}>`.
-- `createConnectionSession(targetSession, windowIndex, connId)` — Create a grouped tmux session for viewing a single window independently. Used by the multi-pane web UI. Returns `Promise<string>` (the grouped session name).
-- `destroyConnectionSession(connSession)` — Destroy a grouped connection session. Safe to call if already gone.
+Module preserved for potential Phase 4 re-integration. All exports removed in Phase 2.
 
-## Exports (src/terminal.js)
+## Exports (src/terminal.js) — Legacy, emptied
 
-- `setupTerminalNamespace(io, sessionName, resolveSession)` — (Legacy) Sets up the `/terminal` Socket.io namespace. Each connecting client gets a node-pty process attached to `tmux attach -t <sessionName>`. When a `pane` query parameter is provided, creates a grouped tmux session for isolated single-window access. Returns the namespace.
+Module preserved for potential Phase 4 re-integration. All exports removed in Phase 2.
 
 ## Exports (src/terminal-manager.js)
 
@@ -96,9 +83,7 @@ Two terminal paths coexist:
 
 ## How it relates to the project
 
-This is the backend entry point. It exposes REST API routes for project CRUD and auth, and manages terminal WebSocket connections. In later phases it will:
-- Serve the React production build from `client/dist/`
-- Manage tmux session lifecycles per project
+This is the backend entry point. It exposes REST API routes for project CRUD, auth, and terminal management, and manages per-terminal WebSocket connections via TerminalManager.
 
 ## Testing
 
