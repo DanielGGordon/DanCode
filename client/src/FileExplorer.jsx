@@ -17,11 +17,12 @@ function getFileIcon(name, type) {
   return '\u{1F4C3}' // generic file
 }
 
-function TreeNode({ entry, path, depth, token, slug, onContextMenu, expandedDirs, toggleDir, loadChildren, children: childrenMap, showHidden, showIgnored, onDragStart, onDoubleClick }) {
+function TreeNode({ entry, path, depth, token, slug, onContextMenu, expandedDirs, toggleDir, loadChildren, children: childrenMap, showHidden, showIgnored, onDragStart, onDoubleClick, renaming, renameRef, onRenameSubmit, onRenameCancel, newItem, newItemRef, onNewItemSubmit, onNewItemCancel }) {
   const fullPath = path ? `${path}/${entry.name}` : entry.name
   const isDir = entry.type === 'directory'
   const isExpanded = expandedDirs.has(fullPath)
   const dirChildren = childrenMap[fullPath]
+  const isRenaming = renaming?.path === fullPath
 
   const handleClick = useCallback(() => {
     if (isDir) {
@@ -47,6 +48,24 @@ function TreeNode({ entry, path, depth, token, slug, onContextMenu, expandedDirs
       onDoubleClick(fullPath)
     }
   }, [isDir, fullPath, onDoubleClick])
+
+  if (isRenaming) {
+    return (
+      <div className="flex items-center px-1 py-0.5" style={{ paddingLeft: `${depth * 16 + 8}px` }}>
+        <input
+          ref={renameRef}
+          data-testid="rename-input"
+          className="flex-1 min-w-0 bg-base03 text-base1 text-xs px-1 py-0.5 rounded border border-blue/50 outline-none"
+          defaultValue={renaming.name}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onRenameSubmit(renaming.path, e.target.value)
+            if (e.key === 'Escape') onRenameCancel()
+          }}
+          onBlur={(e) => onRenameSubmit(renaming.path, e.target.value)}
+        />
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -92,9 +111,34 @@ function TreeNode({ entry, path, depth, token, slug, onContextMenu, expandedDirs
               showIgnored={showIgnored}
               onDragStart={onDragStart}
               onDoubleClick={onDoubleClick}
+              renaming={renaming}
+              renameRef={renameRef}
+              onRenameSubmit={onRenameSubmit}
+              onRenameCancel={onRenameCancel}
+              newItem={newItem}
+              newItemRef={newItemRef}
+              onNewItemSubmit={onNewItemSubmit}
+              onNewItemCancel={onNewItemCancel}
             />
           ))}
-          {dirChildren.length === 0 && (
+          {/* New item input inside this expanded directory */}
+          {newItem && newItem.parentPath === fullPath && (
+            <div className="flex items-center px-1 py-0.5" style={{ paddingLeft: `${(depth + 1) * 16 + 8}px` }}>
+              <span className="mr-1 text-[11px]">{newItem.type === 'directory' ? '\u{1F4C1}' : '\u{1F4C3}'}</span>
+              <input
+                ref={newItemRef}
+                data-testid="new-item-input"
+                className="flex-1 min-w-0 bg-base03 text-base1 text-xs px-1 py-0.5 rounded border border-blue/50 outline-none"
+                placeholder={newItem.type === 'directory' ? 'New folder name...' : 'New file name...'}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') onNewItemSubmit(e.target.value)
+                  if (e.key === 'Escape') onNewItemCancel()
+                }}
+                onBlur={(e) => onNewItemSubmit(e.target.value)}
+              />
+            </div>
+          )}
+          {dirChildren.length === 0 && !newItem?.parentPath === fullPath && (
             <div className="text-[10px] text-base01 italic" style={{ paddingLeft: `${(depth + 1) * 16 + 8}px` }}>
               (empty)
             </div>
@@ -428,46 +472,33 @@ export default function FileExplorer({ token, slug, collapsed, onToggle, onOpenT
           <div className="px-2 py-2 text-xs text-base01 italic">Empty directory</div>
         ) : (
           <>
-            {rootEntries.map((entry) => {
-              // Check if this entry is being renamed
-              const entryPath = entry.name
-              if (renaming?.path === entryPath) {
-                return (
-                  <div key={entry.name} className="flex items-center px-2 py-0.5" style={{ paddingLeft: '8px' }}>
-                    <input
-                      ref={renameRef}
-                      data-testid="rename-input"
-                      className="flex-1 min-w-0 bg-base03 text-base1 text-xs px-1 py-0.5 rounded border border-blue/50 outline-none"
-                      defaultValue={renaming.name}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleRenameSubmit(renaming.path, e.target.value)
-                        if (e.key === 'Escape') setRenaming(null)
-                      }}
-                      onBlur={(e) => handleRenameSubmit(renaming.path, e.target.value)}
-                    />
-                  </div>
-                )
-              }
-              return (
-                <TreeNode
-                  key={entry.name}
-                  entry={entry}
-                  path=""
-                  depth={0}
-                  token={token}
-                  slug={slug}
-                  onContextMenu={handleContextMenu}
-                  expandedDirs={expandedDirs}
-                  toggleDir={toggleDir}
-                  loadChildren={loadChildren}
-                  children={children}
-                  showHidden={showHidden}
-                  showIgnored={showIgnored}
-                  onDragStart={() => {}}
-                  onDoubleClick={handleDoubleClick}
-                />
-              )
-            })}
+            {rootEntries.map((entry) => (
+              <TreeNode
+                key={entry.name}
+                entry={entry}
+                path=""
+                depth={0}
+                token={token}
+                slug={slug}
+                onContextMenu={handleContextMenu}
+                expandedDirs={expandedDirs}
+                toggleDir={toggleDir}
+                loadChildren={loadChildren}
+                children={children}
+                showHidden={showHidden}
+                showIgnored={showIgnored}
+                onDragStart={() => {}}
+                onDoubleClick={handleDoubleClick}
+                renaming={renaming}
+                renameRef={renameRef}
+                onRenameSubmit={handleRenameSubmit}
+                onRenameCancel={() => setRenaming(null)}
+                newItem={newItem}
+                newItemRef={newItemRef}
+                onNewItemSubmit={handleNewItemSubmit}
+                onNewItemCancel={() => setNewItem(null)}
+              />
+            ))}
             {/* New item input at root level */}
             {newItem && !newItem.parentPath && (
               <div className="flex items-center px-2 py-0.5" style={{ paddingLeft: '8px' }}>
@@ -563,32 +594,6 @@ export default function FileExplorer({ token, slug, collapsed, onToggle, onOpenT
         </div>
       )}
 
-      {/* New item input inside expanded directory (rendered as overlay within the tree) */}
-      {newItem && newItem.parentPath && expandedDirs.has(newItem.parentPath) && (
-        <div
-          className="fixed z-40 bg-base02 border border-blue/50 rounded shadow-lg p-1"
-          style={{
-            left: '0',
-            right: '0',
-            bottom: '0',
-          }}
-        >
-          <div className="flex items-center px-1">
-            <span className="mr-1 text-[11px]">{newItem.type === 'directory' ? '\u{1F4C1}' : '\u{1F4C3}'}</span>
-            <input
-              ref={newItemRef}
-              data-testid="new-item-input"
-              className="flex-1 min-w-0 bg-base03 text-base1 text-xs px-1 py-0.5 rounded border border-blue/50 outline-none"
-              placeholder={newItem.type === 'directory' ? 'New folder name...' : 'New file name...'}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleNewItemSubmit(e.target.value)
-                if (e.key === 'Escape') setNewItem(null)
-              }}
-              onBlur={(e) => handleNewItemSubmit(e.target.value)}
-            />
-          </div>
-        </div>
-      )}
     </aside>
   )
 }
