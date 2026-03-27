@@ -3,10 +3,14 @@ import { mkdtemp, readFile, rm, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { generate } from 'otplib';
 import { io as ioClient } from 'socket.io-client';
 import { startServer, httpServer, terminalManager } from '../src/index.js';
 import { clearSessions } from '../src/auth.js';
+
+const execFileAsync = promisify(execFile);
 
 const TEST_PORT = 3098;
 const TEST_USERNAME = 'testadmin';
@@ -486,23 +490,18 @@ describe('Terminal Manager', () => {
       // Send resize
       socket.emit('resize', { cols: 132, rows: 43 });
 
-      // Verify by running stty size
-      const outputPromise = new Promise((resolve) => {
-        let buffer = '';
-        socket.on('output', (data) => {
-          buffer += data;
-          if (buffer.includes('43 132')) {
-            resolve(buffer);
-          }
-        });
-      });
+      // Give resize a moment to propagate through tmux
+      await new Promise((r) => setTimeout(r, 500));
 
-      // Give resize a moment to take effect
-      await new Promise((r) => setTimeout(r, 200));
-      socket.emit('input', 'stty size\n');
+      // Verify resize via tmux API (tmux rendering splits text with escape sequences,
+      // making stty size output undetectable via simple string matching)
+      const tmuxName = terminalManager.getTmuxSessionName(terminalId);
+      expect(tmuxName).toBeTruthy();
 
-      const output = await outputPromise;
-      expect(output).toContain('43 132');
+      const { stdout } = await execFileAsync('tmux', [
+        'display-message', '-t', tmuxName, '-p', '#{pane_width}x#{pane_height}',
+      ]);
+      expect(stdout.trim()).toBe('132x43');
 
       socket.disconnect();
     });

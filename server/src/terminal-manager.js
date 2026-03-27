@@ -1,10 +1,20 @@
 import pty from 'node-pty';
 import { randomUUID } from 'node:crypto';
-import { writeFile, rm, mkdir } from 'node:fs/promises';
+import { writeFile, rm, mkdir, readFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { validateSession } from './auth.js';
+import {
+  sessionName as tmuxSessionName,
+  createSession as tmuxCreateSession,
+  hasSession as tmuxHasSession,
+  killSession as tmuxKillSession,
+  capturePane as tmuxCapturePane,
+  sendKeys as tmuxSendKeys,
+  resizePane as tmuxResizePane,
+  listDancodeSessions,
+} from './tmux.js';
 
 const RING_BUFFER_SIZE = 50 * 1024; // ~50KB
 
@@ -37,9 +47,10 @@ class RingBuffer {
 }
 
 /**
- * Manages PTY terminal processes with metadata persistence.
- * Each terminal has an in-memory ring buffer (~50KB) for output replay
- * and supports multiple concurrent WebSocket connections.
+ * Manages PTY terminal processes backed by tmux sessions.
+ * Each terminal runs inside a tmux session named dancode-{projectSlug}-{terminalId}.
+ * The node-pty process attaches to the tmux session, providing I/O relay to WebSocket clients.
+ * Processes survive server restarts; on startup, reconcile() reattaches to existing tmux sessions.
  */
 export class TerminalManager {
   /**
@@ -51,7 +62,7 @@ export class TerminalManager {
   }
 
   /**
-   * Create a new terminal with a PTY process.
+   * Create a new terminal with a PTY process inside a tmux session.
    */
   async create({ projectSlug, label, command, cols = 80, rows = 24, cwd }) {
     const id = randomUUID();
@@ -61,8 +72,18 @@ export class TerminalManager {
       await mkdir(this.terminalsDir, { recursive: true });
     }
 
-    const shell = process.env.SHELL || '/bin/bash';
-    const ptyProcess = pty.spawn(shell, [], {
+    const tmuxName = tmuxSessionName(projectSlug, id);
+
+    // Create a detached tmux session
+    await tmuxCreateSession(tmuxName, { cols, rows, cwd: cwd || process.env.HOME });
+
+    // If a startup command is requested, send it to the tmux session
+    if (command) {
+      await tmuxSendKeys(tmuxName, command);
+    }
+
+    // Attach node-pty to the tmux session for I/O relay
+    const ptyProcess = pty.spawn('tmux', ['attach-session', '-t', tmuxName], {
       name: 'xterm-256color',
       cols,
       rows,
@@ -82,17 +103,30 @@ export class TerminalManager {
       }
     });
 
-    ptyProcess.onExit(({ exitCode }) => {
+    ptyProcess.onExit(async () => {
       const terminal = this.terminals.get(id);
-      if (terminal) {
+      if (!terminal) return;
+
+      // Check if the tmux session still exists
+      const sessionAlive = await tmuxHasSession(tmuxName);
+      if (!sessionAlive) {
+        // Session was destroyed (shell exited) — notify clients
         terminal.exited = true;
         for (const socket of terminal.sockets) {
-          socket.emit('session-exit', { exitCode });
+          socket.emit('session-exit', { exitCode: 0 });
         }
       }
+      // If session is still alive, the pty exited for another reason (e.g. detach).
+      // This shouldn't happen in normal operation since we control the attachment.
     });
 
-    const meta = { id, projectSlug, label: label || 'Terminal', createdAt };
+    const meta = {
+      id,
+      projectSlug,
+      label: label || 'Terminal',
+      createdAt,
+      tmuxSessionName: tmuxName,
+    };
 
     await writeFile(
       join(this.terminalsDir, `${id}.json`),
@@ -107,35 +141,145 @@ export class TerminalManager {
       exited: false,
     });
 
-    if (command) {
-      ptyProcess.write(command + '\n');
+    return this._publicMeta(meta);
+  }
+
+  /**
+   * Reconcile tmux sessions with terminal metadata on server startup.
+   * - Reattaches to orphaned tmux sessions (metadata exists, tmux session alive)
+   * - Cleans up stale metadata (metadata exists, tmux session gone)
+   * - Logs warnings for stale entries
+   */
+  async reconcile() {
+    if (!existsSync(this.terminalsDir)) {
+      return { reattached: 0, cleaned: 0 };
     }
 
-    return meta;
+    const files = await readdir(this.terminalsDir);
+    const metaFiles = files.filter((f) => f.endsWith('.json'));
+
+    let reattached = 0;
+    let cleaned = 0;
+
+    for (const file of metaFiles) {
+      const metaPath = join(this.terminalsDir, file);
+      let meta;
+      try {
+        meta = JSON.parse(await readFile(metaPath, 'utf-8'));
+      } catch {
+        console.warn(`[reconcile] Could not parse metadata file: ${file}`);
+        continue;
+      }
+
+      const tmuxName = meta.tmuxSessionName;
+      if (!tmuxName) {
+        console.warn(`[reconcile] Metadata missing tmuxSessionName: ${file}`);
+        await rm(metaPath);
+        cleaned++;
+        continue;
+      }
+
+      const sessionAlive = await tmuxHasSession(tmuxName);
+
+      if (sessionAlive) {
+        // Reattach: spawn node-pty to connect to the existing tmux session
+        const ptyProcess = pty.spawn('tmux', ['attach-session', '-t', tmuxName], {
+          name: 'xterm-256color',
+          cols: 80,
+          rows: 24,
+          env: process.env,
+        });
+
+        // Populate ring buffer from tmux scrollback
+        const ringBuffer = new RingBuffer();
+        const scrollback = await tmuxCapturePane(tmuxName);
+        if (scrollback) {
+          ringBuffer.append(scrollback);
+        }
+
+        ptyProcess.onData((data) => {
+          ringBuffer.append(data);
+          const terminal = this.terminals.get(meta.id);
+          if (terminal) {
+            for (const socket of terminal.sockets) {
+              socket.emit('output', data);
+            }
+          }
+        });
+
+        ptyProcess.onExit(async () => {
+          const terminal = this.terminals.get(meta.id);
+          if (!terminal) return;
+
+          const alive = await tmuxHasSession(tmuxName);
+          if (!alive) {
+            terminal.exited = true;
+            for (const socket of terminal.sockets) {
+              socket.emit('session-exit', { exitCode: 0 });
+            }
+          }
+        });
+
+        this.terminals.set(meta.id, {
+          ...meta,
+          pty: ptyProcess,
+          ringBuffer,
+          sockets: new Set(),
+          exited: false,
+        });
+
+        reattached++;
+        console.log(`[reconcile] Reattached terminal ${meta.id} → tmux session ${tmuxName}`);
+      } else {
+        // Stale metadata: tmux session is gone
+        console.warn(`[reconcile] Stale metadata for terminal ${meta.id}: tmux session ${tmuxName} not found. Cleaning up.`);
+        await rm(metaPath);
+        cleaned++;
+      }
+    }
+
+    return { reattached, cleaned };
+  }
+
+  /**
+   * Get the tmux session name for a terminal (used by tests).
+   */
+  getTmuxSessionName(id) {
+    const terminal = this.terminals.get(id);
+    return terminal?.tmuxSessionName || null;
+  }
+
+  /**
+   * Return public metadata (no tmux internals).
+   */
+  _publicMeta(meta) {
+    return {
+      id: meta.id,
+      projectSlug: meta.projectSlug,
+      label: meta.label,
+      createdAt: meta.createdAt,
+    };
   }
 
   /**
    * Get terminal metadata by ID. Returns null if not found.
+   * Does NOT include tmux session name (invisible to clients).
    */
   get(id) {
     const terminal = this.terminals.get(id);
     if (!terminal) return null;
-    return { id: terminal.id, projectSlug: terminal.projectSlug, label: terminal.label, createdAt: terminal.createdAt };
+    return this._publicMeta(terminal);
   }
 
   /**
    * List terminals, optionally filtered by project slug.
+   * Does NOT include tmux session name (invisible to clients).
    */
   list(projectSlug) {
     const results = [];
     for (const terminal of this.terminals.values()) {
       if (!projectSlug || terminal.projectSlug === projectSlug) {
-        results.push({
-          id: terminal.id,
-          projectSlug: terminal.projectSlug,
-          label: terminal.label,
-          createdAt: terminal.createdAt,
-        });
+        results.push(this._publicMeta(terminal));
       }
     }
     return results;
@@ -157,6 +301,7 @@ export class TerminalManager {
       projectSlug: terminal.projectSlug,
       label: terminal.label,
       createdAt: terminal.createdAt,
+      tmuxSessionName: terminal.tmuxSessionName,
     };
 
     await writeFile(
@@ -164,11 +309,11 @@ export class TerminalManager {
       JSON.stringify(meta, null, 2) + '\n'
     );
 
-    return meta;
+    return this._publicMeta(meta);
   }
 
   /**
-   * Destroy a terminal: kill PTY, disconnect sockets, remove metadata file.
+   * Destroy a terminal: kill PTY, kill tmux session, disconnect sockets, remove metadata file.
    */
   async destroy(id) {
     const terminal = this.terminals.get(id);
@@ -178,6 +323,11 @@ export class TerminalManager {
       terminal.pty.kill();
     } catch {
       // already dead
+    }
+
+    // Kill the tmux session
+    if (terminal.tmuxSessionName) {
+      await tmuxKillSession(terminal.tmuxSessionName);
     }
 
     for (const socket of terminal.sockets) {
@@ -230,7 +380,7 @@ export class TerminalManager {
   }
 
   /**
-   * Resize a terminal's PTY.
+   * Resize a terminal's PTY and tmux pane.
    */
   resize(id, cols, rows) {
     const terminal = this.terminals.get(id);
@@ -239,6 +389,10 @@ export class TerminalManager {
       terminal.pty.resize(cols, rows);
     } catch {
       // pty already exited
+    }
+    // Also resize the tmux pane so the shell sees the correct dimensions
+    if (terminal.tmuxSessionName) {
+      tmuxResizePane(terminal.tmuxSessionName, cols, rows).catch(() => {});
     }
     return true;
   }

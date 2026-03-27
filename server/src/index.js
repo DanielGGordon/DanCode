@@ -416,9 +416,15 @@ export async function startServer(port = PORT, { credentialsPath: credPath, proj
   credentialsPath = credPath || getCredentialsPath();
   projectsDir = projDir || getProjectsDir();
 
-  // Set up TerminalManager (direct PTY, no tmux)
+  // Set up TerminalManager (PTY backed by invisible tmux sessions)
   const terminalsDir = termDir || getTerminalsDir();
   terminalManager = new TerminalManager(terminalsDir);
+
+  // Reconcile: reattach to surviving tmux sessions from a previous run
+  const { reattached, cleaned } = await terminalManager.reconcile();
+  if (reattached > 0 || cleaned > 0) {
+    console.log(`[startup] Reconciled terminals: ${reattached} reattached, ${cleaned} stale cleaned`);
+  }
 
   if (!terminalManagerNamespaceRegistered) {
     setupTerminalManagerNamespace(io, terminalManager);
