@@ -38,6 +38,10 @@ npm run dev          # Start server + client concurrently
 - **Focused pane indicator** — 8px blue accent bar + dimmed unfocused panes
 - **Right-click context menu** on sidebar projects — Rename, Delete
 - **Keyboard shortcuts** — Ctrl+K command palette, Alt+arrows project switching, Ctrl+wheel font sizing
+- **Mobile terminal** — Full-screen read-first terminal on mobile (<1024px) with thin top bar, keyboard toggle, and horizontal shortcut bar (Ctrl+C/V/D, Tab, arrows, Esc) with 44px tap targets
+- **Mobile dashboard** — Project card grid with long-press quick actions (open CLI/Claude terminal)
+- **Pinch-to-zoom** — Touch gesture for terminal font size on mobile
+- **Tablet support** — Optional side-by-side terminals (768-1024px) with shortcut bar toggle
 - **TOTP authentication** — Username/password + TOTP-based login with QR code setup
 
 ## Development

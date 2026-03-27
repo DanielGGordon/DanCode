@@ -98,6 +98,7 @@ Durable decisions that apply across all phases:
 - Playwright test: create a project, see 2 terminals (CLI + Claude), create a 3rd, rename it, close it, switch to tab mode and back
 
 ---
+<!-- PHASE 3 COMPLETE -->
 
 ## Phase 3: Reconnection UX & Polish
 <!-- PHASE 3 COMPLETE -->
@@ -211,3 +212,15 @@ Durable decisions that apply across all phases:
 - Landscape mode: terminal uses full width, shortcut bar along the bottom
 - Tablet viewports (768-1024px) can optionally show 2 terminals side-by-side with shortcut bar available
 - Playwright mobile emulation test: open terminal on mobile, verify read-first (no keyboard), tap to show keyboard, verify shortcut bar appears, tap Ctrl+C shortcut, verify it sends interrupt signal
+
+**Status**: Complete (2026-03-27)
+
+**Implementation summary**:
+- `ShortcutBar.jsx`: Horizontal scrolling bar with 7 shortcut buttons (44px tap targets), sends key sequences via `onSend` callback
+- `MobileTerminalView.jsx`: Full-screen terminal with thin top bar, read-first mode (keyboard hidden), keyboard toggle, visualViewport-based keyboard detection, tab switching for multiple terminals
+- `MobileDashboard.jsx`: Project card grid with tap-to-select and long-press (500ms) for quick actions (Open CLI Terminal, Open Claude Terminal)
+- `Terminal.jsx`: Added `forwardRef` + `useImperativeHandle` (sendInput, focus, setFontSize, getFontSize), `readFirst` prop, pinch-to-zoom gesture handler
+- `App.jsx`: Mobile detection via `useIsMobile()` hook (<1024px), routes to MobileDashboard or MobileTerminalView on mobile
+- `TerminalLayout.jsx`: Tablet detection (768-1024px), optional ShortcutBar toggle for tablets, terminal ref forwarding
+- Playwright `mobile-terminal.spec.js`: iPhone 12 viewport emulation, tests dashboard, read-first terminal, shortcut bar, Ctrl+C interrupt, long-press quick actions
+- 29 new unit tests (ShortcutBar: 10, MobileDashboard: 10, MobileTerminalView: 9), total 200 tests passing

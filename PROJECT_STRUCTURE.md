@@ -5,19 +5,25 @@ DanCode/
 ├── client/                     # React + Vite + Tailwind frontend
 │   ├── public/                 # Static assets
 │   ├── src/
-│   │   ├── App.jsx             # Root React component (auth gate, project form toggle, terminal view, command palette, sidebar, header project dropdown)
-│   │   ├── App.test.jsx        # App unit tests (login/terminal/new-project/command-palette/sidebar/header-dropdown conditional rendering)
+│   │   ├── App.jsx             # Root React component (auth gate, mobile/desktop routing, project form, command palette, sidebar)
+│   │   ├── App.test.jsx        # App unit tests (login/terminal/mobile/command-palette/sidebar/header-dropdown rendering)
 │   │   ├── CommandPalette.jsx  # Command palette overlay with fuzzy search for project switching (Ctrl+K)
 │   │   ├── CommandPalette.test.jsx # CommandPalette unit tests (fuzzy match, filtering, open/close, selection)
 │   │   ├── LoginScreen.jsx     # Username/password + TOTP login form
 │   │   ├── LoginScreen.test.jsx # LoginScreen component unit tests
+│   │   ├── MobileDashboard.jsx # Mobile project card grid with long-press quick actions (CLI/Claude)
+│   │   ├── MobileDashboard.test.jsx # MobileDashboard unit tests (cards, selection, quick actions)
+│   │   ├── MobileTerminalView.jsx # Full-screen mobile terminal: read-first, keyboard toggle, shortcut bar
+│   │   ├── MobileTerminalView.test.jsx # MobileTerminalView unit tests (read-first, back, tabs)
 │   │   ├── NewProjectForm.jsx  # New project creation form (name + path inputs, calls POST /api/projects)
 │   │   ├── NewProjectForm.test.jsx # NewProjectForm component unit tests
-│   │   ├── TerminalLayout.jsx  # Multi-terminal layout: split (side-by-side) or tabbed view with add/close/rename
+│   │   ├── ShortcutBar.jsx     # Horizontal scrolling shortcut bar (Ctrl+C/V/D, Tab, arrows, Esc) with 44px tap targets
+│   │   ├── ShortcutBar.test.jsx # ShortcutBar unit tests (key sequences, tap targets)
+│   │   ├── TerminalLayout.jsx  # Multi-terminal layout: split/tabbed view, tablet shortcut bar toggle
 │   │   ├── TerminalLayout.test.jsx # TerminalLayout component unit tests
 │   │   ├── Sidebar.jsx         # Collapsible left sidebar listing all projects by name with active highlight
 │   │   ├── Sidebar.test.jsx    # Sidebar component unit tests
-│   │   ├── Terminal.jsx        # xterm.js terminal connected via Socket.io /terminal/{uuid} namespace
+│   │   ├── Terminal.jsx        # xterm.js terminal with forwardRef, pinch-to-zoom, readFirst mode
 │   │   ├── Terminal.test.jsx   # Terminal component unit tests
 │   │   ├── poc-terminal.js     # POC: standalone xterm.js page for new terminal API (E2E testing)
 │   │   ├── index.css           # Tailwind + Solarized Dark theme
@@ -62,6 +68,7 @@ DanCode/
 │   │   │   ├── sidebar-visual.spec.js   # Visual assertion: sidebar with project list and active highlight
 │   │   │   ├── header-dropdown.spec.js  # Playwright E2E test (header dropdown project switching)
 │   │   │   ├── reconnection.spec.js   # Playwright E2E test (disconnect/reconnect overlay, buffer replay, state indicators)
+│   │   │   ├── mobile-terminal.spec.js # Playwright mobile emulation E2E (iPhone 12 viewport, read-first, shortcut bar, Ctrl+C)
 │   │   │   └── visual.spec.js  # Midscene AI visual assertion test (DOM-based on Pi 5)
 │   │   ├── auth.test.js        # Auth account setup, login, session management tests
 │   │   ├── projects.test.js    # Project config CRUD, slug generation, validation tests

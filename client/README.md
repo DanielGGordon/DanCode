@@ -14,13 +14,16 @@ The dev server proxies `/api` and `/socket.io` requests to the backend at `http:
 
 ## Public interface
 
-- `App` — Root component, checks localStorage for auth token; shows `LoginScreen` if absent, otherwise renders the header with "New Project" button, a left sidebar listing projects, and either the `NewProjectForm` or `TerminalLayout` (when a project is selected). Ctrl+K opens the command palette for project switching.
+- `App` — Root component. Detects mobile (<1024px) vs desktop. On desktop: header, sidebar, command palette, TerminalLayout. On mobile: MobileDashboard or MobileTerminalView. Ctrl+K opens command palette for project switching.
 - `CommandPalette` — Centered overlay with fuzzy-search input for switching between projects. Exports `fuzzyMatch` for reuse. Props: `open`, `onClose`, `projects`, `currentSlug`, `onSelect`.
 - `Sidebar` — Left sidebar listing all projects by name with the active project visually highlighted. Props: `projects`, `currentSlug`, `onSelect`.
 - `LoginScreen` — Username/password + TOTP login form; calls `onLogin` callback with the session token
 - `NewProjectForm` — Project creation form with name and directory path inputs (path pre-filled with `~/`); submits to `POST /api/projects` with Bearer token auth
-- `TerminalLayout` — Multi-terminal layout rendering Terminal instances side by side (split) or in tabs. Supports dynamic terminal creation (+), close with confirmation, inline rename (double-click label), and persists layout mode + terminal order to the project config via `PATCH /api/projects/:slug`. Responsive: auto-switches to tabs on mobile (<768px).
-- `Terminal` — xterm.js terminal that connects to the backend Socket.io `/terminal/{uuid}` namespace, with Solarized Dark theme and automatic resize. Supports Socket.io auto-reconnection with a "Reconnecting..." overlay (30s timeout), manual "Reconnect" button on failure, and "Session Ended" overlay on PTY exit. Drag-and-drop image upload injects file paths into the terminal. Exposes connection state via `onConnectionStateChange` callback. Props: `token`, `terminalId`, `projectSlug`, `focused`, `onFocus`, `onConnectionStateChange`.
+- `MobileDashboard` — Project card grid for mobile devices. Tap to select, long-press (500ms) for quick actions (Open CLI Terminal, Open Claude Terminal). Props: `projects`, `onSelectProject`, `onQuickAction`, `onNewProject`, `onLogout`.
+- `MobileTerminalView` — Full-screen mobile terminal. Read-first design (keyboard hidden by default). Thin top bar with back button and terminal label. Keyboard toggle button to enter input mode. ShortcutBar appears when in input mode. Supports tab switching for multiple terminals. Props: `token`, `terminal`, `projectSlug`, `onBack`, `terminals`, `onSwitchTerminal`.
+- `ShortcutBar` — Horizontal scrolling bar of terminal key shortcuts (Ctrl+C, Ctrl+V, Ctrl+D, Tab, Up, Down, Esc). Each button is a 44px minimum tap target. Props: `onSend`, `onPaste`.
+- `TerminalLayout` — Multi-terminal layout: split (side-by-side) or tabbed view. Supports terminal creation, close, rename. Persists layout via `PATCH /api/projects/:slug`. Responsive: auto-switches to tabs on mobile (<768px). Tablet (768-1024px): optional shortcut bar toggle.
+- `Terminal` — xterm.js terminal with forwardRef. Connects via Socket.io `/terminal/{uuid}`. Solarized Dark theme, auto-resize, reconnection UX, drag-and-drop upload. Supports `readFirst` prop (no auto-focus), pinch-to-zoom on mobile, and imperative API via ref (`sendInput`, `focus`, `setFontSize`, `getFontSize`). Props: `token`, `terminalId`, `projectSlug`, `focused`, `readFirst`, `onFocus`, `onConnectionStateChange`.
 - `main.jsx` — Entry point, mounts React to `#root`
 
 ## Relation to other modules
