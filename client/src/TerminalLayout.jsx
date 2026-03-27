@@ -1,7 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import Terminal from './Terminal.jsx'
+import ShortcutBar from './ShortcutBar.jsx'
 
 export const MOBILE_BREAKPOINT = 768
+const TABLET_MAX = 1024
 
 /**
  * Returns Tailwind classes for a connection state indicator dot.
@@ -33,27 +35,29 @@ export default function TerminalLayout({ token, slug }) {
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT
   )
+  const [isTablet, setIsTablet] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth >= MOBILE_BREAKPOINT && window.innerWidth < TABLET_MAX
+  )
+  const [showTabletShortcuts, setShowTabletShortcuts] = useState(false)
   const loadedRef = useRef(false)
   const saveTimerRef = useRef(null)
   const editInputRef = useRef(null)
+  const terminalRefs = useRef({})
   const [fetchAttempt, setFetchAttempt] = useState(0)
 
-  // Responsive breakpoint
+  // Responsive breakpoints
   useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
-    const onChange = (e) => setIsMobile(e.matches)
-    if (mql.addEventListener) {
-      mql.addEventListener('change', onChange)
-    } else {
-      mql.addListener(onChange)
-    }
-    setIsMobile(mql.matches)
+    const mobileMql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
+    const tabletMql = window.matchMedia(`(min-width: ${MOBILE_BREAKPOINT}px) and (max-width: ${TABLET_MAX - 1}px)`)
+    const onMobileChange = (e) => setIsMobile(e.matches)
+    const onTabletChange = (e) => setIsTablet(e.matches)
+    mobileMql.addEventListener('change', onMobileChange)
+    tabletMql.addEventListener('change', onTabletChange)
+    setIsMobile(mobileMql.matches)
+    setIsTablet(tabletMql.matches)
     return () => {
-      if (mql.removeEventListener) {
-        mql.removeEventListener('change', onChange)
-      } else {
-        mql.removeListener(onChange)
-      }
+      mobileMql.removeEventListener('change', onMobileChange)
+      tabletMql.removeEventListener('change', onTabletChange)
     }
   }, [])
 
@@ -259,6 +263,29 @@ export default function TerminalLayout({ token, slug }) {
     setEditingId(null)
   }, [])
 
+  // Store terminal ref by id
+  const setTerminalRef = useCallback((id, ref) => {
+    terminalRefs.current[id] = ref
+  }, [])
+
+  // Tablet shortcut bar: send key sequence to focused terminal
+  const handleShortcutSend = useCallback((seq) => {
+    const focused = terminals[focusedIndex]
+    if (focused && terminalRefs.current[focused.id]) {
+      terminalRefs.current[focused.id].sendInput(seq)
+    }
+  }, [terminals, focusedIndex])
+
+  const handleShortcutPaste = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText()
+      const focused = terminals[focusedIndex]
+      if (text && focused && terminalRefs.current[focused.id]) {
+        terminalRefs.current[focused.id].sendInput(text)
+      }
+    } catch {}
+  }, [terminals, focusedIndex])
+
   if (loading) {
     return (
       <div data-testid="terminal-layout" className="flex flex-col w-full h-full">
@@ -419,6 +446,7 @@ export default function TerminalLayout({ token, slug }) {
                 </div>
                 <div className="flex-1 min-h-0">
                   <Terminal
+                    ref={(r) => setTerminalRef(term.id, r)}
                     token={token}
                     terminalId={term.id}
                     projectSlug={slug}
@@ -481,6 +509,7 @@ export default function TerminalLayout({ token, slug }) {
                   </button>
                 </div>
                 <Terminal
+                  ref={(r) => setTerminalRef(term.id, r)}
                   token={token}
                   terminalId={term.id}
                   projectSlug={slug}
@@ -491,6 +520,38 @@ export default function TerminalLayout({ token, slug }) {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Tablet shortcut bar toggle + bar */}
+      {isTablet && (
+        <div className="shrink-0">
+          {showTabletShortcuts ? (
+            <div className="flex items-center">
+              <div className="flex-1 min-w-0">
+                <ShortcutBar onSend={handleShortcutSend} onPaste={handleShortcutPaste} />
+              </div>
+              <button
+                data-testid="tablet-shortcut-toggle"
+                onClick={() => setShowTabletShortcuts(false)}
+                className="shrink-0 px-2 py-1 text-xs text-base01 hover:text-base0 border-t border-l border-base01/30 bg-base02"
+                style={{ minHeight: '44px' }}
+              >
+                Hide
+              </button>
+            </div>
+          ) : (
+            <div className="flex justify-end px-2 py-1 bg-base02 border-t border-base01/30">
+              <button
+                data-testid="tablet-shortcut-toggle"
+                onClick={() => setShowTabletShortcuts(true)}
+                className="px-3 py-1 text-xs text-base01 hover:text-base0 border border-base01/30 rounded"
+                style={{ minHeight: '44px' }}
+              >
+                Shortcuts
+              </button>
+            </div>
+          )}
         </div>
       )}
 

@@ -32,6 +32,26 @@ vi.mock('./NewProjectForm.jsx', () => ({
   ),
 }))
 
+// Mock MobileDashboard
+vi.mock('./MobileDashboard.jsx', () => ({
+  default: ({ onSelectProject, onNewProject, onLogout }) => (
+    <div data-testid="mobile-dashboard">
+      <button data-testid="mock-mobile-select" onClick={() => onSelectProject?.('my-project')}>Select</button>
+      <button data-testid="mock-mobile-new" onClick={() => onNewProject?.()}>New</button>
+      <button data-testid="mock-mobile-logout" onClick={() => onLogout?.()}>Logout</button>
+    </div>
+  ),
+}))
+
+// Mock MobileTerminalView
+vi.mock('./MobileTerminalView.jsx', () => ({
+  default: ({ terminal, onBack }) => (
+    <div data-testid="mobile-terminal-view" data-terminal-id={terminal?.id || ''}>
+      <button data-testid="mock-mobile-back" onClick={onBack}>Back</button>
+    </div>
+  ),
+}))
+
 // Mock Sidebar
 vi.mock('./Sidebar.jsx', () => ({
   default: ({ projects, currentSlug, onSelect, collapsed, onToggle }) => (
@@ -74,6 +94,21 @@ function mockFetch(status, body = {}) {
     json: () => Promise.resolve(body),
   })
 }
+
+// Mock window.matchMedia for useIsMobile hook (desktop by default)
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: vi.fn().mockImplementation((query) => ({
+    matches: false, // desktop by default
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+})
 
 beforeEach(() => {
   localStorageMock.clear()

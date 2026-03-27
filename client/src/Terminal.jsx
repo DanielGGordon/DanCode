@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { io } from 'socket.io-client'
@@ -28,7 +28,7 @@ function fallbackCopy(text) {
   document.body.removeChild(textarea)
 }
 
-export default function Terminal({ token, terminalId, projectSlug, focused, onFocus, onConnectionStateChange }) {
+const Terminal = forwardRef(function Terminal({ token, terminalId, projectSlug, focused, readFirst, onFocus, onConnectionStateChange }, ref) {
   const containerRef = useRef(null)
   const termRef = useRef(null)
   const fitAddonRef = useRef(null)
@@ -45,6 +45,29 @@ export default function Terminal({ token, terminalId, projectSlug, focused, onFo
     stateRef.current = newState
     setConnectionState(newState)
   }, [])
+
+  // Expose imperative methods for parent components (MobileTerminalView shortcut bar)
+  useImperativeHandle(ref, () => ({
+    sendInput: (data) => {
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('input', data)
+      }
+    },
+    focus: () => {
+      if (termRef.current) {
+        termRef.current.focus()
+      }
+    },
+    setFontSize: (size) => {
+      const clamped = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, size))
+      if (termRef.current && clamped !== fontSizeRef.current) {
+        fontSizeRef.current = clamped
+        termRef.current.options.fontSize = clamped
+        if (fitAddonRef.current) fitAddonRef.current.fit()
+      }
+    },
+    getFontSize: () => fontSizeRef.current,
+  }))
 
   // Notify parent of connection state changes
   useEffect(() => {
@@ -255,12 +278,12 @@ export default function Terminal({ token, terminalId, projectSlug, focused, onFo
     }
   }, [connect])
 
-  // Focus the xterm instance when the focused prop becomes true
+  // Focus the xterm instance when the focused prop becomes true (skip if readFirst)
   useEffect(() => {
-    if (focused && termRef.current) {
+    if (focused && !readFirst && termRef.current) {
       termRef.current.focus()
     }
-  }, [focused])
+  }, [focused, readFirst])
 
   // Notify parent when xterm receives native focus
   useEffect(() => {
@@ -291,6 +314,52 @@ export default function Terminal({ token, terminalId, projectSlug, focused, onFo
     }
     container.addEventListener('wheel', handler, { passive: false, capture: true })
     return () => container.removeEventListener('wheel', handler, { capture: true })
+  }, [])
+
+  // Pinch-to-zoom for mobile font size
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    let initialDistance = 0
+    let initialFontSize = fontSizeRef.current
+
+    const getDistance = (touches) => {
+      const dx = touches[0].clientX - touches[1].clientX
+      const dy = touches[0].clientY - touches[1].clientY
+      return Math.sqrt(dx * dx + dy * dy)
+    }
+
+    const handleTouchStart = (e) => {
+      if (e.touches.length === 2) {
+        e.preventDefault()
+        initialDistance = getDistance(e.touches)
+        initialFontSize = fontSizeRef.current
+      }
+    }
+
+    const handleTouchMove = (e) => {
+      if (e.touches.length !== 2) return
+      e.preventDefault()
+
+      const currentDistance = getDistance(e.touches)
+      const scale = currentDistance / initialDistance
+      const newSize = Math.round(initialFontSize * scale)
+      const clamped = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, newSize))
+
+      if (clamped !== fontSizeRef.current && termRef.current) {
+        fontSizeRef.current = clamped
+        termRef.current.options.fontSize = clamped
+        if (fitAddonRef.current) fitAddonRef.current.fit()
+      }
+    }
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: false })
+    container.addEventListener('touchmove', handleTouchMove, { passive: false })
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart)
+      container.removeEventListener('touchmove', handleTouchMove)
+    }
   }, [])
 
   // Handle native paste events
@@ -425,4 +494,6 @@ export default function Terminal({ token, terminalId, projectSlug, focused, onFo
       )}
     </div>
   )
-}
+})
+
+export default Terminal

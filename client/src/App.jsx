@@ -5,9 +5,27 @@ import LoginScreen from './LoginScreen.jsx'
 import NewProjectForm from './NewProjectForm.jsx'
 import CommandPalette from './CommandPalette.jsx'
 import Sidebar from './Sidebar.jsx'
+import MobileDashboard from './MobileDashboard.jsx'
+import MobileTerminalView from './MobileTerminalView.jsx'
 
 const TOKEN_KEY = 'dancode-auth-token'
 const SIDEBAR_KEY = 'dancode-sidebar-collapsed'
+const MOBILE_BREAKPOINT = 480
+const TABLET_MAX = 1024
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < TABLET_MAX
+  )
+  useEffect(() => {
+    const mql = window.matchMedia(`(max-width: ${TABLET_MAX - 1}px)`)
+    const onChange = (e) => setIsMobile(e.matches)
+    mql.addEventListener('change', onChange)
+    setIsMobile(mql.matches)
+    return () => mql.removeEventListener('change', onChange)
+  }, [])
+  return isMobile
+}
 
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY))
@@ -20,6 +38,11 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === 'true')
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef(null)
+  const isMobile = useIsMobile()
+
+  // Mobile-specific state
+  const [mobileTerminal, setMobileTerminal] = useState(null) // { id, label }
+  const [mobileTerminals, setMobileTerminals] = useState([]) // all terminals for current project
 
   useEffect(() => {
     if (!token) return
@@ -135,6 +158,8 @@ function App() {
     setSelectedSlug(null)
     setSelectedProjectName(null)
     setProjects([])
+    setMobileTerminal(null)
+    setMobileTerminals([])
   }
 
   if (validating) {
@@ -208,6 +233,103 @@ function App() {
     } catch {}
   }
 
+  // Mobile: open project and load its terminals, then show first one
+  async function handleMobileSelectProject(slug) {
+    setSelectedSlug(slug)
+    setSelectedProjectName(Array.isArray(projects) ? projects.find((p) => p.slug === slug)?.name || null : null)
+    try {
+      const res = await fetch(`/api/terminals?project=${slug}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const terms = await res.json()
+        setMobileTerminals(terms)
+        if (terms.length > 0) {
+          setMobileTerminal(terms[0])
+        }
+      }
+    } catch {}
+  }
+
+  // Mobile: long-press quick action to open a specific terminal type
+  async function handleMobileQuickAction(slug, action) {
+    setSelectedSlug(slug)
+    setSelectedProjectName(Array.isArray(projects) ? projects.find((p) => p.slug === slug)?.name || null : null)
+    try {
+      const res = await fetch(`/api/terminals?project=${slug}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const terms = await res.json()
+        setMobileTerminals(terms)
+        // Find the matching terminal by label
+        const target = action === 'claude'
+          ? terms.find((t) => /claude/i.test(t.label))
+          : terms.find((t) => /cli/i.test(t.label))
+        setMobileTerminal(target || terms[0] || null)
+      }
+    } catch {}
+  }
+
+  // Mobile: back from terminal view
+  function handleMobileBack() {
+    setMobileTerminal(null)
+    setMobileTerminals([])
+    setSelectedSlug(null)
+    setSelectedProjectName(null)
+  }
+
+  // Mobile: switch between terminals in the mobile view
+  function handleMobileSwitchTerminal(terminalId) {
+    const t = mobileTerminals.find((term) => term.id === terminalId)
+    if (t) setMobileTerminal(t)
+  }
+
+  // --- Mobile layout ---
+  if (isMobile) {
+    // Show mobile terminal view if a terminal is selected
+    if (mobileTerminal && selectedSlug) {
+      return (
+        <MobileTerminalView
+          token={token}
+          terminal={mobileTerminal}
+          projectSlug={selectedSlug}
+          onBack={handleMobileBack}
+          terminals={mobileTerminals}
+          onSwitchTerminal={handleMobileSwitchTerminal}
+        />
+      )
+    }
+
+    // Show new project form on mobile
+    if (showNewProject) {
+      return (
+        <div className="w-screen h-screen flex flex-col bg-base03">
+          <NewProjectForm
+            token={token}
+            onCreated={(project) => {
+              handleProjectCreated(project)
+              handleMobileSelectProject(project.slug)
+            }}
+            onCancel={() => setShowNewProject(false)}
+          />
+        </div>
+      )
+    }
+
+    // Mobile dashboard
+    return (
+      <MobileDashboard
+        projects={projects}
+        onSelectProject={handleMobileSelectProject}
+        onQuickAction={handleMobileQuickAction}
+        onNewProject={() => setShowNewProject(true)}
+        onLogout={handleLogout}
+      />
+    )
+  }
+
+  // --- Desktop layout ---
   return (
     <div className="w-screen h-screen flex flex-col">
       <CommandPalette
