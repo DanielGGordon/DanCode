@@ -20,7 +20,7 @@ The dev server proxies `/api` and `/socket.io` requests to the backend at `http:
 - `LoginScreen` — Username/password + TOTP login form; calls `onLogin` callback with the session token
 - `NewProjectForm` — Project creation form with name and directory path inputs (path pre-filled with `~/`); submits to `POST /api/projects` with Bearer token auth
 - `TerminalLayout` — Multi-terminal layout rendering Terminal instances side by side (split) or in tabs. Supports dynamic terminal creation (+), close with confirmation, inline rename (double-click label), and persists layout mode + terminal order to the project config via `PATCH /api/projects/:slug`. Responsive: auto-switches to tabs on mobile (<768px).
-- `Terminal` — xterm.js terminal that connects to the backend Socket.io `/terminal/{uuid}` namespace, with Solarized Dark theme and automatic resize. Accepts `terminalId` prop. Shows a reconnect button on WebSocket disconnection and an informational overlay when the PTY exits.
+- `Terminal` — xterm.js terminal that connects to the backend Socket.io `/terminal/{uuid}` namespace, with Solarized Dark theme and automatic resize. Supports Socket.io auto-reconnection with a "Reconnecting..." overlay (30s timeout), manual "Reconnect" button on failure, and "Session Ended" overlay on PTY exit. Drag-and-drop image upload injects file paths into the terminal. Exposes connection state via `onConnectionStateChange` callback. Props: `token`, `terminalId`, `projectSlug`, `focused`, `onFocus`, `onConnectionStateChange`.
 - `main.jsx` — Entry point, mounts React to `#root`
 
 ## Relation to other modules

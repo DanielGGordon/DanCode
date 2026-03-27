@@ -31,7 +31,9 @@ npm run dev          # Start server + client concurrently
 
 - **Multi-terminal layout** — Split (side-by-side) or tabbed view with dynamic terminal creation, close, and rename
 - **Direct PTY terminals** — TerminalManager spawns shells directly via node-pty, with per-terminal WebSocket namespace, ~50KB output ring buffer for reconnection replay, and metadata persistence
+- **Reconnection UX** — Auto-reconnects on disconnect with "Reconnecting..." overlay, 30-second timeout to "Disconnected" with manual button; per-terminal connection state indicator dots (green/yellow/red)
 - **Project creation** — Automatically creates 2 terminals (CLI + Claude) per project
+- **Drag-and-drop image upload** — Drop images onto a terminal to upload and inject the file path
 - **Clipboard support** over plain HTTP — Ctrl+C copies selected text, Ctrl+V pastes (uses `execCommand` fallback for non-HTTPS)
 - **Focused pane indicator** — 8px blue accent bar + dimmed unfocused panes
 - **Right-click context menu** on sidebar projects — Rename, Delete

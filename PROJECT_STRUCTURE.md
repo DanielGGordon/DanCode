@@ -61,6 +61,7 @@ DanCode/
 │   │   │   ├── sidebar.spec.js          # Playwright E2E test (sidebar project switching)
 │   │   │   ├── sidebar-visual.spec.js   # Visual assertion: sidebar with project list and active highlight
 │   │   │   ├── header-dropdown.spec.js  # Playwright E2E test (header dropdown project switching)
+│   │   │   ├── reconnection.spec.js   # Playwright E2E test (disconnect/reconnect overlay, buffer replay, state indicators)
 │   │   │   └── visual.spec.js  # Midscene AI visual assertion test (DOM-based on Pi 5)
 │   │   ├── auth.test.js        # Auth account setup, login, session management tests
 │   │   ├── projects.test.js    # Project config CRUD, slug generation, validation tests
