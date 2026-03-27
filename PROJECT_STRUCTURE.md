@@ -43,9 +43,9 @@ DanCode/
 │   │   ├── auth.js             # TOTP-based auth: account setup, login, session management (~/.dancode/credentials.json)
 │   │   ├── index.js            # Server entry point (Express, Socket.io, REST API routes, terminal CRUD)
 │   │   ├── projects.js         # Project config CRUD (create, list, get, delete) in ~/.dancode/projects/
-│   │   ├── terminal-manager.js # TerminalManager: direct PTY spawning, CRUD, ring buffer, WebSocket /terminal/{uuid}
-│   │   ├── terminal.js         # (Legacy, emptied) Socket.io /terminal namespace — preserved for Phase 4
-│   │   └── tmux.js             # (Legacy, emptied) Tmux session management — preserved for Phase 4
+│   │   ├── terminal-manager.js # TerminalManager: tmux-backed PTY spawning, CRUD, ring buffer, reconcile, WebSocket /terminal/{uuid}
+│   │   ├── terminal.js         # (Legacy, emptied) Socket.io /terminal namespace
+│   │   └── tmux.js             # Tmux utility: create/kill/query sessions, capture pane, resize, send keys
 │   ├── tests/
 │   │   ├── e2e/
 │   │   │   ├── fixture.js      # Playwright + Midscene.js AI fixture (provides aiAssert, etc.)
@@ -68,14 +68,15 @@ DanCode/
 │   │   │   ├── sidebar-visual.spec.js   # Visual assertion: sidebar with project list and active highlight
 │   │   │   ├── header-dropdown.spec.js  # Playwright E2E test (header dropdown project switching)
 │   │   │   ├── reconnection.spec.js   # Playwright E2E test (disconnect/reconnect overlay, buffer replay, state indicators)
+│   │   │   ├── tmux-persistence.spec.js # Playwright E2E test (tmux persistence: server restart, reconnect, scrollback replay)
 │   │   │   ├── mobile-terminal.spec.js # Playwright mobile emulation E2E (iPhone 12 viewport, read-first, shortcut bar, Ctrl+C)
 │   │   │   └── visual.spec.js  # Midscene AI visual assertion test (DOM-based on Pi 5)
 │   │   ├── auth.test.js        # Auth account setup, login, session management tests
 │   │   ├── projects.test.js    # Project config CRUD, slug generation, validation tests
 │   │   ├── server.test.js      # Server unit tests (routes, auth middleware, project API)
 │   │   ├── terminal.test.js    # Socket.io /terminal namespace lifecycle tests (legacy, preserved)
-│   │   ├── terminal-manager.test.js  # TerminalManager integration tests (CRUD, metadata, WebSocket, reconnection, auth)
-│   │   └── tmux.test.js        # Tmux session management tests (legacy, preserved)
+│   │   ├── terminal-manager.test.js  # TerminalManager integration tests (CRUD, metadata, WebSocket, reconnection, auth, tmux persistence, reconcile)
+│   │   └── tmux.test.js        # Tmux utility module tests (session lifecycle, capture, resize, list)
 │   ├── .env                    # Midscene.js config (git-ignored): Ollama endpoint, model settings
 │   ├── package.json
 │   ├── playwright.config.js    # Playwright config (Midscene reporter, system Chromium, webServer on :3001)

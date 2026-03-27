@@ -8,7 +8,7 @@ Built for Raspberry Pi 5, accessed via Tailscale.
 
 - **Backend:** Node.js + Express + Socket.io
 - **Frontend:** React + Vite + Tailwind CSS
-- **Terminal:** xterm.js + node-pty (direct PTY via TerminalManager)
+- **Terminal:** xterm.js + node-pty + tmux (PTY inside invisible tmux sessions via TerminalManager)
 - **Theme:** Solarized Dark (#002b36)
 - **Testing:** Vitest + Playwright + Midscene.js
 
@@ -30,7 +30,8 @@ npm run dev          # Start server + client concurrently
 ## Features
 
 - **Multi-terminal layout** — Split (side-by-side) or tabbed view with dynamic terminal creation, close, and rename
-- **Direct PTY terminals** — TerminalManager spawns shells directly via node-pty, with per-terminal WebSocket namespace, ~50KB output ring buffer for reconnection replay, and metadata persistence
+- **Tmux-backed terminals** — TerminalManager spawns shells inside invisible tmux sessions (`dancode-{slug}-{id}`), with per-terminal WebSocket namespace, ~50KB output ring buffer for reconnection replay, and metadata persistence. Processes survive server restarts; `tmux attach` from the host connects to the same terminal
+- **Server restart recovery** — On startup, reconciles tmux sessions with terminal metadata: reattaches orphaned sessions, repopulates ring buffers from tmux scrollback, and cleans up stale metadata
 - **Reconnection UX** — Auto-reconnects on disconnect with "Reconnecting..." overlay, 30-second timeout to "Disconnected" with manual button; per-terminal connection state indicator dots (green/yellow/red)
 - **Project creation** — Automatically creates 2 terminals (CLI + Claude) per project
 - **Drag-and-drop image upload** — Drop images onto a terminal to upload and inject the file path
