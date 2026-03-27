@@ -72,6 +72,7 @@ Durable decisions that apply across all phases:
 ---
 
 ## Phase 2: Multi-Terminal Layout + Project Integration
+<!-- PHASE 2 COMPLETE -->
 
 **Delivers**: The new TerminalManager fully replaces the old tmux-based terminal flow. `PaneLayout` is replaced by `TerminalLayout` — a frontend-owned layout component that supports split and tabbed views with dynamic terminal creation. Project creation uses the new terminal API. All tmux code is removed from client and server. The old "adopt session" flow is removed.
 
