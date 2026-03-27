@@ -43,6 +43,20 @@ vi.mock('./MobileDashboard.jsx', () => ({
   ),
 }))
 
+// Mock MobileTerminalList
+vi.mock('./MobileTerminalList.jsx', () => ({
+  default: ({ projectName, terminals, onSelectTerminal, onBack }) => (
+    <div data-testid="mobile-terminal-list" data-project-name={projectName || ''}>
+      <button data-testid="mock-terminal-list-back" onClick={onBack}>Back</button>
+      {terminals?.map((t) => (
+        <button key={t.id} data-testid={`mock-terminal-item-${t.id}`} onClick={() => onSelectTerminal?.(t)}>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  ),
+}))
+
 // Mock MobileTerminalView
 vi.mock('./MobileTerminalView.jsx', () => ({
   default: ({ terminal, onBack }) => (

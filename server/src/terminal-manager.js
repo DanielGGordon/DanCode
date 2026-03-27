@@ -97,6 +97,7 @@ export class TerminalManager {
       ringBuffer.append(data);
       const terminal = this.terminals.get(id);
       if (terminal) {
+        terminal.lastActivity = new Date().toISOString();
         for (const socket of terminal.sockets) {
           socket.emit('output', data);
         }
@@ -125,6 +126,7 @@ export class TerminalManager {
       projectSlug,
       label: label || 'Terminal',
       createdAt,
+      lastActivity: createdAt,
       tmuxSessionName: tmuxName,
     };
 
@@ -269,7 +271,7 @@ export class TerminalManager {
   get(id) {
     const terminal = this.terminals.get(id);
     if (!terminal) return null;
-    return this._publicMeta(terminal);
+    return { ...this._publicMeta(terminal), lastActivity: terminal.lastActivity };
   }
 
   /**
@@ -280,7 +282,7 @@ export class TerminalManager {
     const results = [];
     for (const terminal of this.terminals.values()) {
       if (!projectSlug || terminal.projectSlug === projectSlug) {
-        results.push(this._publicMeta(terminal));
+        results.push({ ...this._publicMeta(terminal), lastActivity: terminal.lastActivity });
       }
     }
     return results;
@@ -302,6 +304,7 @@ export class TerminalManager {
       projectSlug: terminal.projectSlug,
       label: terminal.label,
       createdAt: terminal.createdAt,
+      lastActivity: terminal.lastActivity,
       tmuxSessionName: terminal.tmuxSessionName,
     };
 

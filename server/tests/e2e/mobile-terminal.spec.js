@@ -65,10 +65,16 @@ test.describe('Mobile Terminal', () => {
     await page.reload();
     await page.waitForSelector('[data-testid="mobile-dashboard"]', { state: 'visible', timeout: 10000 });
 
-    // Tap project card to open terminal
+    // Tap project card to open terminal list
     const card = page.getByTestId(`project-card-${slug}`);
     await expect(card).toBeVisible();
     await card.click();
+
+    // Should show terminal list first (Phase 6 navigation)
+    await page.waitForSelector('[data-testid="mobile-terminal-list"]', { state: 'visible', timeout: 10000 });
+
+    // Tap first terminal to enter terminal view
+    await page.locator('[data-testid^="terminal-item-"]').first().click();
 
     // Should show mobile terminal view (full-screen)
     await page.waitForSelector('[data-testid="mobile-terminal-view"]', { state: 'visible', timeout: 15000 });
@@ -159,8 +165,13 @@ test.describe('Mobile Terminal', () => {
       return term && term.textContent.includes('INTERRUPT_OK');
     }, { timeout: 5000 });
 
-    // Tap back button to return to dashboard
+    // Tap back button to return to terminal list (Phase 6 navigation)
     await backButton.click();
+    await page.waitForSelector('[data-testid="mobile-terminal-list"]', { state: 'visible', timeout: 5000 });
+    await expect(page.getByTestId('mobile-terminal-list')).toBeVisible();
+
+    // Tap back again to return to dashboard
+    await page.getByTestId('terminal-list-back').click();
     await page.waitForSelector('[data-testid="mobile-dashboard"]', { state: 'visible', timeout: 5000 });
     await expect(page.getByTestId('mobile-dashboard')).toBeVisible();
   });

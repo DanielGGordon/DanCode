@@ -3,9 +3,13 @@
 ```
 DanCode/
 ├── client/                     # React + Vite + Tailwind frontend
-│   ├── public/                 # Static assets
+│   ├── public/                 # Static assets (PWA manifest, icons, service worker)
+│   │   ├── manifest.json       # PWA manifest: app name, theme color, standalone display, icons
+│   │   ├── icon-192.svg        # PWA icon 192x192 (SVG, Solarized Dark with "D" monogram)
+│   │   ├── icon-512.svg        # PWA icon 512x512 (SVG, maskable)
+│   │   └── sw.js               # Service worker: caches app shell, network-first for navigation
 │   ├── src/
-│   │   ├── App.jsx             # Root React component (auth gate, mobile/desktop routing, project form, command palette, sidebar, file explorer)
+│   │   ├── App.jsx             # Root React component (auth gate, mobile/desktop routing, project form, command palette, sidebar, file explorer, terminal activity)
 │   │   ├── App.test.jsx        # App unit tests (login/terminal/mobile/command-palette/sidebar/header-dropdown rendering)
 │   │   ├── CommandPalette.jsx  # Command palette overlay with fuzzy search for project switching (Ctrl+K)
 │   │   ├── FileExplorer.jsx   # Collapsible file explorer panel: lazy-loaded tree view, context menu, drag-to-terminal, .gitignore/.hidden toggles
@@ -13,10 +17,12 @@ DanCode/
 │   │   ├── CommandPalette.test.jsx # CommandPalette unit tests (fuzzy match, filtering, open/close, selection)
 │   │   ├── LoginScreen.jsx     # Username/password + TOTP login form
 │   │   ├── LoginScreen.test.jsx # LoginScreen component unit tests
-│   │   ├── MobileDashboard.jsx # Mobile project card grid with long-press quick actions (CLI/Claude)
-│   │   ├── MobileDashboard.test.jsx # MobileDashboard unit tests (cards, selection, quick actions)
-│   │   ├── MobileTerminalView.jsx # Full-screen mobile terminal: read-first, keyboard toggle, shortcut bar
-│   │   ├── MobileTerminalView.test.jsx # MobileTerminalView unit tests (read-first, back, tabs)
+│   │   ├── MobileDashboard.jsx # Mobile project card grid with activity indicators, terminal labels, pull-to-refresh, long-press quick actions
+│   │   ├── MobileDashboard.test.jsx # MobileDashboard unit tests (cards, selection, quick actions, activity indicators)
+│   │   ├── MobileTerminalList.jsx # Mobile terminal list for selected project with activity indicators and back navigation
+│   │   ├── MobileTerminalList.test.jsx # MobileTerminalList unit tests (terminal items, activity, back, selection)
+│   │   ├── MobileTerminalView.jsx # Full-screen mobile terminal: read-first, keyboard toggle, shortcut bar, swipe nav, dot indicators, project drawer
+│   │   ├── MobileTerminalView.test.jsx # MobileTerminalView unit tests (read-first, back, tabs, dots, drawer)
 │   │   ├── NewProjectForm.jsx  # New project creation form (name + path inputs, calls POST /api/projects)
 │   │   ├── NewProjectForm.test.jsx # NewProjectForm component unit tests
 │   │   ├── ShortcutBar.jsx     # Horizontal scrolling shortcut bar (Ctrl+C/V/D, Tab, arrows, Esc) with 44px tap targets
@@ -30,7 +36,7 @@ DanCode/
 │   │   ├── poc-terminal.js     # POC: standalone xterm.js page for new terminal API (E2E testing)
 │   │   ├── index.css           # Tailwind + Solarized Dark theme
 │   │   └── main.jsx            # Entry point
-│   ├── index.html              # HTML shell
+│   ├── index.html              # HTML shell with PWA manifest link, theme-color meta, service worker registration
 │   ├── poc-terminal.html       # POC: HTML entry point for standalone terminal page
 │   ├── vite.config.js          # Vite config (proxy, Tailwind plugin)
 │   ├── package.json            # Includes vitest test scripts
@@ -46,7 +52,7 @@ DanCode/
 │   │   ├── files.js            # File system API: list, read, write, mkdir, rename, delete with path traversal protection
 │   │   ├── index.js            # Server entry point (Express, Socket.io, REST API routes, terminal CRUD, file API)
 │   │   ├── projects.js         # Project config CRUD (create, list, get, delete) in ~/.dancode/projects/
-│   │   ├── terminal-manager.js # TerminalManager: tmux-backed PTY spawning, CRUD, ring buffer, reconcile, WebSocket /terminal/{uuid}
+│   │   ├── terminal-manager.js # TerminalManager: tmux-backed PTY spawning, CRUD, ring buffer, reconcile, WebSocket /terminal/{uuid}, lastActivity tracking
 │   │   ├── terminal.js         # (Legacy, emptied) Socket.io /terminal namespace
 │   │   └── tmux.js             # Tmux utility: create/kill/query sessions, capture pane, resize, send keys
 │   ├── tests/
@@ -74,6 +80,7 @@ DanCode/
 │   │   │   ├── tmux-persistence.spec.js # Playwright E2E test (tmux persistence: server restart, reconnect, scrollback replay)
 │   │   │   ├── mobile-terminal.spec.js # Playwright mobile emulation E2E (iPhone 12 viewport, read-first, shortcut bar, Ctrl+C)
 │   │   │   ├── file-explorer.spec.js # Playwright E2E test (expand dirs, create/rename/delete files, drag to terminal)
+│   │   │   ├── mobile-pwa.spec.js    # Playwright mobile emulation E2E (Pixel 5 viewport, PWA, dashboard nav, dots, swipe)
 │   │   │   └── visual.spec.js  # Midscene AI visual assertion test (DOM-based on Pi 5)
 │   │   ├── files.test.js       # File API unit tests (CRUD, path traversal rejection, gitignore filtering)
 │   │   ├── auth.test.js        # Auth account setup, login, session management tests

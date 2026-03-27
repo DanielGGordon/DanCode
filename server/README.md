@@ -22,8 +22,8 @@ Terminals are managed via the TerminalManager: REST CRUD at `/api/terminals` + S
 - **`POST /api/files/mkdir`** — Create directory. Accepts `{ path, project }`.
 - **`POST /api/files/rename`** — Rename/move. Accepts `{ oldPath, newPath, project }`.
 - **`DELETE /api/files?path=<path>&project=<slug>`** — Delete file or directory.
-- **`POST /api/terminals`** — Create a tmux-backed terminal. Accepts `{ projectSlug, label, command, cwd }`. Creates a tmux session, spawns `$SHELL` inside it, attaches node-pty for I/O relay. Returns 201 with `{ id, projectSlug, label, createdAt }`. Metadata (including tmuxSessionName) persisted to `~/.dancode/terminals/{id}.json`. Tmux details are not exposed in API responses.
-- **`GET /api/terminals?project=<slug>`** — List terminals, optionally filtered by project slug. Returns a JSON array.
+- **`POST /api/terminals`** — Create a tmux-backed terminal. Accepts `{ projectSlug, label, command, cwd }`. Creates a tmux session, spawns `$SHELL` inside it, attaches node-pty for I/O relay. Returns 201 with `{ id, projectSlug, label, createdAt, lastActivity }`. Metadata (including tmuxSessionName) persisted to `~/.dancode/terminals/{id}.json`. Tmux details are not exposed in API responses.
+- **`GET /api/terminals?project=<slug>`** — List terminals, optionally filtered by project slug. Returns a JSON array with `lastActivity` timestamp.
 - **`GET /api/terminals/:id`** — Get a single terminal by UUID. Returns 404 if not found.
 - **`PATCH /api/terminals/:id`** — Update a terminal's label. Accepts `{ label }`. Returns the updated terminal object.
 - **`DELETE /api/terminals/:id`** — Kill the PTY, destroy tmux session, and remove metadata. Returns 204.
@@ -94,7 +94,7 @@ Module emptied in Phase 2. All exports removed.
 - `getTerminalsDir()` — Returns the path to `~/.dancode/terminals/`.
 - `TerminalManager` — Class managing tmux-backed PTY terminal processes:
   - `constructor(terminalsDir?)` — Create a manager with optional custom metadata directory.
-  - `create({ projectSlug, label, command, cols, rows, cwd })` — Create tmux session, attach node-pty, persist metadata, return `{ id, projectSlug, label, createdAt }`.
+  - `create({ projectSlug, label, command, cols, rows, cwd })` — Create tmux session, attach node-pty, persist metadata, return `{ id, projectSlug, label, createdAt, lastActivity }`. `lastActivity` is updated on every PTY output event.
   - `reconcile()` — Reconcile tmux sessions with metadata on startup: reattach orphaned sessions (repopulate ring buffer from scrollback), clean up stale metadata. Returns `{ reattached, cleaned }`.
   - `get(id)` — Get terminal metadata (no tmux internals). Returns null if not found.
   - `list(projectSlug?)` — List terminals, optionally filtered by project.

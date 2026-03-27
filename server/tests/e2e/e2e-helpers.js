@@ -84,8 +84,11 @@ export async function login(page) {
   await page.evaluate((tok) => localStorage.setItem('dancode-auth-token', tok), token);
   await page.reload();
 
-  // Wait for authenticated view
-  await page.waitForSelector('[data-testid="new-project-button"]', { state: 'visible', timeout: 10000 });
+  // Wait for authenticated view (desktop OR mobile dashboard)
+  await Promise.race([
+    page.waitForSelector('[data-testid="new-project-button"]', { state: 'visible', timeout: 10000 }),
+    page.waitForSelector('[data-testid="mobile-dashboard"]', { state: 'visible', timeout: 10000 }),
+  ]);
 
   return token;
 }

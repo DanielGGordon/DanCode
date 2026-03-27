@@ -17,3 +17,11 @@
 - **Resize requires tmux pane resize**: When the browser resizes a terminal, both the node-pty and the tmux pane must be resized. The pty resize triggers a SIGWINCH to the tmux client, but the pane doesn't auto-expand to fill the window (especially after disabling status/borders). `resizePane()` must be called explicitly alongside `pty.resize()`.
 
 - **Server restart reconcile timing**: The `reconcile()` method captures tmux scrollback before spawning the new node-pty attachment. This ordering is critical — if reversed, the tmux client's initial rendering output floods the ring buffer before the scrollback can be captured. Future changes to reconcile must preserve this order.
+
+## After Phase 6 (proposed by Phase 6 generator)
+
+- **lastActivity not persisted to disk**: The `lastActivity` timestamp is tracked in-memory only (on the TerminalManager's Map entry). If the server restarts, `lastActivity` resets to `createdAt`. Consider persisting `lastActivity` to the terminal metadata JSON files periodically (e.g., every 30s) or on graceful shutdown if accurate activity tracking across restarts is needed.
+
+- **Terminal output preview for dashboard cards**: The acceptance criteria mention "last few lines of terminal output as preview" on dashboard project cards. This is not currently implemented because fetching ring buffer contents for all terminals on every dashboard load would be expensive. If this is needed, consider adding a `GET /api/terminals/:id/preview` endpoint that returns the last N lines from the ring buffer, or extending the `GET /api/terminals` response with a `preview` field that lazily extracts the last 3-5 lines.
+
+- **Service worker cache versioning**: The service worker uses a static `CACHE_NAME = 'dancode-v1'`. When deploying new versions, this must be manually bumped to bust the cache. Consider generating the cache name from the build hash or Vite's manifest to automate cache invalidation on deploys.
