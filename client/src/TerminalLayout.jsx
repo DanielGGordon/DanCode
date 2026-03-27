@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import Terminal from './Terminal.jsx'
 import ShortcutBar from './ShortcutBar.jsx'
 
@@ -22,7 +22,7 @@ function connectionDotClasses(state) {
   }
 }
 
-export default function TerminalLayout({ token, slug }) {
+const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) {
   const [terminals, setTerminals] = useState([])
   const [focusedIndex, setFocusedIndex] = useState(0)
   const [layoutMode, setLayoutMode] = useState('split')
@@ -264,8 +264,62 @@ export default function TerminalLayout({ token, slug }) {
   }, [])
 
   // Store terminal ref by id
-  const setTerminalRef = useCallback((id, ref) => {
-    terminalRefs.current[id] = ref
+  const setTerminalRef = useCallback((id, r) => {
+    terminalRefs.current[id] = r
+  }, [])
+
+  // Add terminal with custom cwd (used by file explorer "Open terminal here")
+  const handleAddTerminalWithCwd = useCallback(async (cwd) => {
+    if (!slug || !token) return
+    const label = `Terminal ${terminals.length + 1}`
+    try {
+      const res = await fetch('/api/terminals', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ projectSlug: slug, label, cwd }),
+      })
+      if (res.ok) {
+        const newTerm = await res.json()
+        setTerminals((prev) => [...prev, newTerm])
+        setFocusedIndex(terminals.length)
+      }
+    } catch {}
+  }, [slug, token, terminals.length])
+
+  // Insert text into focused terminal (used by file explorer drag/double-click)
+  const insertIntoFocusedTerminal = useCallback((text) => {
+    const focused = terminals[focusedIndex]
+    if (focused && terminalRefs.current[focused.id]) {
+      terminalRefs.current[focused.id].sendInput(text)
+    }
+  }, [terminals, focusedIndex])
+
+  // Expose methods to parent via ref
+  useImperativeHandle(ref, () => ({
+    addTerminalWithCwd: handleAddTerminalWithCwd,
+    insertIntoFocusedTerminal,
+  }), [handleAddTerminalWithCwd, insertIntoFocusedTerminal])
+
+  // Handle file drop from file explorer onto terminal panes
+  const handleFileDrop = useCallback((e, terminalIndex) => {
+    const filePath = e.dataTransfer.getData('application/x-dancode-file')
+    if (filePath) {
+      e.preventDefault()
+      const term = terminals[terminalIndex]
+      if (term && terminalRefs.current[term.id]) {
+        terminalRefs.current[term.id].sendInput(filePath)
+      }
+    }
+  }, [terminals])
+
+  const handleFileDragOver = useCallback((e) => {
+    if (e.dataTransfer.types.includes('application/x-dancode-file')) {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+    }
   }, [])
 
   // Tablet shortcut bar: send key sequence to focused terminal
@@ -401,6 +455,8 @@ export default function TerminalLayout({ token, slug }) {
                 }`}
                 onClick={() => handleTerminalClick(index)}
                 onMouseDown={handlePaneMouseDown}
+                onDragOver={handleFileDragOver}
+                onDrop={(e) => handleFileDrop(e, index)}
               >
                 <div
                   className={`px-3 py-1 text-xs font-medium border-b select-none flex items-center justify-between transition-colors duration-150 ${
@@ -469,6 +525,8 @@ export default function TerminalLayout({ token, slug }) {
                 key={term.id}
                 data-testid={`terminal-pane-${index}`}
                 className={`flex-1 min-h-0 flex flex-col ${isActive ? '' : 'hidden'}`}
+                onDragOver={handleFileDragOver}
+                onDrop={(e) => handleFileDrop(e, index)}
               >
                 <div
                   className="px-3 py-1 text-xs font-medium border-b select-none flex items-center justify-between text-base1 bg-blue/10 border-blue/50"
@@ -591,4 +649,6 @@ export default function TerminalLayout({ token, slug }) {
       )}
     </div>
   )
-}
+})
+
+export default TerminalLayout

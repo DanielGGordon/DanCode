@@ -338,7 +338,7 @@ app.post('/api/projects', async (req, res) => {
 
 // Terminal CRUD endpoints (new direct-PTY path, no tmux)
 app.post('/api/terminals', async (req, res) => {
-  const { projectSlug, label, command } = req.body || {};
+  const { projectSlug, label, command, cwd: requestedCwd } = req.body || {};
   if (!projectSlug || typeof projectSlug !== 'string') {
     return res.status(400).json({ error: 'projectSlug is required' });
   }
@@ -347,7 +347,19 @@ app.post('/api/terminals', async (req, res) => {
     let cwd = process.env.HOME;
     try {
       const project = await getProject(projectSlug, projectsDir);
-      if (project?.path) cwd = project.path;
+      if (project?.path) {
+        cwd = project.path;
+        // If a relative cwd was provided, resolve it within the project directory
+        if (requestedCwd && !requestedCwd.startsWith('/')) {
+          const resolved = join(project.path, requestedCwd);
+          // Validate it stays within the project
+          if (resolved.startsWith(project.path + '/') || resolved === project.path) {
+            cwd = resolved;
+          }
+        } else if (requestedCwd && requestedCwd.startsWith('/')) {
+          cwd = requestedCwd;
+        }
+      }
     } catch {
       // project doesn't exist, use HOME
     }
