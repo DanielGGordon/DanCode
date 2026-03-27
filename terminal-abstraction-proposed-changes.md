@@ -7,3 +7,11 @@
 - **Ring buffer size tuning**: The 50KB ring buffer uses string concatenation and slicing. For terminals with heavy output (e.g., build logs), this could cause GC pressure. If this becomes an issue, consider using a Buffer-based circular buffer with fixed allocation instead of string operations.
 
 - **Pre-existing test failures**: `terminal.test.js` has 14 failing tests (all timeouts) because the mock setup doesn't account for the auth session store — `validateSession` rejects the test token since it's never registered as a session. `tmux.test.js` has 4 failures related to `getOrphanedSessions` filtering logic. These are pre-existing and unrelated to Phase 1 but should be fixed before Phase 2.
+
+## After Phase 6 (proposed by Phase 6 generator)
+
+- **lastActivity not persisted to disk**: The `lastActivity` timestamp is tracked in-memory only (on the TerminalManager's Map entry). If the server restarts, `lastActivity` resets to `createdAt`. Consider persisting `lastActivity` to the terminal metadata JSON files periodically (e.g., every 30s) or on graceful shutdown if accurate activity tracking across restarts is needed.
+
+- **Terminal output preview for dashboard cards**: The acceptance criteria mention "last few lines of terminal output as preview" on dashboard project cards. This is not currently implemented because fetching ring buffer contents for all terminals on every dashboard load would be expensive. If this is needed, consider adding a `GET /api/terminals/:id/preview` endpoint that returns the last N lines from the ring buffer, or extending the `GET /api/terminals` response with a `preview` field that lazily extracts the last 3-5 lines.
+
+- **Service worker cache versioning**: The service worker uses a static `CACHE_NAME = 'dancode-v1'`. When deploying new versions, this must be manually bumped to bust the cache. Consider generating the cache name from the build hash or Vite's manifest to automate cache invalidation on deploys.

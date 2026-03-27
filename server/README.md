@@ -17,7 +17,7 @@ Terminals are managed via the TerminalManager: REST CRUD at `/api/terminals` + S
 - **`PATCH /api/projects/:slug`** — Update a project's config (layout preferences, terminal order). Accepts `{ layout: { mode, activeTab }, terminals: [...ids] }`. Returns the updated project object.
 - **`DELETE /api/projects/:slug`** — Delete a project's config file and its associated terminals. Returns 204 on success, 404 if the project does not exist.
 - **`POST /api/terminals`** — Create a direct PTY terminal. Accepts `{ projectSlug, label, command }`. Spawns `$SHELL` (or `/bin/bash`) with cwd set to the project's path. Returns 201 with `{ id, projectSlug, label, createdAt }`. Metadata persisted to `~/.dancode/terminals/{id}.json`.
-- **`GET /api/terminals?project=<slug>`** — List terminals, optionally filtered by project slug. Returns a JSON array.
+- **`GET /api/terminals?project=<slug>`** — List terminals, optionally filtered by project slug. Returns a JSON array with `lastActivity` timestamp (updated on each PTY output event).
 - **`GET /api/terminals/:id`** — Get a single terminal by UUID. Returns 404 if not found.
 - **`PATCH /api/terminals/:id`** — Update a terminal's label. Accepts `{ label }`. Returns the updated terminal object.
 - **`DELETE /api/terminals/:id`** — Kill the PTY process and remove metadata. Returns 204.
@@ -69,7 +69,7 @@ Module preserved for potential Phase 4 re-integration. All exports removed in Ph
 - `getTerminalsDir()` — Returns the path to `~/.dancode/terminals/`.
 - `TerminalManager` — Class managing direct PTY terminal processes:
   - `constructor(terminalsDir?)` — Create a manager with optional custom metadata directory.
-  - `create({ projectSlug, label, command, cols, rows, cwd })` — Spawn a PTY, persist metadata, return `{ id, projectSlug, label, createdAt }`.
+  - `create({ projectSlug, label, command, cols, rows, cwd })` — Spawn a PTY, persist metadata, return `{ id, projectSlug, label, createdAt, lastActivity }`. `lastActivity` is updated on every PTY output event.
   - `get(id)` — Get terminal metadata. Returns null if not found.
   - `list(projectSlug?)` — List terminals, optionally filtered by project.
   - `update(id, { label })` — Update terminal metadata.

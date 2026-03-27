@@ -38,8 +38,11 @@ npm run dev          # Start server + client concurrently
 - **Focused pane indicator** — 8px blue accent bar + dimmed unfocused panes
 - **Right-click context menu** on sidebar projects — Rename, Delete
 - **Keyboard shortcuts** — Ctrl+K command palette, Alt+arrows project switching, Ctrl+wheel font sizing
+- **PWA installable** — manifest.json with DanCode branding, Solarized Dark theme color (#002b36), standalone display; service worker caches app shell for offline-capable fast loading; installable on Android home screen
 - **Mobile terminal** — Full-screen read-first terminal on mobile (<1024px) with thin top bar, keyboard toggle, and horizontal shortcut bar (Ctrl+C/V/D, Tab, arrows, Esc) with 44px tap targets
-- **Mobile dashboard** — Project card grid with long-press quick actions (open CLI/Claude terminal)
+- **Mobile dashboard** — Project card grid with activity indicators (active/idle), terminal labels, last activity timestamps, pull-to-refresh, and long-press quick actions (open CLI/Claude terminal)
+- **Mobile navigation** — Three-level flow: dashboard → terminal list → full-screen terminal, with back button at each level
+- **Swipe gestures** — Swipe left/right between terminals with dot pagination indicators; swipe from left edge opens project drawer
 - **Pinch-to-zoom** — Touch gesture for terminal font size on mobile
 - **Tablet support** — Optional side-by-side terminals (768-1024px) with shortcut bar toggle
 - **TOTP authentication** — Username/password + TOTP-based login with QR code setup
