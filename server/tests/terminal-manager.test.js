@@ -79,6 +79,7 @@ describe('Terminal Manager', () => {
       expect(body.projectSlug).toBe('test-project');
       expect(body.label).toBe('CLI');
       expect(body.createdAt).toBeDefined();
+      expect(body.lastActivity).toBeDefined();
 
       // Cleanup
       await terminalManager.destroy(body.id);
@@ -159,6 +160,18 @@ describe('Terminal Manager', () => {
       const body = await res.json();
       expect(body.every((t) => t.projectSlug === 'proj-a')).toBe(true);
       expect(body.some((t) => t.id === terminalId1)).toBe(true);
+    });
+
+    it('includes lastActivity timestamp in response', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/terminals?project=proj-a`, {
+        headers: { Authorization: `Bearer ${storedToken}` },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      for (const t of body) {
+        expect(t.lastActivity).toBeDefined();
+        expect(new Date(t.lastActivity).getTime()).toBeGreaterThan(0);
+      }
     });
 
     it('returns empty array for unknown project', async () => {

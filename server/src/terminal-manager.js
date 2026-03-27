@@ -93,7 +93,7 @@ export class TerminalManager {
       }
     });
 
-    const meta = { id, projectSlug, label: label || 'Terminal', createdAt };
+    const meta = { id, projectSlug, label: label || 'Terminal', createdAt, lastActivity: createdAt };
 
     await writeFile(
       join(this.terminalsDir, `${id}.json`),
@@ -106,7 +106,6 @@ export class TerminalManager {
       ringBuffer,
       sockets: new Set(),
       exited: false,
-      lastActivity: createdAt,
     });
 
     if (command) {
