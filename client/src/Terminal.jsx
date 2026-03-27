@@ -9,7 +9,7 @@ import '@xterm/xterm/css/xterm.css'
  * - 'connecting': socket is being established
  * - 'connected': socket connected and receiving data
  * - 'disconnected': socket lost connection (network issue, server restart)
- * - 'session-exit': tmux session/pty process exited (session killed, tmux died)
+ * - 'session-exit': PTY process exited
  */
 
 const DEFAULT_FONT_SIZE = 14
@@ -26,7 +26,7 @@ function fallbackCopy(text) {
   document.body.removeChild(textarea)
 }
 
-export default function Terminal({ token, slug, pane, focused, onFocus }) {
+export default function Terminal({ token, terminalId, focused, onFocus }) {
   const containerRef = useRef(null)
   const termRef = useRef(null)
   const fitAddonRef = useRef(null)
@@ -37,7 +37,7 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
 
   const connect = useCallback(() => {
     const container = containerRef.current
-    if (!container) return
+    if (!container || !terminalId) return
 
     // Clean up any previous terminal
     if (termRef.current) {
@@ -88,8 +88,6 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
     fitAddonRef.current = fitAddon
 
     // Intercept Ctrl+C/V before xterm processes them as terminal input.
-    // Returning false tells xterm to ignore the key and not call preventDefault,
-    // so the browser's native behavior (paste event) can fire.
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown' || !(e.ctrlKey || e.metaKey)) return true
 
@@ -111,17 +109,12 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
     })
 
     // Defer socket connection so StrictMode cleanup can cancel it
-    // before a backend pty/tmux session is spawned.
     const connectTimer = setTimeout(() => {
       if (disposed) return
 
       fitAddon.fit()
-      const query = { cols: term.cols, rows: term.rows }
-      if (slug) query.slug = slug
-      if (pane != null) query.pane = pane
 
-      socket = io('/terminal', {
-        query,
+      socket = io(`/terminal/${terminalId}`, {
         auth: { token },
         transports: ['websocket'],
       })
@@ -143,7 +136,6 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
 
       socket.on('disconnect', (reason) => {
         if (!disposed && reason !== 'io client disconnect') {
-          // Only show disconnected state if not a deliberate client disconnect
           setConnectionState((prev) =>
             prev === 'session-exit' ? prev : 'disconnected'
           )
@@ -159,8 +151,6 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
       })
 
       const handleResize = () => {
-        // Skip when container is hidden (display: none) to avoid
-        // sending invalid dimensions to the tmux pane
         if (container.offsetWidth === 0 && container.offsetHeight === 0) return
         fitAddon.fit()
         socket.emit('resize', { cols: term.cols, rows: term.rows })
@@ -182,7 +172,7 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
 
     reconnectRef.current = cleanup
     return cleanup
-  }, [token, slug, pane])
+  }, [token, terminalId])
 
   useEffect(() => {
     connect()
@@ -201,7 +191,7 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
     }
   }, [focused])
 
-  // Notify parent when xterm receives native focus (e.g. direct click on terminal canvas)
+  // Notify parent when xterm receives native focus
   useEffect(() => {
     const container = containerRef.current
     if (!container || !onFocus) return
@@ -210,7 +200,7 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
     return () => container.removeEventListener('focusin', handler)
   })
 
-  // Ctrl+wheel to resize font — capture phase to intercept before xterm/tmux
+  // Ctrl+wheel to resize font
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
@@ -232,7 +222,7 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
     return () => container.removeEventListener('wheel', handler, { capture: true })
   }, [])
 
-  // Handle native paste events (fired by browser when Ctrl+V is not consumed by xterm)
+  // Handle native paste events
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
@@ -247,7 +237,6 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
   }, [])
 
   const handleReconnect = useCallback(() => {
-    // Tear down the old connection and start fresh
     if (reconnectRef.current) {
       reconnectRef.current()
       reconnectRef.current = null
@@ -257,10 +246,8 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
 
   const showOverlay = connectionState === 'disconnected' || connectionState === 'session-exit'
 
-  // Use capture phase so this fires before xterm.js swallows the event
   const handleMouseDown = useCallback(() => {
     if (onFocus) onFocus()
-    // Defer focus() so xterm finishes processing the mousedown first
     setTimeout(() => {
       if (termRef.current) termRef.current.focus()
     }, 0)
@@ -270,7 +257,7 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
     <div
       ref={containerRef}
       data-testid="terminal"
-      data-slug={slug || ''}
+      data-terminal-id={terminalId || ''}
       className="w-full h-full relative"
       onMouseDownCapture={handleMouseDown}
     >
@@ -284,8 +271,7 @@ export default function Terminal({ token, slug, pane, focused, onFocus }) {
               <>
                 <div className="text-red text-lg font-semibold">Session Ended</div>
                 <p className="text-base0 text-sm">
-                  The tmux session has exited{exitCode != null ? ` (code ${exitCode})` : ''}.
-                  Re-open this project to start a new session.
+                  The terminal process has exited{exitCode != null ? ` (code ${exitCode})` : ''}.
                 </p>
               </>
             ) : (

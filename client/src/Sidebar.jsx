@@ -1,16 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 
-function fallbackCopy(text) {
-  const textarea = document.createElement('textarea')
-  textarea.value = text
-  textarea.style.cssText = 'position:fixed;opacity:0'
-  document.body.appendChild(textarea)
-  textarea.select()
-  document.execCommand('copy')
-  document.body.removeChild(textarea)
-}
-
-export default function Sidebar({ projects, currentSlug, onSelect, onDelete, onRename, tmuxStatus, collapsed, onToggle }) {
+export default function Sidebar({ projects, currentSlug, onSelect, onDelete, onRename, collapsed, onToggle }) {
   const [menu, setMenu] = useState(null) // { slug, x, y }
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [renaming, setRenaming] = useState(null) // { slug, name }
@@ -54,17 +44,6 @@ export default function Sidebar({ projects, currentSlug, onSelect, onDelete, onR
     setRenaming(null)
   }, [onRename])
 
-  const handleCopyTmux = useCallback((project) => {
-    const session = project.tmuxSession || project.slug
-    const cmd = `tmux attach -t ${session}`
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(cmd).catch(() => fallbackCopy(cmd))
-    } else {
-      fallbackCopy(cmd)
-    }
-    setMenu(null)
-  }, [])
-
   return (
     <aside
       data-testid="sidebar"
@@ -81,7 +60,7 @@ export default function Sidebar({ projects, currentSlug, onSelect, onDelete, onR
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          {collapsed ? '▶' : '◀'}
+          {collapsed ? '\u25b6' : '\u25c0'}
         </button>
       </div>
       {!collapsed && <ul data-testid="sidebar-project-list" className="py-1">
@@ -91,17 +70,6 @@ export default function Sidebar({ projects, currentSlug, onSelect, onDelete, onR
           </li>
         )}
         {(projects || []).map((p) => {
-          const status = tmuxStatus?.[p.slug]
-          const dotClass = status === true
-            ? 'bg-green'
-            : status === false
-              ? 'bg-base01/40'
-              : 'bg-base01/20 animate-pulse'
-          const dotTitle = status === true
-            ? 'tmux session running'
-            : status === false
-              ? 'no tmux session'
-              : 'checking status\u2026'
           return (
             <li
               key={p.slug}
@@ -114,11 +82,6 @@ export default function Sidebar({ projects, currentSlug, onSelect, onDelete, onR
               onClick={() => onSelect?.(p.slug)}
               onContextMenu={(e) => handleContextMenu(e, p.slug)}
             >
-              <span
-                data-testid={`sidebar-status-${p.slug}`}
-                className={`inline-block w-2 h-2 rounded-full shrink-0 ${dotClass}`}
-                title={dotTitle}
-              />
               {renaming?.slug === p.slug ? (
                 <input
                   ref={renameRef}
@@ -179,16 +142,6 @@ export default function Sidebar({ projects, currentSlug, onSelect, onDelete, onR
                 }}
               >
                 Rename
-              </button>
-              <button
-                data-testid="context-copy-tmux"
-                className="w-full text-left px-3 py-1.5 text-sm text-base0 hover:bg-base03/50 hover:text-base1 transition-colors"
-                onClick={() => {
-                  const project = projects.find((p) => p.slug === menu.slug)
-                  if (project) handleCopyTmux(project)
-                }}
-              >
-                Copy tmux command
               </button>
               <div className="border-t border-base01/30 my-1" />
               <button

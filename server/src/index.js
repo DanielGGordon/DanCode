@@ -5,10 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync, mkdirSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
-import { ensureSession, createProjectSession, sessionExists, listSessions, listWindows, getOrphanedSessions, breakPanesIntoWindows, enableMouse, renameSession, cleanupStaleConnSessions, killWindow, killSession } from './tmux.js';
-import { setupTerminalNamespace } from './terminal.js';
 import { isAccountSetUp, createAccount, verifyLogin, createSession, validateSession, destroySession, getCredentialsPath } from './auth.js';
-import { validateProjectInput, createProject, createAdoptedProject, listProjects, getProject, updateProject, deleteProject, getProjectsDir, slugify, isValidSlug } from './projects.js';
+import { validateProjectInput, createProject, listProjects, getProject, updateProject, deleteProject, getProjectsDir, slugify, isValidSlug } from './projects.js';
 import { TerminalManager, setupTerminalManagerNamespace, getTerminalsDir } from './terminal-manager.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -167,37 +165,6 @@ app.get('/api/projects', async (req, res) => {
   }
 });
 
-app.get('/api/tmux-status', async (req, res) => {
-  try {
-    const projects = await listProjects(projectsDir);
-    const status = {};
-    await Promise.all(
-      projects.map(async (p) => {
-        const sessionName = p.tmuxSession || p.slug;
-        status[p.slug] = await sessionExists(sessionName);
-      })
-    );
-    res.json(status);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to check tmux status' });
-  }
-});
-
-app.get('/api/tmux/sessions', async (req, res) => {
-  try {
-    const [allSessions, projects] = await Promise.all([
-      listSessions(),
-      listProjects(projectsDir),
-    ]);
-
-    const orphaned = getOrphanedSessions(allSessions, projects);
-
-    res.json(orphaned.map((name) => ({ name })));
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to list tmux sessions' });
-  }
-});
-
 app.get('/api/projects/:slug', async (req, res) => {
   const { slug } = req.params;
   if (!isValidSlug(slug)) {
@@ -211,47 +178,6 @@ app.get('/api/projects/:slug', async (req, res) => {
     res.json(project);
   } catch (err) {
     res.status(500).json({ error: 'Failed to get project' });
-  }
-});
-
-app.get('/api/projects/:slug/panes', async (req, res) => {
-  const { slug } = req.params;
-  if (!isValidSlug(slug)) {
-    return res.status(400).json({ error: 'Invalid project slug' });
-  }
-  try {
-    const project = await getProject(slug, projectsDir);
-    if (!project) {
-      return res.status(404).json({ error: 'Project not found' });
-    }
-    const sessionName = project.tmuxSession || `dancode-${slug}`;
-    const windows = await listWindows(sessionName);
-    const panes = windows.map((w) => ({ index: w.index, label: w.name }));
-    res.json(panes);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to list panes' });
-  }
-});
-
-app.delete('/api/projects/:slug/panes/:windowIndex', async (req, res) => {
-  const { slug, windowIndex } = req.params;
-  if (!isValidSlug(slug)) {
-    return res.status(400).json({ error: 'Invalid project slug' });
-  }
-  const idx = parseInt(windowIndex, 10);
-  if (isNaN(idx)) {
-    return res.status(400).json({ error: 'Invalid window index' });
-  }
-  try {
-    const project = await getProject(slug, projectsDir);
-    if (!project) {
-      return res.status(404).json({ error: 'Project not found' });
-    }
-    const sessionName = project.tmuxSession || slug;
-    await killWindow(sessionName, idx);
-    res.status(204).end();
-  } catch (err) {
-    res.status(500).json({ error: `Failed to kill window: ${err.message}` });
   }
 });
 
@@ -306,31 +232,11 @@ app.patch('/api/projects/:slug', async (req, res) => {
   if (body.layout && typeof body.layout === 'object') {
     updates.layout = body.layout;
   }
-  if (typeof body.showTmuxCommands === 'boolean') {
-    updates.showTmuxCommands = body.showTmuxCommands;
+  if (Array.isArray(body.terminals)) {
+    updates.terminals = body.terminals;
   }
-
-  // Rename the project and its tmux session
   if (typeof body.name === 'string' && body.name.trim()) {
-    const newName = body.name.trim();
-    updates.name = newName;
-
-    // Also rename the tmux session if requested
-    if (typeof body.tmuxSession === 'string' && body.tmuxSession.trim()) {
-      const newTmuxName = body.tmuxSession.trim();
-      try {
-        const project = await getProject(slug, projectsDir);
-        if (project) {
-          const currentSession = project.tmuxSession || slug;
-          if (currentSession !== newTmuxName && await sessionExists(currentSession)) {
-            await renameSession(currentSession, newTmuxName);
-          }
-          updates.tmuxSession = newTmuxName;
-        }
-      } catch (err) {
-        return res.status(400).json({ error: `Failed to rename tmux session: ${err.message}` });
-      }
-    }
+    updates.name = body.name.trim();
   }
 
   if (Object.keys(updates).length === 0) {
@@ -358,13 +264,13 @@ app.delete('/api/projects/:slug', async (req, res) => {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    // Optionally kill the tmux session too
-    if (req.query.killSession === 'true') {
-      const sessionName = project.tmuxSession || slug;
+    // Kill all terminals for this project
+    const terminals = terminalManager.list(slug);
+    for (const t of terminals) {
       try {
-        await killSession(sessionName);
+        await terminalManager.destroy(t.id);
       } catch {
-        // Session may already be dead — continue with project deletion
+        // terminal may already be dead
       }
     }
 
@@ -376,64 +282,48 @@ app.delete('/api/projects/:slug', async (req, res) => {
 });
 
 app.post('/api/projects', async (req, res) => {
-  const { name, path, adoptSession } = req.body || {};
-
-  if (adoptSession) {
-    // Adopt mode: link to an existing tmux session without creating a new one
-    if (!name || typeof name !== 'string' || !name.trim()) {
-      return res.status(400).json({ error: 'Project name is required' });
-    }
-    const slug = slugify(name.trim());
-    if (!slug) {
-      return res.status(400).json({ error: 'Project name must contain at least one alphanumeric character' });
-    }
-    if (slug === TMUX_SESSION) {
-      return res.status(400).json({ error: 'Project name conflicts with a reserved session name' });
-    }
-
-    // Verify the tmux session actually exists
-    if (!(await sessionExists(adoptSession))) {
-      return res.status(400).json({ error: `Tmux session "${adoptSession}" does not exist` });
-    }
-
-    try {
-      // Break any multi-pane windows into separate windows so each
-      // gets its own xterm.js terminal in the browser
-      await breakPanesIntoWindows(adoptSession);
-      const project = await createAdoptedProject(name, adoptSession, projectsDir);
-      return res.status(201).json(project);
-    } catch (err) {
-      if (err.message.includes('already exists')) {
-        return res.status(409).json({ error: err.message });
-      }
-      return res.status(500).json({ error: 'Failed to create project' });
-    }
-  }
+  const { name, path } = req.body || {};
 
   const validation = validateProjectInput(name, path);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.error });
   }
 
-  // Reject slugs that would collide with the server's bootstrap tmux session
-  const slug = slugify(name.trim());
-  if (slug === TMUX_SESSION) {
-    return res.status(400).json({ error: `Project name conflicts with a reserved session name` });
-  }
-
   try {
     const project = await createProject(name, path, projectsDir);
 
-    // Spin up the tmux session with CLI + Claude panes
+    // Create default terminals: CLI (shell) + Claude
     try {
-      await createProjectSession(project.slug, project.path);
-    } catch (tmuxErr) {
-      // Roll back: remove the persisted project config
-      await deleteProject(project.slug, projectsDir);
-      return res.status(500).json({ error: `Failed to create tmux session: ${tmuxErr.message}` });
-    }
+      const cliTerminal = await terminalManager.create({
+        projectSlug: project.slug,
+        label: 'CLI',
+        cwd: project.path,
+      });
+      const claudeTerminal = await terminalManager.create({
+        projectSlug: project.slug,
+        label: 'Claude',
+        command: 'claude --dangerously-skip-permissions',
+        cwd: project.path,
+      });
 
-    res.status(201).json(project);
+      // Store terminal IDs and default layout in project config
+      await updateProject(project.slug, {
+        terminals: [cliTerminal.id, claudeTerminal.id],
+        layout: { mode: 'split', activeTab: 0 },
+      }, projectsDir);
+
+      // Return the updated project with terminals
+      const updated = await getProject(project.slug, projectsDir);
+      res.status(201).json(updated);
+    } catch (termErr) {
+      // Roll back: remove the persisted project config and any terminals
+      const terminals = terminalManager.list(project.slug);
+      for (const t of terminals) {
+        try { await terminalManager.destroy(t.id); } catch {}
+      }
+      await deleteProject(project.slug, projectsDir);
+      return res.status(500).json({ error: `Failed to create terminals: ${termErr.message}` });
+    }
   } catch (err) {
     if (err.message.includes('already exists')) {
       return res.status(409).json({ error: err.message });
@@ -520,39 +410,11 @@ io.on('connection', (socket) => {
 
 export { app, httpServer, io };
 
-const TMUX_SESSION = process.env.DANCODE_TMUX_SESSION || 'dancode-test';
-
-let terminalNamespaceRegistered = false;
 let terminalManagerNamespaceRegistered = false;
 
 export async function startServer(port = PORT, { credentialsPath: credPath, projectsDir: projDir, terminalsDir: termDir } = {}) {
   credentialsPath = credPath || getCredentialsPath();
   projectsDir = projDir || getProjectsDir();
-
-  // Enable mouse support globally so scroll works in all sessions
-  try {
-    await enableMouse();
-  } catch {}
-
-  // Clean up stale connection sessions from previous ungraceful shutdowns
-  try {
-    await cleanupStaleConnSessions();
-  } catch {}
-
-  try {
-    await ensureSession(TMUX_SESSION);
-  } catch (err) {
-    throw new Error(`Failed to ensure tmux session "${TMUX_SESSION}": ${err.message}`);
-  }
-
-  if (!terminalNamespaceRegistered) {
-    async function resolveSession(slug) {
-      const project = await getProject(slug, projectsDir);
-      return project?.tmuxSession || slug;
-    }
-    setupTerminalNamespace(io, TMUX_SESSION, resolveSession);
-    terminalNamespaceRegistered = true;
-  }
 
   // Set up TerminalManager (direct PTY, no tmux)
   const terminalsDir = termDir || getTerminalsDir();

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Terminal from './Terminal.jsx'
-import PaneLayout from './PaneLayout.jsx'
+import TerminalLayout from './TerminalLayout.jsx'
 import LoginScreen from './LoginScreen.jsx'
 import NewProjectForm from './NewProjectForm.jsx'
 import CommandPalette from './CommandPalette.jsx'
@@ -17,7 +17,6 @@ function App() {
   const [selectedProjectName, setSelectedProjectName] = useState(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [projects, setProjects] = useState([])
-  const [tmuxStatus, setTmuxStatus] = useState(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === 'true')
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef(null)
@@ -67,28 +66,9 @@ function App() {
     } catch {}
   }, [token])
 
-  // Fetch tmux session status for all projects
-  const fetchTmuxStatus = useCallback(async () => {
-    if (!token) return
-    try {
-      const res = await fetch('/api/tmux-status', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setTmuxStatus(data)
-      } else {
-        setTmuxStatus({})
-      }
-    } catch {
-      setTmuxStatus({})
-    }
-  }, [token])
-
   useEffect(() => {
     fetchProjects()
-    fetchTmuxStatus()
-  }, [fetchProjects, fetchTmuxStatus])
+  }, [fetchProjects])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -102,12 +82,11 @@ function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [dropdownOpen])
 
-  // Global keyboard shortcuts — capture phase so they work even when xterm has focus
+  // Global keyboard shortcuts
   useEffect(() => {
     if (!token) return
 
     function handleKeyDown(e) {
-      // Ctrl+K: toggle command palette
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         const tag = document.activeElement?.tagName
         if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return
@@ -115,13 +94,11 @@ function App() {
         e.stopPropagation()
         setPaletteOpen((prev) => !prev)
       }
-      // Escape: close palette
       if (e.key === 'Escape' && paletteOpen) {
         e.preventDefault()
         e.stopPropagation()
         setPaletteOpen(false)
       }
-      // Alt+Right: next project, Alt+Left: previous project
       if (e.altKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft') && Array.isArray(projects) && projects.length > 1) {
         e.preventDefault()
         e.stopPropagation()
@@ -158,7 +135,6 @@ function App() {
     setSelectedSlug(null)
     setSelectedProjectName(null)
     setProjects([])
-    setTmuxStatus(null)
   }
 
   if (validating) {
@@ -174,7 +150,6 @@ function App() {
     setSelectedSlug(project.slug)
     setSelectedProjectName(project.name || null)
     fetchProjects()
-    fetchTmuxStatus()
   }
 
   function handlePaletteSelect(slug) {
@@ -206,7 +181,7 @@ function App() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ name: newName, tmuxSession: newName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') }),
+        body: JSON.stringify({ name: newName }),
       })
       if (res.ok) {
         if (selectedSlug === slug) {
@@ -229,7 +204,6 @@ function App() {
           setSelectedProjectName(null)
         }
         fetchProjects()
-        fetchTmuxStatus()
       }
     } catch {}
   }
@@ -268,7 +242,7 @@ function App() {
                           : 'text-base0 hover:bg-base03/30 hover:text-base1'
                       }`}
                     >
-                      {p.slug === selectedSlug && <span className="mr-1.5">✓</span>}
+                      {p.slug === selectedSlug && <span className="mr-1.5">{'\u2713'}</span>}
                       {p.name || p.slug}
                     </button>
                   </li>
@@ -299,7 +273,6 @@ function App() {
           onSelect={handleSidebarSelect}
           onDelete={handleDeleteProject}
           onRename={handleRenameProject}
-          tmuxStatus={tmuxStatus}
           collapsed={sidebarCollapsed}
           onToggle={() => setSidebarCollapsed((prev) => {
             const next = !prev
@@ -315,9 +288,13 @@ function App() {
               onCancel={() => setShowNewProject(false)}
             />
           ) : selectedSlug ? (
-            <PaneLayout key={selectedSlug} token={token} slug={selectedSlug} />
+            <TerminalLayout key={selectedSlug} token={token} slug={selectedSlug} />
           ) : (
-            <Terminal token={token} />
+            <div data-testid="welcome-screen" className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <h2 className="text-lg text-base01 font-medium">Select a project or create a new one</h2>
+              </div>
+            </div>
           )}
         </main>
       </div>
