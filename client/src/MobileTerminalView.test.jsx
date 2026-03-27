@@ -123,7 +123,68 @@ describe('MobileTerminalView', () => {
     const { getByTestId } = render(<MobileTerminalView {...defaultProps} />)
     expect(getByTestId('mobile-terminal-area')).toBeDefined()
     fireEvent.click(getByTestId('mobile-terminal-area'))
-    // After click, shortcut bar should appear (input mode enabled)
     expect(getByTestId('shortcut-bar')).toBeDefined()
+  })
+
+  // Phase 6: Dot indicators
+  it('shows dot indicators when multiple terminals exist', () => {
+    const props = {
+      ...defaultProps,
+      terminals: [
+        { id: 'term-1', label: 'CLI' },
+        { id: 'term-2', label: 'Claude' },
+        { id: 'term-3', label: 'Shell' },
+      ],
+    }
+    const { getByTestId } = render(<MobileTerminalView {...props} />)
+    expect(getByTestId('dot-indicators')).toBeDefined()
+    expect(getByTestId('dot-0')).toBeDefined()
+    expect(getByTestId('dot-1')).toBeDefined()
+    expect(getByTestId('dot-2')).toBeDefined()
+  })
+
+  it('highlights the active terminal dot', () => {
+    const props = {
+      ...defaultProps,
+      terminals: [
+        { id: 'term-1', label: 'CLI' },
+        { id: 'term-2', label: 'Claude' },
+      ],
+    }
+    const { getByTestId } = render(<MobileTerminalView {...props} />)
+    expect(getByTestId('dot-0').className).toContain('bg-blue')
+    expect(getByTestId('dot-1').className).not.toContain('bg-blue')
+  })
+
+  it('does not show dot indicators for single terminal', () => {
+    const { queryByTestId } = render(<MobileTerminalView {...defaultProps} />)
+    expect(queryByTestId('dot-indicators')).toBeNull()
+  })
+
+  it('calls onSwitchTerminal when a dot is tapped', () => {
+    const onSwitch = vi.fn()
+    const props = {
+      ...defaultProps,
+      terminals: [
+        { id: 'term-1', label: 'CLI' },
+        { id: 'term-2', label: 'Claude' },
+      ],
+      onSwitchTerminal: onSwitch,
+    }
+    const { getByTestId } = render(<MobileTerminalView {...props} />)
+    fireEvent.click(getByTestId('dot-1'))
+    expect(onSwitch).toHaveBeenCalledWith('term-2')
+  })
+
+  // Phase 6: Project drawer
+  it('does not show project drawer by default', () => {
+    const props = {
+      ...defaultProps,
+      projects: [{ slug: 'proj-a', name: 'A' }, { slug: 'proj-b', name: 'B' }],
+      onSwitchProject: vi.fn(),
+    }
+    const { queryByTestId } = render(<MobileTerminalView {...props} />)
+    expect(queryByTestId('project-drawer')).toBeNull()
+    expect(queryByTestId('project-drawer-overlay')).toBeNull()
   })
 })

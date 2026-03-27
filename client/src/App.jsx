@@ -6,6 +6,7 @@ import NewProjectForm from './NewProjectForm.jsx'
 import CommandPalette from './CommandPalette.jsx'
 import Sidebar from './Sidebar.jsx'
 import MobileDashboard from './MobileDashboard.jsx'
+import MobileTerminalList from './MobileTerminalList.jsx'
 import MobileTerminalView from './MobileTerminalView.jsx'
 
 const TOKEN_KEY = 'dancode-auth-token'
@@ -41,8 +42,10 @@ function App() {
   const isMobile = useIsMobile()
 
   // Mobile-specific state
+  const [mobileView, setMobileView] = useState('dashboard') // 'dashboard' | 'terminals' | 'terminal'
   const [mobileTerminal, setMobileTerminal] = useState(null) // { id, label }
   const [mobileTerminals, setMobileTerminals] = useState([]) // all terminals for current project
+  const [projectTerminals, setProjectTerminals] = useState({}) // { [slug]: [...terminals with lastActivity] }
 
   useEffect(() => {
     if (!token) return
@@ -85,13 +88,43 @@ function App() {
       if (res.ok) {
         const data = await res.json()
         setProjects(data)
+        return data
       }
     } catch {}
+    return null
   }, [token])
 
   useEffect(() => {
     fetchProjects()
   }, [fetchProjects])
+
+  // Fetch terminal activity data for all projects (mobile dashboard)
+  const fetchAllTerminalActivity = useCallback(async () => {
+    if (!token || !isMobile) return
+    try {
+      const res = await fetch('/api/terminals', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const allTerminals = await res.json()
+        const grouped = {}
+        for (const t of allTerminals) {
+          if (!grouped[t.projectSlug]) grouped[t.projectSlug] = []
+          grouped[t.projectSlug].push(t)
+        }
+        setProjectTerminals(grouped)
+      }
+    } catch {}
+  }, [token, isMobile])
+
+  useEffect(() => {
+    fetchAllTerminalActivity()
+    // Refresh activity every 30 seconds
+    if (isMobile && token) {
+      const interval = setInterval(fetchAllTerminalActivity, 30000)
+      return () => clearInterval(interval)
+    }
+  }, [fetchAllTerminalActivity, isMobile, token])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -160,6 +193,8 @@ function App() {
     setProjects([])
     setMobileTerminal(null)
     setMobileTerminals([])
+    setMobileView('dashboard')
+    setProjectTerminals({})
   }
 
   if (validating) {
@@ -233,7 +268,7 @@ function App() {
     } catch {}
   }
 
-  // Mobile: open project and load its terminals, then show first one
+  // Mobile: tap project card → show terminal list
   async function handleMobileSelectProject(slug) {
     setSelectedSlug(slug)
     setSelectedProjectName(Array.isArray(projects) ? projects.find((p) => p.slug === slug)?.name || null : null)
@@ -244,11 +279,15 @@ function App() {
       if (res.ok) {
         const terms = await res.json()
         setMobileTerminals(terms)
-        if (terms.length > 0) {
-          setMobileTerminal(terms[0])
-        }
+        setMobileView('terminals')
       }
     } catch {}
+  }
+
+  // Mobile: tap terminal in list → open terminal view
+  function handleMobileSelectTerminal(terminal) {
+    setMobileTerminal(terminal)
+    setMobileView('terminal')
   }
 
   // Mobile: long-press quick action to open a specific terminal type
@@ -262,21 +301,27 @@ function App() {
       if (res.ok) {
         const terms = await res.json()
         setMobileTerminals(terms)
-        // Find the matching terminal by label
         const target = action === 'claude'
           ? terms.find((t) => /claude/i.test(t.label))
           : terms.find((t) => /cli/i.test(t.label))
         setMobileTerminal(target || terms[0] || null)
+        setMobileView('terminal')
       }
     } catch {}
   }
 
-  // Mobile: back from terminal view
-  function handleMobileBack() {
+  // Mobile: back from terminal view → terminal list
+  function handleMobileBackFromTerminal() {
     setMobileTerminal(null)
+    setMobileView('terminals')
+  }
+
+  // Mobile: back from terminal list → dashboard
+  function handleMobileBackFromList() {
     setMobileTerminals([])
     setSelectedSlug(null)
     setSelectedProjectName(null)
+    setMobileView('dashboard')
   }
 
   // Mobile: switch between terminals in the mobile view
@@ -285,18 +330,59 @@ function App() {
     if (t) setMobileTerminal(t)
   }
 
+  // Mobile: switch project from drawer
+  async function handleMobileSwitchProject(slug) {
+    setSelectedSlug(slug)
+    setSelectedProjectName(Array.isArray(projects) ? projects.find((p) => p.slug === slug)?.name || null : null)
+    try {
+      const res = await fetch(`/api/terminals?project=${slug}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const terms = await res.json()
+        setMobileTerminals(terms)
+        if (terms.length > 0) {
+          setMobileTerminal(terms[0])
+          setMobileView('terminal')
+        } else {
+          setMobileView('terminals')
+        }
+      }
+    } catch {}
+  }
+
+  // Mobile: pull-to-refresh on dashboard
+  async function handleMobileRefresh() {
+    await fetchProjects()
+    await fetchAllTerminalActivity()
+  }
+
   // --- Mobile layout ---
   if (isMobile) {
-    // Show mobile terminal view if a terminal is selected
-    if (mobileTerminal && selectedSlug) {
+    // Show mobile terminal view
+    if (mobileView === 'terminal' && mobileTerminal && selectedSlug) {
       return (
         <MobileTerminalView
           token={token}
           terminal={mobileTerminal}
           projectSlug={selectedSlug}
-          onBack={handleMobileBack}
+          onBack={handleMobileBackFromTerminal}
           terminals={mobileTerminals}
           onSwitchTerminal={handleMobileSwitchTerminal}
+          projects={projects}
+          onSwitchProject={handleMobileSwitchProject}
+        />
+      )
+    }
+
+    // Show terminal list for selected project
+    if (mobileView === 'terminals' && selectedSlug) {
+      return (
+        <MobileTerminalList
+          projectName={selectedProjectName}
+          terminals={mobileTerminals}
+          onSelectTerminal={handleMobileSelectTerminal}
+          onBack={handleMobileBackFromList}
         />
       )
     }
@@ -321,10 +407,12 @@ function App() {
     return (
       <MobileDashboard
         projects={projects}
+        projectTerminals={projectTerminals}
         onSelectProject={handleMobileSelectProject}
         onQuickAction={handleMobileQuickAction}
         onNewProject={() => setShowNewProject(true)}
         onLogout={handleLogout}
+        onRefresh={handleMobileRefresh}
       />
     )
   }

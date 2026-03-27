@@ -1,0 +1,23 @@
+{
+  "name": "DanCode",
+  "short_name": "DanCode",
+  "description": "Web-Based Project Terminal Manager",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#002b36",
+  "background_color": "#002b36",
+  "icons": [
+    {
+      "src": "/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

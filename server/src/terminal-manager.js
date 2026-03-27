@@ -76,6 +76,7 @@ export class TerminalManager {
       ringBuffer.append(data);
       const terminal = this.terminals.get(id);
       if (terminal) {
+        terminal.lastActivity = new Date().toISOString();
         for (const socket of terminal.sockets) {
           socket.emit('output', data);
         }
@@ -105,6 +106,7 @@ export class TerminalManager {
       ringBuffer,
       sockets: new Set(),
       exited: false,
+      lastActivity: createdAt,
     });
 
     if (command) {
@@ -120,7 +122,7 @@ export class TerminalManager {
   get(id) {
     const terminal = this.terminals.get(id);
     if (!terminal) return null;
-    return { id: terminal.id, projectSlug: terminal.projectSlug, label: terminal.label, createdAt: terminal.createdAt };
+    return { id: terminal.id, projectSlug: terminal.projectSlug, label: terminal.label, createdAt: terminal.createdAt, lastActivity: terminal.lastActivity };
   }
 
   /**
@@ -135,6 +137,7 @@ export class TerminalManager {
           projectSlug: terminal.projectSlug,
           label: terminal.label,
           createdAt: terminal.createdAt,
+          lastActivity: terminal.lastActivity,
         });
       }
     }
@@ -157,6 +160,7 @@ export class TerminalManager {
       projectSlug: terminal.projectSlug,
       label: terminal.label,
       createdAt: terminal.createdAt,
+      lastActivity: terminal.lastActivity,
     };
 
     await writeFile(

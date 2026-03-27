@@ -11,6 +11,16 @@ const mockProjects = [
   { slug: 'proj-b', name: 'Project B', path: '/home/user/b' },
 ]
 
+const mockProjectTerminals = {
+  'proj-a': [
+    { id: 't1', label: 'CLI', lastActivity: new Date().toISOString() },
+    { id: 't2', label: 'Claude', lastActivity: new Date(Date.now() - 120000).toISOString() },
+  ],
+  'proj-b': [
+    { id: 't3', label: 'CLI', lastActivity: new Date(Date.now() - 3600000).toISOString() },
+  ],
+}
+
 describe('MobileDashboard', () => {
   it('renders project cards for each project', () => {
     const { getByTestId } = render(
@@ -98,5 +108,62 @@ describe('MobileDashboard', () => {
     const card = getByTestId('project-card-proj-a')
     expect(card.textContent).toContain('Project A')
     expect(card.textContent).toContain('/home/user/a')
+  })
+
+  // Phase 6: Activity indicators
+  it('shows activity indicator per project card', () => {
+    const { getByTestId } = render(
+      <MobileDashboard
+        projects={mockProjects}
+        projectTerminals={mockProjectTerminals}
+        onSelectProject={() => {}}
+      />
+    )
+    const indicatorA = getByTestId('activity-indicator-proj-a')
+    const indicatorB = getByTestId('activity-indicator-proj-b')
+    expect(indicatorA).toBeDefined()
+    expect(indicatorB).toBeDefined()
+    // Project A has recent activity (< 60s), should be active (green)
+    expect(indicatorA.className).toContain('bg-green')
+    // Project B has old activity (1h ago), should be idle
+    expect(indicatorB.className).toContain('bg-base01')
+  })
+
+  it('shows terminal labels on project cards', () => {
+    const { getByTestId } = render(
+      <MobileDashboard
+        projects={mockProjects}
+        projectTerminals={mockProjectTerminals}
+        onSelectProject={() => {}}
+      />
+    )
+    expect(getByTestId('terminal-label-proj-a-0').textContent).toBe('CLI')
+    expect(getByTestId('terminal-label-proj-a-1').textContent).toBe('Claude')
+    expect(getByTestId('terminal-label-proj-b-0').textContent).toBe('CLI')
+  })
+
+  it('shows last activity time on project cards', () => {
+    const { getByTestId } = render(
+      <MobileDashboard
+        projects={mockProjects}
+        projectTerminals={mockProjectTerminals}
+        onSelectProject={() => {}}
+      />
+    )
+    expect(getByTestId('last-activity-proj-a').textContent).toBe('just now')
+    expect(getByTestId('last-activity-proj-b').textContent).toBe('1h ago')
+  })
+
+  it('shows pull-to-refresh indicator when pulling down', () => {
+    const onRefresh = vi.fn(() => Promise.resolve())
+    const { getByTestId, queryByTestId } = render(
+      <MobileDashboard
+        projects={mockProjects}
+        onSelectProject={() => {}}
+        onRefresh={onRefresh}
+      />
+    )
+    // Initially no indicator
+    expect(queryByTestId('pull-to-refresh-indicator')).toBeNull()
   })
 })
