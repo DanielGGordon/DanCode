@@ -1,7 +1,7 @@
 import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { authenticator } from 'otplib';
+import { generate } from 'otplib';
 
 /**
  * Shared E2E test helpers.
@@ -33,7 +33,7 @@ export async function login(page) {
   }
 
   // Generate TOTP code
-  const totpCode = authenticator.generate(creds.totpSecret);
+  const totpCode = await generate({ secret: creds.totpSecret });
 
   // Login via API
   const response = await page.request.post('/api/auth/login', {

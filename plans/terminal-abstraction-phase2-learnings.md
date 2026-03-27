@@ -34,8 +34,8 @@ Terminal.jsx calls `attachCustomKeyEventHandler`, `getSelection`, `clearSelectio
 ### 5. LoginScreen phases require async test setup
 The new LoginScreen fetches `/api/auth/setup/status` on mount to decide which phase to show (loading → setup | login). Tests that render LoginScreen must mock this endpoint and `await waitFor(() => ...)` for the form to appear. Synchronous assertions (like the old tests) always hit the "Loading..." state. **Takeaway**: Components with async initialization need async test patterns — you can't just render and assert.
 
-### 6. terminal-poc.spec.js had wrong otplib import
-The original test used `import { generate } from 'otplib'` which doesn't exist — the correct import is `import { authenticator } from 'otplib'` and then `authenticator.generate(secret)`. This test was written before the auth rewrite was fully integrated. **Takeaway**: Verify imports against the library's actual API, especially after upgrading auth libraries.
+### 6. E2E files had wrong otplib import
+The E2E helpers and terminal-poc.spec.js used `import { authenticator } from 'otplib'` with `authenticator.generate(secret)`, but the installed otplib exports `generate` as a named function: `import { generate } from 'otplib'` with `await generate({ secret })`. The server's own `auth.js` had the correct import all along. **Takeaway**: Verify imports against the library's actual API and match what the production code already uses.
 
 ### 7. Scope of tmux removal
 The plan said to "empty" tmux.js and terminal.js rather than delete them (preserving for Phase 4). This is the right call — Phase 4 will re-introduce tmux as an invisible persistence layer behind TerminalManager. The files serve as placeholders and their existing tests still pass (both have single placeholder tests).

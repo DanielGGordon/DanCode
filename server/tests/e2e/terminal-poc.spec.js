@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { authenticator } from 'otplib';
+import { generate } from 'otplib';
 
 const BACKEND_URL = 'http://localhost:3001';
 const FRONTEND_URL = 'http://localhost:5174';
@@ -42,7 +42,7 @@ async function getAuthToken() {
     }
   }
 
-  const totpCode = authenticator.generate(totpSecret);
+  const totpCode = await generate({ secret: totpSecret });
   const loginRes = await fetch(`${BACKEND_URL}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
