@@ -182,6 +182,14 @@ export class TerminalManager {
       const sessionAlive = await tmuxHasSession(tmuxName);
 
       if (sessionAlive) {
+        // Populate ring buffer from tmux scrollback BEFORE attaching
+        // (attaching triggers tmux rendering output that would mix with scrollback)
+        const ringBuffer = new RingBuffer();
+        const scrollback = await tmuxCapturePane(tmuxName);
+        if (scrollback) {
+          ringBuffer.append(scrollback);
+        }
+
         // Reattach: spawn node-pty to connect to the existing tmux session
         const ptyProcess = pty.spawn('tmux', ['attach-session', '-t', tmuxName], {
           name: 'xterm-256color',
@@ -189,13 +197,6 @@ export class TerminalManager {
           rows: 24,
           env: process.env,
         });
-
-        // Populate ring buffer from tmux scrollback
-        const ringBuffer = new RingBuffer();
-        const scrollback = await tmuxCapturePane(tmuxName);
-        if (scrollback) {
-          ringBuffer.append(scrollback);
-        }
 
         ptyProcess.onData((data) => {
           ringBuffer.append(data);

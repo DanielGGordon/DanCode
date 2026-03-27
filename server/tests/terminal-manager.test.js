@@ -9,6 +9,8 @@ import { generate } from 'otplib';
 import { io as ioClient } from 'socket.io-client';
 import { startServer, httpServer, terminalManager } from '../src/index.js';
 import { clearSessions } from '../src/auth.js';
+import { hasSession as tmuxHasSession, capturePane as tmuxCapturePane, killSession as tmuxKillSession } from '../src/tmux.js';
+import { TerminalManager } from '../src/terminal-manager.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -55,7 +57,7 @@ describe('Terminal Manager', () => {
     });
     const loginData = await loginRes.json();
     storedToken = loginData.token;
-  });
+  }, 30000);
 
   afterAll(async () => {
     if (terminalManager) {
@@ -68,7 +70,7 @@ describe('Terminal Manager', () => {
     if (tempDir) {
       await rm(tempDir, { recursive: true, force: true });
     }
-  });
+  }, 30000);
 
   describe('POST /api/terminals', () => {
     it('creates a terminal with projectSlug and label', async () => {
@@ -643,6 +645,280 @@ describe('Terminal Manager', () => {
       expect(output).toContain('cmd-executed');
 
       socket.disconnect();
+      await terminalManager.destroy(id);
+    });
+  });
+
+  describe('Phase 4: tmux session management', () => {
+    it('creates terminal with tmux session named dancode-{slug}-{id}', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/terminals`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ projectSlug: 'tmux-test', label: 'Tmux Test' }),
+      });
+      const { id } = await res.json();
+
+      const tmuxName = terminalManager.getTmuxSessionName(id);
+      expect(tmuxName).toBe(`dancode-tmux-test-${id}`);
+      expect(await tmuxHasSession(tmuxName)).toBe(true);
+
+      await terminalManager.destroy(id);
+    });
+
+    it('tmux ls shows dancode-managed sessions with clean names', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/terminals`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ projectSlug: 'tmux-ls-test', label: 'LS Test' }),
+      });
+      const { id } = await res.json();
+
+      const tmuxName = terminalManager.getTmuxSessionName(id);
+
+      // Verify via tmux ls
+      const { stdout } = await execFileAsync('tmux', ['list-sessions', '-F', '#{session_name}']);
+      const sessions = stdout.trim().split('\n');
+      expect(sessions).toContain(tmuxName);
+
+      await terminalManager.destroy(id);
+    });
+
+    it('tmux session is destroyed when terminal is deleted', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/terminals`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ projectSlug: 'tmux-destroy', label: 'Destroy' }),
+      });
+      const { id } = await res.json();
+
+      const tmuxName = terminalManager.getTmuxSessionName(id);
+      expect(await tmuxHasSession(tmuxName)).toBe(true);
+
+      await terminalManager.destroy(id);
+      expect(await tmuxHasSession(tmuxName)).toBe(false);
+    });
+
+    it('API responses do not contain tmux concepts', async () => {
+      const createRes = await fetch(`http://localhost:${TEST_PORT}/api/terminals`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ projectSlug: 'api-clean', label: 'Clean API' }),
+      });
+      const createBody = await createRes.json();
+      expect(JSON.stringify(createBody).toLowerCase()).not.toContain('tmux');
+
+      const getRes = await fetch(`http://localhost:${TEST_PORT}/api/terminals/${createBody.id}`, {
+        headers: { Authorization: `Bearer ${storedToken}` },
+      });
+      const getBody = await getRes.json();
+      expect(JSON.stringify(getBody).toLowerCase()).not.toContain('tmux');
+
+      const listRes = await fetch(`http://localhost:${TEST_PORT}/api/terminals?project=api-clean`, {
+        headers: { Authorization: `Bearer ${storedToken}` },
+      });
+      const listBody = await listRes.json();
+      expect(JSON.stringify(listBody).toLowerCase()).not.toContain('tmux');
+
+      await terminalManager.destroy(createBody.id);
+    });
+
+    it('metadata file includes tmuxSessionName field', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/terminals`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ projectSlug: 'meta-tmux', label: 'Meta Tmux' }),
+      });
+      const { id } = await res.json();
+
+      const metaPath = join(terminalsDir, `${id}.json`);
+      const meta = JSON.parse(await readFile(metaPath, 'utf-8'));
+      expect(meta.tmuxSessionName).toBe(`dancode-meta-tmux-${id}`);
+
+      await terminalManager.destroy(id);
+    });
+
+    it('input from tmux attach and browser are interleaved', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/terminals`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ projectSlug: 'interleave', label: 'Interleave' }),
+      });
+      const { id } = await res.json();
+      const tmuxName = terminalManager.getTmuxSessionName(id);
+
+      // Connect via WebSocket (browser side)
+      const socket = ioClient(`http://localhost:${TEST_PORT}/terminal/${id}`, {
+        forceNew: true,
+        transports: ['websocket'],
+        auth: { token: storedToken },
+      });
+      await new Promise((resolve) => socket.on('connect', resolve));
+
+      // Send input from tmux (host side)
+      await execFileAsync('tmux', ['send-keys', '-t', tmuxName, 'echo TMUX_HOST_INPUT', 'Enter']);
+
+      // Wait for output to appear via WebSocket
+      const output = await new Promise((resolve) => {
+        let buffer = '';
+        socket.on('output', (data) => {
+          buffer += data;
+          if (buffer.includes('TMUX_HOST_INPUT')) {
+            resolve(buffer);
+          }
+        });
+        setTimeout(() => resolve(buffer), 5000);
+      });
+
+      expect(output).toContain('TMUX_HOST_INPUT');
+
+      socket.disconnect();
+      await terminalManager.destroy(id);
+    });
+  });
+
+  describe('Phase 4: server restart reconciliation', () => {
+    it('reattaches to surviving tmux sessions after simulated restart', { timeout: 30000 }, async () => {
+      // Create a terminal
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/terminals`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ projectSlug: 'restart-test', label: 'Restart' }),
+      });
+      const { id } = await res.json();
+      const tmuxName = terminalManager.getTmuxSessionName(id);
+
+      // Send some content to the terminal
+      const socket = ioClient(`http://localhost:${TEST_PORT}/terminal/${id}`, {
+        forceNew: true,
+        transports: ['websocket'],
+        auth: { token: storedToken },
+      });
+      await new Promise((resolve) => socket.on('connect', resolve));
+
+      const outputPromise = new Promise((resolve) => {
+        let buffer = '';
+        socket.on('output', (data) => {
+          buffer += data;
+          if (buffer.includes('BEFORE_RESTART')) resolve(buffer);
+        });
+        setTimeout(() => resolve(buffer), 5000);
+      });
+      socket.emit('input', 'echo BEFORE_RESTART\n');
+      await outputPromise;
+      socket.disconnect();
+
+      // Simulate server restart: kill the pty (but NOT the tmux session),
+      // clear the in-memory terminals map, then reconcile
+      const oldTerminal = terminalManager.terminals.get(id);
+      try { oldTerminal.pty.kill(); } catch {}
+      terminalManager.terminals.clear();
+
+      // Wait for tmux to settle after client detach
+      await new Promise((r) => setTimeout(r, 500));
+
+      // Verify tmux session still exists
+      expect(await tmuxHasSession(tmuxName)).toBe(true);
+
+      // Verify capturePane returns the expected content
+      const capturedContent = await tmuxCapturePane(tmuxName);
+      expect(capturedContent).toContain('BEFORE_RESTART');
+
+      // Reconcile (simulates startup)
+      const { reattached, cleaned } = await terminalManager.reconcile();
+      expect(reattached).toBeGreaterThanOrEqual(1);
+
+      // Terminal should be back in the manager
+      const meta = terminalManager.get(id);
+      expect(meta).not.toBeNull();
+      expect(meta.id).toBe(id);
+      expect(meta.label).toBe('Restart');
+
+      // Ring buffer should contain previous output from tmux scrollback
+      // Check the ring buffer directly (tmux rendering escape sequences make
+      // WebSocket output unreliable for simple string matching)
+      const terminal = terminalManager.terminals.get(id);
+      expect(terminal).toBeDefined();
+      const ringContents = terminal.ringBuffer.getContents();
+      expect(ringContents).toContain('BEFORE_RESTART');
+
+      // Also verify via WebSocket reconnection (replay includes ring buffer)
+      const reconnectSocket = ioClient(`http://localhost:${TEST_PORT}/terminal/${id}`, {
+        forceNew: true,
+        transports: ['websocket'],
+        auth: { token: storedToken },
+      });
+
+      const replayOutput = await new Promise((resolve) => {
+        let buffer = '';
+        reconnectSocket.on('output', (data) => {
+          buffer += data;
+        });
+        setTimeout(() => resolve(buffer), 3000);
+      });
+
+      // The ring buffer replay is sent first, then tmux rendering starts
+      expect(replayOutput.length).toBeGreaterThan(0);
+
+      reconnectSocket.disconnect();
+      await terminalManager.destroy(id);
+    });
+
+    it('cleans up stale metadata when tmux session is gone', async () => {
+      // Create a terminal
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/terminals`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ projectSlug: 'stale-test', label: 'Stale' }),
+      });
+      const { id } = await res.json();
+      const tmuxName = terminalManager.getTmuxSessionName(id);
+
+      // Kill the tmux session and pty, clear in-memory state
+      try { terminalManager.terminals.get(id).pty.kill(); } catch {}
+      await tmuxKillSession(tmuxName);
+      terminalManager.terminals.delete(id);
+
+      // Metadata file should still exist
+      const metaPath = join(terminalsDir, `${id}.json`);
+      expect(existsSync(metaPath)).toBe(true);
+
+      // Reconcile should clean up stale metadata
+      const { cleaned } = await terminalManager.reconcile();
+      expect(cleaned).toBeGreaterThanOrEqual(1);
+
+      // Metadata file should be removed
+      expect(existsSync(metaPath)).toBe(false);
+
+      // Terminal should not be in the manager
+      expect(terminalManager.get(id)).toBeNull();
+    });
+
+    it('orphaned tmux sessions (metadata exists, no PTY handle) are reattached', async () => {
+      // Create a terminal
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/terminals`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ projectSlug: 'orphan-test', label: 'Orphan' }),
+      });
+      const { id } = await res.json();
+      const tmuxName = terminalManager.getTmuxSessionName(id);
+
+      // Simulate orphan: kill pty but keep tmux session alive and metadata on disk
+      const terminal = terminalManager.terminals.get(id);
+      try { terminal.pty.kill(); } catch {}
+      terminalManager.terminals.delete(id);
+
+      // Verify state: tmux alive, no in-memory handle
+      expect(await tmuxHasSession(tmuxName)).toBe(true);
+      expect(terminalManager.get(id)).toBeNull();
+
+      // Reconcile should reattach
+      await terminalManager.reconcile();
+
+      // Terminal should be back
+      expect(terminalManager.get(id)).not.toBeNull();
+      expect(terminalManager.getTmuxSessionName(id)).toBe(tmuxName);
+
       await terminalManager.destroy(id);
     });
   });
