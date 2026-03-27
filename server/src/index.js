@@ -8,6 +8,7 @@ import { writeFile } from 'node:fs/promises';
 import { isAccountSetUp, createAccount, verifyLogin, createSession, validateSession, destroySession, getCredentialsPath } from './auth.js';
 import { validateProjectInput, createProject, listProjects, getProject, updateProject, deleteProject, getProjectsDir, slugify, isValidSlug } from './projects.js';
 import { TerminalManager, setupTerminalManagerNamespace, getTerminalsDir } from './terminal-manager.js';
+import { listDirectory, readFileContent, writeFileContent, createDirectory, renameFile, deleteFile, safePath } from './files.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -238,6 +239,9 @@ app.patch('/api/projects/:slug', async (req, res) => {
   if (typeof body.name === 'string' && body.name.trim()) {
     updates.name = body.name.trim();
   }
+  if (body.fileExplorer && typeof body.fileExplorer === 'object') {
+    updates.fileExplorer = body.fileExplorer;
+  }
 
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: 'No valid fields to update' });
@@ -334,7 +338,7 @@ app.post('/api/projects', async (req, res) => {
 
 // Terminal CRUD endpoints (new direct-PTY path, no tmux)
 app.post('/api/terminals', async (req, res) => {
-  const { projectSlug, label, command } = req.body || {};
+  const { projectSlug, label, command, cwd: requestedCwd } = req.body || {};
   if (!projectSlug || typeof projectSlug !== 'string') {
     return res.status(400).json({ error: 'projectSlug is required' });
   }
@@ -343,7 +347,19 @@ app.post('/api/terminals', async (req, res) => {
     let cwd = process.env.HOME;
     try {
       const project = await getProject(projectSlug, projectsDir);
-      if (project?.path) cwd = project.path;
+      if (project?.path) {
+        cwd = project.path;
+        // If a relative cwd was provided, resolve it within the project directory
+        if (requestedCwd && !requestedCwd.startsWith('/')) {
+          const resolved = join(project.path, requestedCwd);
+          // Validate it stays within the project
+          if (resolved.startsWith(project.path + '/') || resolved === project.path) {
+            cwd = resolved;
+          }
+        } else if (requestedCwd && requestedCwd.startsWith('/')) {
+          cwd = requestedCwd;
+        }
+      }
     } catch {
       // project doesn't exist, use HOME
     }
@@ -388,6 +404,117 @@ app.delete('/api/terminals/:id', async (req, res) => {
     res.status(204).end();
   } catch (err) {
     res.status(500).json({ error: `Failed to delete terminal: ${err.message}` });
+  }
+});
+
+// ---------- File Explorer API ----------
+
+/**
+ * Helper to resolve a project slug to its root directory path.
+ */
+async function resolveProjectRoot(slug) {
+  if (!isValidSlug(slug)) return null;
+  const project = await getProject(slug, projectsDir);
+  return project?.path || null;
+}
+
+app.get('/api/files', async (req, res) => {
+  const { path: dirPath, project, showHidden, showIgnored } = req.query;
+  const projectRoot = await resolveProjectRoot(project);
+  if (!projectRoot) return res.status(404).json({ error: 'Project not found' });
+
+  try {
+    const entries = await listDirectory(projectRoot, dirPath || '.', {
+      showHidden: showHidden === 'true',
+      showIgnored: showIgnored === 'true',
+    });
+    res.json(entries);
+  } catch (err) {
+    if (err.code === 'TRAVERSAL') return res.status(403).json({ error: err.message });
+    if (err.code === 'ENOENT') return res.status(404).json({ error: 'Directory not found' });
+    res.status(500).json({ error: `Failed to list directory: ${err.message}` });
+  }
+});
+
+app.get('/api/files/read', async (req, res) => {
+  const { path: filePath, project } = req.query;
+  const projectRoot = await resolveProjectRoot(project);
+  if (!projectRoot) return res.status(404).json({ error: 'Project not found' });
+  if (!filePath) return res.status(400).json({ error: 'path is required' });
+
+  try {
+    const content = await readFileContent(projectRoot, filePath);
+    res.json({ content });
+  } catch (err) {
+    if (err.code === 'TRAVERSAL') return res.status(403).json({ error: err.message });
+    if (err.code === 'ENOENT') return res.status(404).json({ error: 'File not found' });
+    if (err.code === 'EISDIR') return res.status(400).json({ error: 'Cannot read a directory' });
+    if (err.code === 'TOOLARGE') return res.status(413).json({ error: 'File exceeds 1MB limit' });
+    res.status(500).json({ error: `Failed to read file: ${err.message}` });
+  }
+});
+
+app.put('/api/files/write', async (req, res) => {
+  const { path: filePath, content, project } = req.body || {};
+  const projectRoot = await resolveProjectRoot(project);
+  if (!projectRoot) return res.status(404).json({ error: 'Project not found' });
+  if (!filePath) return res.status(400).json({ error: 'path is required' });
+  if (typeof content !== 'string') return res.status(400).json({ error: 'content must be a string' });
+
+  try {
+    await writeFileContent(projectRoot, filePath, content);
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code === 'TRAVERSAL') return res.status(403).json({ error: err.message });
+    res.status(500).json({ error: `Failed to write file: ${err.message}` });
+  }
+});
+
+app.post('/api/files/mkdir', async (req, res) => {
+  const { path: dirPath, project } = req.body || {};
+  const projectRoot = await resolveProjectRoot(project);
+  if (!projectRoot) return res.status(404).json({ error: 'Project not found' });
+  if (!dirPath) return res.status(400).json({ error: 'path is required' });
+
+  try {
+    await createDirectory(projectRoot, dirPath);
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code === 'TRAVERSAL') return res.status(403).json({ error: err.message });
+    res.status(500).json({ error: `Failed to create directory: ${err.message}` });
+  }
+});
+
+app.post('/api/files/rename', async (req, res) => {
+  const { oldPath, newPath, project } = req.body || {};
+  const projectRoot = await resolveProjectRoot(project);
+  if (!projectRoot) return res.status(404).json({ error: 'Project not found' });
+  if (!oldPath || !newPath) return res.status(400).json({ error: 'oldPath and newPath are required' });
+
+  try {
+    await renameFile(projectRoot, oldPath, newPath);
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code === 'TRAVERSAL') return res.status(403).json({ error: err.message });
+    if (err.code === 'ENOENT') return res.status(404).json({ error: 'Source file not found' });
+    res.status(500).json({ error: `Failed to rename: ${err.message}` });
+  }
+});
+
+app.delete('/api/files', async (req, res) => {
+  const { path: filePath, project } = req.query;
+  const projectRoot = await resolveProjectRoot(project);
+  if (!projectRoot) return res.status(404).json({ error: 'Project not found' });
+  if (!filePath) return res.status(400).json({ error: 'path is required' });
+
+  try {
+    await deleteFile(projectRoot, filePath);
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code === 'TRAVERSAL') return res.status(403).json({ error: err.message });
+    if (err.code === 'FORBIDDEN') return res.status(403).json({ error: err.message });
+    if (err.code === 'ENOENT') return res.status(404).json({ error: 'File not found' });
+    res.status(500).json({ error: `Failed to delete: ${err.message}` });
   }
 });
 

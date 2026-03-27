@@ -5,9 +5,11 @@ DanCode/
 ├── client/                     # React + Vite + Tailwind frontend
 │   ├── public/                 # Static assets
 │   ├── src/
-│   │   ├── App.jsx             # Root React component (auth gate, mobile/desktop routing, project form, command palette, sidebar)
+│   │   ├── App.jsx             # Root React component (auth gate, mobile/desktop routing, project form, command palette, sidebar, file explorer)
 │   │   ├── App.test.jsx        # App unit tests (login/terminal/mobile/command-palette/sidebar/header-dropdown rendering)
 │   │   ├── CommandPalette.jsx  # Command palette overlay with fuzzy search for project switching (Ctrl+K)
+│   │   ├── FileExplorer.jsx   # Collapsible file explorer panel: lazy-loaded tree view, context menu, drag-to-terminal, .gitignore/.hidden toggles
+│   │   ├── FileExplorer.test.jsx # FileExplorer unit tests (tree view, context menu, toggles, drag, expand)
 │   │   ├── CommandPalette.test.jsx # CommandPalette unit tests (fuzzy match, filtering, open/close, selection)
 │   │   ├── LoginScreen.jsx     # Username/password + TOTP login form
 │   │   ├── LoginScreen.test.jsx # LoginScreen component unit tests
@@ -19,7 +21,7 @@ DanCode/
 │   │   ├── NewProjectForm.test.jsx # NewProjectForm component unit tests
 │   │   ├── ShortcutBar.jsx     # Horizontal scrolling shortcut bar (Ctrl+C/V/D, Tab, arrows, Esc) with 44px tap targets
 │   │   ├── ShortcutBar.test.jsx # ShortcutBar unit tests (key sequences, tap targets)
-│   │   ├── TerminalLayout.jsx  # Multi-terminal layout: split/tabbed view, tablet shortcut bar toggle
+│   │   ├── TerminalLayout.jsx  # Multi-terminal layout: split/tabbed view, tablet shortcut bar toggle, file drop support
 │   │   ├── TerminalLayout.test.jsx # TerminalLayout component unit tests
 │   │   ├── Sidebar.jsx         # Collapsible left sidebar listing all projects by name with active highlight
 │   │   ├── Sidebar.test.jsx    # Sidebar component unit tests
@@ -41,7 +43,8 @@ DanCode/
 ├── server/                     # Express + Socket.io backend
 │   ├── src/
 │   │   ├── auth.js             # TOTP-based auth: account setup, login, session management (~/.dancode/credentials.json)
-│   │   ├── index.js            # Server entry point (Express, Socket.io, REST API routes, terminal CRUD)
+│   │   ├── files.js            # File system API: list, read, write, mkdir, rename, delete with path traversal protection
+│   │   ├── index.js            # Server entry point (Express, Socket.io, REST API routes, terminal CRUD, file API)
 │   │   ├── projects.js         # Project config CRUD (create, list, get, delete) in ~/.dancode/projects/
 │   │   ├── terminal-manager.js # TerminalManager: tmux-backed PTY spawning, CRUD, ring buffer, reconcile, WebSocket /terminal/{uuid}
 │   │   ├── terminal.js         # (Legacy, emptied) Socket.io /terminal namespace
@@ -70,7 +73,9 @@ DanCode/
 │   │   │   ├── reconnection.spec.js   # Playwright E2E test (disconnect/reconnect overlay, buffer replay, state indicators)
 │   │   │   ├── tmux-persistence.spec.js # Playwright E2E test (tmux persistence: server restart, reconnect, scrollback replay)
 │   │   │   ├── mobile-terminal.spec.js # Playwright mobile emulation E2E (iPhone 12 viewport, read-first, shortcut bar, Ctrl+C)
+│   │   │   ├── file-explorer.spec.js # Playwright E2E test (expand dirs, create/rename/delete files, drag to terminal)
 │   │   │   └── visual.spec.js  # Midscene AI visual assertion test (DOM-based on Pi 5)
+│   │   ├── files.test.js       # File API unit tests (CRUD, path traversal rejection, gitignore filtering)
 │   │   ├── auth.test.js        # Auth account setup, login, session management tests
 │   │   ├── projects.test.js    # Project config CRUD, slug generation, validation tests
 │   │   ├── server.test.js      # Server unit tests (routes, auth middleware, project API)

@@ -10,3 +10,9 @@
 - The `readFirst` prop on Terminal.jsx currently just prevents auto-focus. If future phases add more sophisticated read-first behavior (e.g., preventing cursor blink, hiding input line), the Terminal component will need additional changes.
 - Pinch-to-zoom changes font size in-memory only (via `fontSizeRef`). If future phases add font size persistence (saved to project config), the pinch-to-zoom handler will need to call the save API.
 - The MobileTerminalView creates its terminal list by fetching `/api/terminals?project=slug` separately from TerminalLayout's load. If future phases add real-time terminal creation/deletion (WebSocket events), both code paths need to handle the same events.
+
+## After Phase 5 (proposed by Phase 5 generator)
+- The file explorer panel is desktop-only (hidden on mobile <1024px). If future phases want a mobile file browser, a separate MobileFileExplorer component would be needed, similar to the MobileTerminalView/MobileDashboard split.
+- The .gitignore parser only reads the root `.gitignore` file. Nested `.gitignore` files in subdirectories are not processed. For large projects with nested gitignore rules, this could show files that should be hidden.
+- The file explorer's collapsed state is stored in localStorage (`dancode-file-explorer-collapsed`), not in the project config. If per-project file explorer state is desired, it should be moved to the project config's `fileExplorer` field (the PATCH endpoint already supports it).
+- The `POST /api/terminals` endpoint now accepts an optional `cwd` field for "Open terminal here" support. Relative paths are resolved against the project root with a basic prefix check, but it does not use the full `safePath` validation from files.js. Consider unifying path validation.
