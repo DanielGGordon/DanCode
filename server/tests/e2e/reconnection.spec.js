@@ -51,36 +51,7 @@ test.describe('Reconnection UX', () => {
     // Give the command time to execute
     await page.waitForTimeout(1000);
 
-    // 4. Simulate network drop by disconnecting all Socket.io sockets
-    await page.evaluate(() => {
-      // Access Socket.io manager instances and force disconnect
-      const ioModule = window.__socketio_sockets;
-      if (ioModule) {
-        for (const s of ioModule) {
-          s.io.engine.close();
-        }
-      }
-    });
-
-    // The above approach may not work if sockets aren't exposed. Use a more
-    // reliable approach: disconnect via the socket.io transport layer
-    // by intercepting and breaking the WebSocket connection.
-    await page.evaluate(() => {
-      // Force-close all WebSocket connections to simulate network drop
-      const originalWS = window.WebSocket;
-      const sockets = [];
-
-      // Close existing WebSocket connections
-      // We need to find the existing connections - patch prototype to track
-      // Actually, let's use a different approach: override WebSocket.prototype.send
-      // to throw, which will cause socket.io to disconnect
-
-      // Find socket.io manager objects in the page
-      // Socket.io stores the manager on the socket instance
-      // We can access it through the React component tree or window objects
-    });
-
-    // More reliable: use Chrome DevTools Protocol to emulate network offline
+    // 4. Simulate network drop via Chrome DevTools Protocol
     const cdpSession = await page.context().newCDPSession(page);
     await cdpSession.send('Network.emulateNetworkConditions', {
       offline: true,
@@ -119,12 +90,12 @@ test.describe('Reconnection UX', () => {
     await page.keyboard.type('echo AFTER_RECONNECT\n', { delay: 30 });
     await page.waitForTimeout(1000);
 
-    // The terminal should show the output (ring buffer replayed + new output)
-    // We can verify by checking the xterm content
+    // The terminal should show both ring-buffer-replayed output and new output
     const terminalText = await terminal0.evaluate((el) => {
       const rows = el.querySelectorAll('.xterm-rows > div');
       return Array.from(rows).map((r) => r.textContent).join('\n');
     });
+    expect(terminalText).toContain('BEFORE_DISCONNECT');
     expect(terminalText).toContain('AFTER_RECONNECT');
 
     await cdpSession.detach();
