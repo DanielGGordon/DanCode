@@ -3,6 +3,23 @@ import Terminal from './Terminal.jsx'
 
 export const MOBILE_BREAKPOINT = 768
 
+/**
+ * Returns Tailwind classes for a connection state indicator dot.
+ */
+function connectionDotClasses(state) {
+  switch (state) {
+    case 'connected':
+      return 'bg-green'
+    case 'reconnecting':
+      return 'bg-yellow animate-pulse-dot'
+    case 'disconnected':
+    case 'session-exit':
+      return 'bg-red'
+    default:
+      return 'bg-base01'
+  }
+}
+
 export default function TerminalLayout({ token, slug }) {
   const [terminals, setTerminals] = useState([])
   const [focusedIndex, setFocusedIndex] = useState(0)
@@ -12,6 +29,7 @@ export default function TerminalLayout({ token, slug }) {
   const [editingId, setEditingId] = useState(null)
   const [editValue, setEditValue] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
+  const [connectionStates, setConnectionStates] = useState({})
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT
   )
@@ -153,6 +171,14 @@ export default function TerminalLayout({ token, slug }) {
     setLayoutMode((prev) => (prev === 'split' ? 'tabs' : 'split'))
   }, [])
 
+  // Track connection state per terminal
+  const handleConnectionStateChange = useCallback((terminalId, state) => {
+    setConnectionStates((prev) => {
+      if (prev[terminalId] === state) return prev
+      return { ...prev, [terminalId]: state }
+    })
+  }, [])
+
   // Add a new terminal
   const handleAddTerminal = useCallback(async () => {
     if (!slug || !token) return
@@ -272,18 +298,23 @@ export default function TerminalLayout({ token, slug }) {
           <div className="flex gap-1 mr-2" data-testid="tab-bar">
             {terminals.map((term, index) => {
               const isActive = focusedIndex === index
+              const state = connectionStates[term.id] || 'connecting'
               return (
                 <button
                   key={term.id}
                   data-testid={`tab-${index}`}
                   onClick={() => setFocusedIndex(index)}
                   onDoubleClick={() => handleStartEdit(term.id, term.label)}
-                  className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                  className={`px-3 py-1 text-xs font-medium rounded transition-colors flex items-center gap-1.5 ${
                     isActive
                       ? 'text-base1 bg-base03 border border-blue/50'
                       : 'text-base01 bg-base02 border border-base01/30 hover:text-base0'
                   }`}
                 >
+                  <span
+                    data-testid={`connection-dot-${index}`}
+                    className={`inline-block w-2 h-2 rounded-full shrink-0 ${connectionDotClasses(state)}`}
+                  />
                   {editingId === term.id ? (
                     <input
                       ref={editInputRef}
@@ -331,6 +362,7 @@ export default function TerminalLayout({ token, slug }) {
         <div key="split" className="flex flex-row flex-1 min-h-0 animate-fade-in">
           {terminals.map((term, index) => {
             const isFocused = focusedIndex === index
+            const state = connectionStates[term.id] || 'connecting'
             return (
               <div
                 key={term.id}
@@ -350,23 +382,29 @@ export default function TerminalLayout({ token, slug }) {
                       : 'text-base01 bg-base02 border-base01/30'
                   }`}
                 >
-                  {editingId === term.id ? (
-                    <input
-                      ref={editInputRef}
-                      data-testid={`pane-edit-${index}`}
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleSaveEdit(term.id)
-                        if (e.key === 'Escape') handleCancelEdit()
-                      }}
-                      onBlur={() => handleSaveEdit(term.id)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="bg-base03 text-base1 text-xs px-1 py-0 rounded border border-blue/50 outline-none w-24"
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      data-testid={`connection-dot-${index}`}
+                      className={`inline-block w-2 h-2 rounded-full shrink-0 ${connectionDotClasses(state)}`}
                     />
-                  ) : (
-                    <span onDoubleClick={() => handleStartEdit(term.id, term.label)}>{term.label}</span>
-                  )}
+                    {editingId === term.id ? (
+                      <input
+                        ref={editInputRef}
+                        data-testid={`pane-edit-${index}`}
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveEdit(term.id)
+                          if (e.key === 'Escape') handleCancelEdit()
+                        }}
+                        onBlur={() => handleSaveEdit(term.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="bg-base03 text-base1 text-xs px-1 py-0 rounded border border-blue/50 outline-none w-24"
+                      />
+                    ) : (
+                      <span onDoubleClick={() => handleStartEdit(term.id, term.label)}>{term.label}</span>
+                    )}
+                  </div>
                   <button
                     data-testid={`close-terminal-${index}`}
                     onClick={(e) => {
@@ -383,8 +421,10 @@ export default function TerminalLayout({ token, slug }) {
                   <Terminal
                     token={token}
                     terminalId={term.id}
+                    projectSlug={slug}
                     focused={isFocused}
                     onFocus={() => setFocusedIndex(index)}
+                    onConnectionStateChange={handleConnectionStateChange}
                   />
                 </div>
               </div>
@@ -395,6 +435,7 @@ export default function TerminalLayout({ token, slug }) {
         <div key="tabs" className="flex-1 min-h-0 flex flex-col animate-fade-in" data-testid="tabbed-content">
           {terminals.map((term, index) => {
             const isActive = focusedIndex === index
+            const state = connectionStates[term.id] || 'connecting'
             return (
               <div
                 key={term.id}
@@ -404,23 +445,29 @@ export default function TerminalLayout({ token, slug }) {
                 <div
                   className="px-3 py-1 text-xs font-medium border-b select-none flex items-center justify-between text-base1 bg-blue/10 border-blue/50"
                 >
-                  {editingId === term.id ? (
-                    <input
-                      ref={editInputRef}
-                      data-testid={`pane-edit-${index}`}
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleSaveEdit(term.id)
-                        if (e.key === 'Escape') handleCancelEdit()
-                      }}
-                      onBlur={() => handleSaveEdit(term.id)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="bg-base03 text-base1 text-xs px-1 py-0 rounded border border-blue/50 outline-none w-24"
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      data-testid={`connection-dot-${index}`}
+                      className={`inline-block w-2 h-2 rounded-full shrink-0 ${connectionDotClasses(state)}`}
                     />
-                  ) : (
-                    <span onDoubleClick={() => handleStartEdit(term.id, term.label)}>{term.label}</span>
-                  )}
+                    {editingId === term.id ? (
+                      <input
+                        ref={editInputRef}
+                        data-testid={`pane-edit-${index}`}
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveEdit(term.id)
+                          if (e.key === 'Escape') handleCancelEdit()
+                        }}
+                        onBlur={() => handleSaveEdit(term.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="bg-base03 text-base1 text-xs px-1 py-0 rounded border border-blue/50 outline-none w-24"
+                      />
+                    ) : (
+                      <span onDoubleClick={() => handleStartEdit(term.id, term.label)}>{term.label}</span>
+                    )}
+                  </div>
                   <button
                     data-testid={`close-terminal-${index}`}
                     onClick={(e) => {
@@ -436,8 +483,10 @@ export default function TerminalLayout({ token, slug }) {
                 <Terminal
                   token={token}
                   terminalId={term.id}
+                  projectSlug={slug}
                   focused={isActive}
                   onFocus={() => setFocusedIndex(index)}
+                  onConnectionStateChange={handleConnectionStateChange}
                 />
               </div>
             )

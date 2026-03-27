@@ -286,4 +286,24 @@ describe('TerminalLayout', () => {
     expect(getByTestId('terminal-layout')).toBeDefined()
     expect(queryByTestId('terminal-loading')).toBeNull()
   })
+
+  it('renders connection state indicator dots for each terminal', async () => {
+    mockFetchSuccess()
+    const { getByTestId } = render(<TerminalLayout token="tok" slug="myproj" />)
+    await waitFor(() => {
+      expect(getByTestId('connection-dot-0')).toBeDefined()
+      expect(getByTestId('connection-dot-1')).toBeDefined()
+    })
+  })
+
+  it('passes projectSlug and onConnectionStateChange props to Terminal', async () => {
+    mockFetchSuccess()
+    render(<TerminalLayout token="tok" slug="myproj" />)
+    await waitFor(() => {
+      expect(terminalInstances.length).toBe(2)
+    })
+    expect(terminalInstances[0]).toHaveProperty('projectSlug', 'myproj')
+    expect(terminalInstances[0]).toHaveProperty('onConnectionStateChange')
+    expect(typeof terminalInstances[0].onConnectionStateChange).toBe('function')
+  })
 })
