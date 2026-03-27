@@ -148,58 +148,10 @@ describe('Sidebar', () => {
     })
   })
 
-  describe('tmux status indicator', () => {
-    it('shows a status dot for each project', () => {
-      const { getByTestId } = render(<Sidebar projects={PROJECTS} currentSlug={null} />)
-      for (const p of PROJECTS) {
-        const dot = getByTestId(`sidebar-status-${p.slug}`)
-        expect(dot).toBeDefined()
-        expect(dot.tagName).toBe('SPAN')
-      }
-    })
-
-    it('shows green dot when tmux session is running', () => {
-      const tmuxStatus = { alpha: true, beta: false, gamma: true }
-      const { getByTestId } = render(
-        <Sidebar projects={PROJECTS} currentSlug={null} tmuxStatus={tmuxStatus} />
-      )
-      const alphaDot = getByTestId('sidebar-status-alpha')
-      expect(alphaDot.className).toContain('bg-green')
-      expect(alphaDot.title).toBe('tmux session running')
-    })
-
-    it('shows dim dot when tmux session is not running', () => {
-      const tmuxStatus = { alpha: true, beta: false, gamma: true }
-      const { getByTestId } = render(
-        <Sidebar projects={PROJECTS} currentSlug={null} tmuxStatus={tmuxStatus} />
-      )
-      const betaDot = getByTestId('sidebar-status-beta')
-      expect(betaDot.className).toContain('bg-base01/40')
-      expect(betaDot.className).not.toContain('bg-green')
-      expect(betaDot.title).toBe('no tmux session')
-    })
-
-    it('shows unknown state when tmuxStatus is undefined', () => {
-      const { getByTestId } = render(
-        <Sidebar projects={PROJECTS} currentSlug={null} />
-      )
-      const alphaDot = getByTestId('sidebar-status-alpha')
-      expect(alphaDot.className).toContain('bg-base01/20')
-      expect(alphaDot.className).toContain('animate-pulse')
-      expect(alphaDot.className).not.toContain('bg-green')
-      expect(alphaDot.className).not.toContain('bg-base01/40')
-      expect(alphaDot.title).toBe('checking status…')
-    })
-
-    it('shows unknown state when project slug is missing from tmuxStatus', () => {
-      const tmuxStatus = { alpha: true }
-      const { getByTestId } = render(
-        <Sidebar projects={PROJECTS} currentSlug={null} tmuxStatus={tmuxStatus} />
-      )
-      const betaDot = getByTestId('sidebar-status-beta')
-      expect(betaDot.className).toContain('bg-base01/20')
-      expect(betaDot.className).toContain('animate-pulse')
-      expect(betaDot.title).toBe('checking status…')
-    })
+  it('does not render tmux status dots', () => {
+    const { queryByTestId } = render(<Sidebar projects={PROJECTS} currentSlug={null} />)
+    for (const p of PROJECTS) {
+      expect(queryByTestId(`sidebar-status-${p.slug}`)).toBeNull()
+    }
   })
 })

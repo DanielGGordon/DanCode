@@ -1,15 +1,11 @@
 import { describe, it, expect, afterAll, beforeAll } from 'vitest';
-import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { generate } from 'otplib';
-import { app, httpServer, startServer } from '../src/index.js';
+import { app, httpServer, startServer, terminalManager } from '../src/index.js';
 import { clearSessions } from '../src/auth.js';
-
-const execFileAsync = promisify(execFile);
 
 const TEST_PORT = 3099;
 const TEST_USERNAME = 'testadmin';
@@ -20,42 +16,37 @@ describe('DanCode server', () => {
   let tempDir;
   let credentialsPath;
   let projectsDir;
-  let storedToken; // session token from login
-  let totpSecret; // TOTP secret for generating codes
-  const createdSessions = [];
+  let terminalsDir;
+  let storedToken;
+  let totpSecret;
 
   beforeAll(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'dancode-server-test-'));
     credentialsPath = join(tempDir, 'credentials.json');
     projectsDir = join(tempDir, 'projects');
+    terminalsDir = join(tempDir, 'terminals');
   });
 
   afterAll(async () => {
+    if (terminalManager) {
+      await terminalManager.destroyAll();
+    }
     if (server) {
       await new Promise((resolve) => server.close(resolve));
     }
     clearSessions();
-    // Clean up tmux sessions created during project creation tests
-    for (const name of createdSessions) {
-      try {
-        await execFileAsync('tmux', ['kill-session', '-t', name]);
-      } catch {
-        // session didn't exist — fine
-      }
-    }
     if (tempDir) {
       await rm(tempDir, { recursive: true, force: true });
     }
   });
 
   it('starts and listens on the specified port', async () => {
-    server = await startServer(TEST_PORT, { credentialsPath, projectsDir });
+    server = await startServer(TEST_PORT, { credentialsPath, projectsDir, terminalsDir });
     const addr = server.address();
     expect(addr.port).toBe(TEST_PORT);
   });
 
   it('allows account setup and login', async () => {
-    // Setup account
     const setupRes = await fetch(`http://localhost:${TEST_PORT}/api/auth/setup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -67,7 +58,6 @@ describe('DanCode server', () => {
     expect(totpSecret).toBeDefined();
     expect(setupData.qrCodeDataUrl).toMatch(/^data:image\/png;base64,/);
 
-    // Login
     const totpCode = await generate({ secret: totpSecret });
     const loginRes = await fetch(`http://localhost:${TEST_PORT}/api/auth/login`, {
       method: 'POST',
@@ -208,20 +198,37 @@ describe('DanCode server', () => {
       Authorization: `Bearer ${storedToken}`,
     });
 
-    it('creates a project with valid inputs', async () => {
+    it('creates a project with valid inputs and 2 default terminals', async () => {
       const projectDir = join(tempDir, 'test-project-dir');
       const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({ name: 'Integration Test', path: projectDir }),
       });
-      createdSessions.push('dancode-integration-test');
       expect(res.status).toBe(201);
       const body = await res.json();
       expect(body.name).toBe('Integration Test');
       expect(body.slug).toBe('integration-test');
       expect(body.path).toBe(projectDir);
       expect(body.createdAt).toBeDefined();
+      // Should have 2 default terminal IDs
+      expect(Array.isArray(body.terminals)).toBe(true);
+      expect(body.terminals).toHaveLength(2);
+      // Should have layout config
+      expect(body.layout).toBeDefined();
+      expect(body.layout.mode).toBe('split');
+    });
+
+    it('creates CLI and Claude terminals for the project', async () => {
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/terminals?project=integration-test`, {
+        headers: { Authorization: `Bearer ${storedToken}` },
+      });
+      expect(res.status).toBe(200);
+      const terminals = await res.json();
+      expect(terminals).toHaveLength(2);
+      const labels = terminals.map((t) => t.label);
+      expect(labels).toContain('CLI');
+      expect(labels).toContain('Claude');
     });
 
     it('creates the project directory if it does not exist', async () => {
@@ -231,7 +238,6 @@ describe('DanCode server', () => {
         headers: authHeaders(),
         body: JSON.stringify({ name: 'Dir Creator', path: projectDir }),
       });
-      createdSessions.push('dancode-dir-creator');
       expect(existsSync(projectDir)).toBe(true);
     });
 
@@ -274,7 +280,6 @@ describe('DanCode server', () => {
         headers: authHeaders(),
         body: JSON.stringify({ name: 'Unique Name', path: '/tmp/a' }),
       });
-      createdSessions.push('dancode-unique-name');
       const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
         method: 'POST',
         headers: authHeaders(),
@@ -285,18 +290,6 @@ describe('DanCode server', () => {
       expect(body.error).toContain('already exists');
     });
 
-    it('returns 400 when project name would collide with reserved session', async () => {
-      // Default DANCODE_TMUX_SESSION is 'dancode-test', so slug 'test' is reserved
-      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ name: 'Test', path: '/tmp/reserved-test' }),
-      });
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toContain('reserved');
-    });
-
     it('returns 401 without auth token', async () => {
       const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
         method: 'POST',
@@ -304,81 +297,6 @@ describe('DanCode server', () => {
         body: JSON.stringify({ name: 'No Auth', path: '/tmp/test' }),
       });
       expect(res.status).toBe(401);
-    });
-
-    describe('adopt mode', () => {
-      const ADOPT_SESSION = 'adopt-test-session';
-
-      beforeAll(async () => {
-        try {
-          await execFileAsync('tmux', ['new-session', '-d', '-s', ADOPT_SESSION]);
-        } catch {
-          // already exists
-        }
-      });
-
-      afterAll(async () => {
-        try {
-          await execFileAsync('tmux', ['kill-session', '-t', ADOPT_SESSION]);
-        } catch {
-          // already gone
-        }
-      });
-
-      it('creates a project linked to an existing tmux session', async () => {
-        const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
-          method: 'POST',
-          headers: authHeaders(),
-          body: JSON.stringify({ name: 'Adopted Project', adoptSession: ADOPT_SESSION }),
-        });
-        expect(res.status).toBe(201);
-        const body = await res.json();
-        expect(body.name).toBe('Adopted Project');
-        expect(body.slug).toBe('adopted-project');
-        expect(body.tmuxSession).toBe(ADOPT_SESSION);
-        expect(body.path).toBeUndefined();
-      });
-
-      it('does not create a new tmux session (no dancode-* session)', async () => {
-        const { stdout } = await execFileAsync('tmux', [
-          'list-sessions', '-F', '#{session_name}',
-        ]);
-        const sessions = stdout.trim().split('\n');
-        expect(sessions).not.toContain('dancode-adopted-project');
-      });
-
-      it('returns 400 when adopted session does not exist', async () => {
-        const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
-          method: 'POST',
-          headers: authHeaders(),
-          body: JSON.stringify({ name: 'Ghost', adoptSession: 'nonexistent-session' }),
-        });
-        expect(res.status).toBe(400);
-        const body = await res.json();
-        expect(body.error).toContain('does not exist');
-      });
-
-      it('returns 400 when name is missing in adopt mode', async () => {
-        const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
-          method: 'POST',
-          headers: authHeaders(),
-          body: JSON.stringify({ adoptSession: ADOPT_SESSION }),
-        });
-        expect(res.status).toBe(400);
-        const body = await res.json();
-        expect(body.error).toContain('name');
-      });
-
-      it('returns 409 for duplicate project name in adopt mode', async () => {
-        const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
-          method: 'POST',
-          headers: authHeaders(),
-          body: JSON.stringify({ name: 'Adopted Project', adoptSession: ADOPT_SESSION }),
-        });
-        expect(res.status).toBe(409);
-        const body = await res.json();
-        expect(body.error).toContain('already exists');
-      });
     });
   });
 
@@ -388,7 +306,6 @@ describe('DanCode server', () => {
     });
 
     it('deletes an existing project and returns 204', async () => {
-      // Seed a project config directly
       const { mkdir } = await import('node:fs/promises');
       await mkdir(projectsDir, { recursive: true });
       const project = { name: 'Delete Me', slug: 'delete-me', path: '/tmp/del', createdAt: '2025-01-01T00:00:00.000Z' };
@@ -425,7 +342,6 @@ describe('DanCode server', () => {
       Authorization: `Bearer ${storedToken}`,
     });
 
-    // Seed test data directly into the projects dir so this block is self-contained
     const seededProjects = [
       { name: 'Alpha Project', slug: 'alpha-project', path: '/tmp/alpha', createdAt: '2025-01-01T00:00:00.000Z' },
       { name: 'Beta Project', slug: 'beta-project', path: '/tmp/beta', createdAt: '2025-01-02T00:00:00.000Z' },
@@ -433,19 +349,16 @@ describe('DanCode server', () => {
     ];
 
     beforeAll(async () => {
-      // Clear any configs left by earlier tests
       const { readdir, rm: rmFile } = await import('node:fs/promises');
       const files = await readdir(projectsDir).catch(() => []);
       for (const f of files) {
         await rmFile(join(projectsDir, f));
       }
-      // Write known fixtures
       const { mkdir } = await import('node:fs/promises');
       await mkdir(projectsDir, { recursive: true });
       for (const p of seededProjects) {
         await writeFile(join(projectsDir, `${p.slug}.json`), JSON.stringify(p, null, 2) + '\n');
       }
-      // Also write a malformed config to verify tolerance
       await writeFile(join(projectsDir, 'broken.json'), '{invalid json!!!');
     });
 
@@ -487,137 +400,16 @@ describe('DanCode server', () => {
     });
 
     it('skips malformed config files instead of failing', async () => {
-      // broken.json was written in beforeAll — endpoint should still succeed
       const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
         headers: authHeaders(),
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      // Only the 3 valid projects should appear
       expect(body.length).toBe(3);
     });
 
     it('returns 401 without auth token', async () => {
       const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`);
-      expect(res.status).toBe(401);
-    });
-  });
-
-  describe('GET /api/tmux-status', () => {
-    const authHeaders = () => ({
-      Authorization: `Bearer ${storedToken}`,
-    });
-
-    it('returns an object mapping slugs to booleans', async () => {
-      const res = await fetch(`http://localhost:${TEST_PORT}/api/tmux-status`, {
-        headers: authHeaders(),
-      });
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(typeof body).toBe('object');
-      expect(Array.isArray(body)).toBe(false);
-      // Each value should be a boolean
-      for (const val of Object.values(body)) {
-        expect(typeof val).toBe('boolean');
-      }
-    });
-
-    it('includes all configured project slugs', async () => {
-      const res = await fetch(`http://localhost:${TEST_PORT}/api/tmux-status`, {
-        headers: authHeaders(),
-      });
-      const body = await res.json();
-      const slugs = Object.keys(body);
-      expect(slugs).toContain('alpha-project');
-      expect(slugs).toContain('beta-project');
-      expect(slugs).toContain('gamma-project');
-    });
-
-    it('returns 401 without auth token', async () => {
-      const res = await fetch(`http://localhost:${TEST_PORT}/api/tmux-status`);
-      expect(res.status).toBe(401);
-    });
-  });
-
-  describe('GET /api/tmux/sessions', () => {
-    const authHeaders = () => ({
-      Authorization: `Bearer ${storedToken}`,
-    });
-
-    const ORPHAN_SESSION = 'orphan-test-session';
-
-    beforeAll(async () => {
-      // Create an orphan tmux session (not mapped to any project)
-      try {
-        await execFileAsync('tmux', ['new-session', '-d', '-s', ORPHAN_SESSION]);
-      } catch {
-        // already exists
-      }
-    });
-
-    afterAll(async () => {
-      try {
-        await execFileAsync('tmux', ['kill-session', '-t', ORPHAN_SESSION]);
-      } catch {
-        // already gone
-      }
-    });
-
-    it('returns an array of orphaned tmux sessions', async () => {
-      const res = await fetch(`http://localhost:${TEST_PORT}/api/tmux/sessions`, {
-        headers: authHeaders(),
-      });
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(Array.isArray(body)).toBe(true);
-      // Each entry should have a name property
-      for (const session of body) {
-        expect(session).toHaveProperty('name');
-        expect(typeof session.name).toBe('string');
-      }
-    });
-
-    it('includes sessions not mapped to any project', async () => {
-      const res = await fetch(`http://localhost:${TEST_PORT}/api/tmux/sessions`, {
-        headers: authHeaders(),
-      });
-      const body = await res.json();
-      const names = body.map((s) => s.name);
-      expect(names).toContain(ORPHAN_SESSION);
-    });
-
-    it('excludes sessions that are mapped to a configured project', async () => {
-      // Create a project session so it appears in tmux
-      await execFileAsync('tmux', ['new-session', '-d', '-s', 'dancode-alpha-project']).catch(() => {});
-      try {
-        const res = await fetch(`http://localhost:${TEST_PORT}/api/tmux/sessions`, {
-          headers: authHeaders(),
-        });
-        const body = await res.json();
-        const names = body.map((s) => s.name);
-        expect(names).not.toContain('dancode-alpha-project');
-      } finally {
-        await execFileAsync('tmux', ['kill-session', '-t', 'dancode-alpha-project']).catch(() => {});
-      }
-    });
-
-    it('excludes connection sessions (containing -conn-)', async () => {
-      // Create a connection-style session
-      await execFileAsync('tmux', ['new-session', '-d', '-s', 'something-conn-abc']).catch(() => {});
-      try {
-        const res = await fetch(`http://localhost:${TEST_PORT}/api/tmux/sessions`, {
-          headers: authHeaders(),
-        });
-        const body = await res.json();
-        const names = body.map((s) => s.name);
-        expect(names).not.toContain('something-conn-abc');
-      } finally {
-        await execFileAsync('tmux', ['kill-session', '-t', 'something-conn-abc']).catch(() => {});
-      }
-    });
-
-    it('returns 401 without auth token', async () => {
-      const res = await fetch(`http://localhost:${TEST_PORT}/api/tmux/sessions`);
       expect(res.status).toBe(401);
     });
   });
@@ -657,84 +449,6 @@ describe('DanCode server', () => {
     });
   });
 
-  describe('GET /api/projects/:slug/panes', () => {
-    const authHeaders = () => ({
-      Authorization: `Bearer ${storedToken}`,
-    });
-
-    const PANES_SESSION = 'panes-test-session';
-
-    beforeAll(async () => {
-      // Create a tmux session with named windows for pane listing
-      try {
-        await execFileAsync('tmux', ['new-session', '-d', '-s', PANES_SESSION, '-n', 'editor']);
-        await execFileAsync('tmux', ['new-window', '-t', PANES_SESSION, '-n', 'shell']);
-      } catch {
-        // already exists
-      }
-      // Create an adopted project pointing to this session
-      const { mkdir } = await import('node:fs/promises');
-      await mkdir(projectsDir, { recursive: true });
-      const project = {
-        name: 'Panes Test',
-        slug: 'panes-test',
-        tmuxSession: PANES_SESSION,
-        createdAt: '2025-01-01T00:00:00.000Z',
-      };
-      await writeFile(join(projectsDir, 'panes-test.json'), JSON.stringify(project, null, 2) + '\n');
-    });
-
-    afterAll(async () => {
-      try {
-        await execFileAsync('tmux', ['kill-session', '-t', PANES_SESSION]);
-      } catch {
-        // already gone
-      }
-    });
-
-    it('returns panes for an adopted project with correct labels', async () => {
-      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/panes-test/panes`, {
-        headers: authHeaders(),
-      });
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(Array.isArray(body)).toBe(true);
-      expect(body).toHaveLength(2);
-      expect(body[0]).toEqual({ index: 0, label: 'editor' });
-      expect(body[1]).toEqual({ index: 1, label: 'shell' });
-    });
-
-    it('returns panes for a regular project (dancode-* session)', async () => {
-      // alpha-project has no tmuxSession, so it resolves to dancode-alpha-project
-      // That session may not exist, so we expect an empty array
-      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/alpha-project/panes`, {
-        headers: authHeaders(),
-      });
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(Array.isArray(body)).toBe(true);
-    });
-
-    it('returns 404 for non-existent project', async () => {
-      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/nonexistent/panes`, {
-        headers: authHeaders(),
-      });
-      expect(res.status).toBe(404);
-    });
-
-    it('returns 400 for invalid slug', async () => {
-      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/-bad/panes`, {
-        headers: authHeaders(),
-      });
-      expect(res.status).toBe(400);
-    });
-
-    it('returns 401 without auth token', async () => {
-      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/panes-test/panes`);
-      expect(res.status).toBe(401);
-    });
-  });
-
   describe('PATCH /api/projects/:slug', () => {
     const authHeaders = () => ({
       'Content-Type': 'application/json',
@@ -745,64 +459,51 @@ describe('DanCode server', () => {
       const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/alpha-project`, {
         method: 'PATCH',
         headers: authHeaders(),
-        body: JSON.stringify({ layout: { mode: 'tabs', hiddenPanes: [2] } }),
+        body: JSON.stringify({ layout: { mode: 'tabs', activeTab: 1 } }),
       });
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.slug).toBe('alpha-project');
-      expect(body.layout).toEqual({ mode: 'tabs', hiddenPanes: [2] });
+      expect(body.layout).toEqual({ mode: 'tabs', activeTab: 1 });
     });
 
     it('persists layout so GET returns updated data', async () => {
       await fetch(`http://localhost:${TEST_PORT}/api/projects/beta-project`, {
         method: 'PATCH',
         headers: authHeaders(),
-        body: JSON.stringify({ layout: { mode: 'split', hiddenPanes: [1] } }),
+        body: JSON.stringify({ layout: { mode: 'split', activeTab: 0 } }),
       });
       const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/beta-project`, {
         headers: { Authorization: `Bearer ${storedToken}` },
       });
       const body = await res.json();
-      expect(body.layout).toEqual({ mode: 'split', hiddenPanes: [1] });
+      expect(body.layout).toEqual({ mode: 'split', activeTab: 0 });
     });
 
-    it('updates showTmuxCommands preference', async () => {
+    it('updates terminals array', async () => {
       const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/alpha-project`, {
         method: 'PATCH',
         headers: authHeaders(),
-        body: JSON.stringify({ showTmuxCommands: true }),
+        body: JSON.stringify({ terminals: ['id-1', 'id-2', 'id-3'] }),
       });
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.showTmuxCommands).toBe(true);
+      expect(body.terminals).toEqual(['id-1', 'id-2', 'id-3']);
     });
 
-    it('persists showTmuxCommands so GET returns it', async () => {
-      await fetch(`http://localhost:${TEST_PORT}/api/projects/beta-project`, {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify({ showTmuxCommands: true }),
-      });
-      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/beta-project`, {
-        headers: { Authorization: `Bearer ${storedToken}` },
-      });
-      const body = await res.json();
-      expect(body.showTmuxCommands).toBe(true);
-    });
-
-    it('accepts layout and showTmuxCommands together', async () => {
+    it('accepts layout and terminals together', async () => {
       const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/alpha-project`, {
         method: 'PATCH',
         headers: authHeaders(),
-        body: JSON.stringify({ layout: { mode: 'split' }, showTmuxCommands: false }),
+        body: JSON.stringify({ layout: { mode: 'split' }, terminals: ['a', 'b'] }),
       });
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.layout.mode).toBe('split');
-      expect(body.showTmuxCommands).toBe(false);
+      expect(body.terminals).toEqual(['a', 'b']);
     });
 
-    it('returns 400 without layout or showTmuxCommands', async () => {
+    it('returns 400 without valid fields', async () => {
       const res = await fetch(`http://localhost:${TEST_PORT}/api/projects/alpha-project`, {
         method: 'PATCH',
         headers: authHeaders(),

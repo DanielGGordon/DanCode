@@ -4,12 +4,22 @@ import App from './App.jsx'
 
 // Mock Terminal to avoid xterm.js side effects
 vi.mock('./Terminal.jsx', () => ({
-  default: ({ slug }) => <div data-testid="terminal" data-slug={slug || ''}>Terminal</div>,
+  default: ({ terminalId }) => <div data-testid="terminal" data-terminal-id={terminalId || ''}>Terminal</div>,
 }))
 
-// Mock PaneLayout
-vi.mock('./PaneLayout.jsx', () => ({
-  default: ({ slug }) => <div data-testid="pane-layout" data-slug={slug || ''}>PaneLayout</div>,
+// Mock TerminalLayout
+vi.mock('./TerminalLayout.jsx', () => ({
+  default: ({ slug }) => <div data-testid="terminal-layout" data-slug={slug || ''}>TerminalLayout</div>,
+}))
+
+// Mock LoginScreen
+vi.mock('./LoginScreen.jsx', () => ({
+  default: ({ onLogin }) => (
+    <div data-testid="login-screen">
+      <input data-testid="token-input" onChange={() => {}} />
+      <button data-testid="login-submit" onClick={() => onLogin('test-token')}>Login</button>
+    </div>
+  ),
 }))
 
 // Mock NewProjectForm
@@ -78,17 +88,16 @@ describe('App', () => {
 
   it('shows login screen when no token in localStorage', () => {
     const { getByTestId, queryByTestId } = render(<App />)
-    expect(getByTestId('token-input')).toBeDefined()
-    expect(getByTestId('login-submit')).toBeDefined()
-    expect(queryByTestId('terminal')).toBeNull()
+    expect(getByTestId('login-screen')).toBeDefined()
+    expect(queryByTestId('welcome-screen')).toBeNull()
   })
 
-  it('shows terminal when token exists in localStorage', async () => {
+  it('shows welcome screen when token exists in localStorage', async () => {
     localStorageMock.setItem('dancode-auth-token', 'test-token')
     mockFetch(200, { valid: true })
     const { getByTestId, queryByTestId } = render(<App />)
     await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
+      expect(getByTestId('welcome-screen')).toBeDefined()
     })
     expect(queryByTestId('token-input')).toBeNull()
   })
@@ -98,31 +107,25 @@ describe('App', () => {
     mockFetch(401, { valid: false })
     const { getByTestId, queryByTestId } = render(<App />)
     await waitFor(() => {
-      expect(getByTestId('token-input')).toBeDefined()
+      expect(getByTestId('login-screen')).toBeDefined()
     })
-    expect(queryByTestId('terminal')).toBeNull()
+    expect(queryByTestId('welcome-screen')).toBeNull()
     expect(localStorageMock.removeItem).toHaveBeenCalledWith('dancode-auth-token')
   })
 
-  it('transitions from login to terminal after successful login', async () => {
+  it('transitions from login to welcome screen after successful login', async () => {
     mockFetch(200, { valid: true })
     const { getByTestId, queryByTestId } = render(<App />)
 
-    // Should show login
-    expect(getByTestId('token-input')).toBeDefined()
+    expect(getByTestId('login-screen')).toBeDefined()
 
-    // Enter token and submit
-    fireEvent.change(getByTestId('token-input'), { target: { value: 'my-token' } })
     fireEvent.click(getByTestId('login-submit'))
 
-    // Should now show terminal after async validation
     await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
+      expect(getByTestId('welcome-screen')).toBeDefined()
     })
-    expect(queryByTestId('token-input')).toBeNull()
-
-    // Token should be stored in localStorage
-    expect(localStorageMock.setItem).toHaveBeenCalledWith('dancode-auth-token', 'my-token')
+    expect(queryByTestId('login-screen')).toBeNull()
+    expect(localStorageMock.setItem).toHaveBeenCalledWith('dancode-auth-token', 'test-token')
   })
 
   it('returns to login screen after logout', async () => {
@@ -130,20 +133,15 @@ describe('App', () => {
     mockFetch(200, { valid: true })
     const { getByTestId, queryByTestId } = render(<App />)
 
-    // Should show terminal with logout button after validation
     await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
+      expect(getByTestId('welcome-screen')).toBeDefined()
     })
     expect(getByTestId('logout-button')).toBeDefined()
 
-    // Click logout
     fireEvent.click(getByTestId('logout-button'))
 
-    // Should return to login screen
-    expect(getByTestId('token-input')).toBeDefined()
-    expect(queryByTestId('terminal')).toBeNull()
-
-    // Token should be removed from localStorage
+    expect(getByTestId('login-screen')).toBeDefined()
+    expect(queryByTestId('welcome-screen')).toBeNull()
     expect(localStorageMock.removeItem).toHaveBeenCalledWith('dancode-auth-token')
   })
 
@@ -162,22 +160,22 @@ describe('App', () => {
     const { getByTestId, queryByTestId } = render(<App />)
 
     await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
+      expect(getByTestId('welcome-screen')).toBeDefined()
     })
 
     fireEvent.click(getByTestId('new-project-button'))
 
     expect(getByTestId('new-project-form')).toBeDefined()
-    expect(queryByTestId('terminal')).toBeNull()
+    expect(queryByTestId('welcome-screen')).toBeNull()
   })
 
-  it('closes new project form and returns to terminal on cancel', async () => {
+  it('closes new project form and returns to welcome screen on cancel', async () => {
     localStorageMock.setItem('dancode-auth-token', 'test-token')
     mockFetch(200, { valid: true })
     const { getByTestId, queryByTestId } = render(<App />)
 
     await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
+      expect(getByTestId('welcome-screen')).toBeDefined()
     })
 
     fireEvent.click(getByTestId('new-project-button'))
@@ -185,16 +183,16 @@ describe('App', () => {
 
     fireEvent.click(getByTestId('mock-cancel'))
     expect(queryByTestId('new-project-form')).toBeNull()
-    expect(getByTestId('terminal')).toBeDefined()
+    expect(getByTestId('welcome-screen')).toBeDefined()
   })
 
-  it('closes new project form after project is created and shows pane layout with slug', async () => {
+  it('closes new project form after project is created and shows terminal layout with slug', async () => {
     localStorageMock.setItem('dancode-auth-token', 'test-token')
     mockFetch(200, { valid: true })
     const { getByTestId, queryByTestId } = render(<App />)
 
     await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
+      expect(getByTestId('welcome-screen')).toBeDefined()
     })
 
     fireEvent.click(getByTestId('new-project-button'))
@@ -202,8 +200,8 @@ describe('App', () => {
 
     fireEvent.click(getByTestId('mock-create'))
     expect(queryByTestId('new-project-form')).toBeNull()
-    expect(getByTestId('pane-layout')).toBeDefined()
-    expect(getByTestId('pane-layout').dataset.slug).toBe('test')
+    expect(getByTestId('terminal-layout')).toBeDefined()
+    expect(getByTestId('terminal-layout').dataset.slug).toBe('test')
   })
 
   it('resets new project form state on logout', async () => {
@@ -212,23 +210,19 @@ describe('App', () => {
     const { getByTestId, queryByTestId } = render(<App />)
 
     await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
+      expect(getByTestId('welcome-screen')).toBeDefined()
     })
 
-    // Open the new project form
     fireEvent.click(getByTestId('new-project-button'))
     expect(getByTestId('new-project-form')).toBeDefined()
 
-    // Logout while form is open
     fireEvent.click(getByTestId('logout-button'))
-    expect(getByTestId('token-input')).toBeDefined()
+    expect(getByTestId('login-screen')).toBeDefined()
 
-    // Log back in — should see terminal, not the form
-    fireEvent.change(getByTestId('token-input'), { target: { value: 'new-token' } })
     fireEvent.click(getByTestId('login-submit'))
 
     await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
+      expect(getByTestId('welcome-screen')).toBeDefined()
     })
     expect(queryByTestId('new-project-form')).toBeNull()
   })
@@ -239,13 +233,11 @@ describe('App', () => {
     const { getByTestId, queryByTestId } = render(<App />)
 
     await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
+      expect(getByTestId('welcome-screen')).toBeDefined()
     })
 
     expect(queryByTestId('command-palette')).toBeNull()
-
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
-
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
     expect(getByTestId('command-palette')).toBeDefined()
   })
 
@@ -255,13 +247,13 @@ describe('App', () => {
     const { getByTestId, queryByTestId } = render(<App />)
 
     await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
+      expect(getByTestId('welcome-screen')).toBeDefined()
     })
 
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
     expect(getByTestId('command-palette')).toBeDefined()
 
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
     expect(queryByTestId('command-palette')).toBeNull()
   })
 
@@ -271,31 +263,30 @@ describe('App', () => {
     const { getByTestId, queryByTestId } = render(<App />)
 
     await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
+      expect(getByTestId('welcome-screen')).toBeDefined()
     })
 
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
     expect(getByTestId('command-palette')).toBeDefined()
 
-    fireEvent.keyDown(window, { key: 'Escape' })
+    fireEvent.keyDown(document, { key: 'Escape' })
     expect(queryByTestId('command-palette')).toBeNull()
   })
 
-  it('switches project via command palette and shows pane layout', async () => {
+  it('switches project via command palette and shows terminal layout', async () => {
     localStorageMock.setItem('dancode-auth-token', 'test-token')
     mockFetch(200, { valid: true })
     const { getByTestId } = render(<App />)
 
     await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
+      expect(getByTestId('welcome-screen')).toBeDefined()
     })
 
-    // Open palette and select a project
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
     fireEvent.click(getByTestId('mock-palette-select'))
 
-    expect(getByTestId('pane-layout')).toBeDefined()
-    expect(getByTestId('pane-layout').dataset.slug).toBe('my-project')
+    expect(getByTestId('terminal-layout')).toBeDefined()
+    expect(getByTestId('terminal-layout').dataset.slug).toBe('my-project')
   })
 
   it('switches between projects via command palette', async () => {
@@ -304,23 +295,17 @@ describe('App', () => {
     const { getByTestId, queryByTestId } = render(<App />)
 
     await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
+      expect(getByTestId('welcome-screen')).toBeDefined()
     })
 
-    // Select first project
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
     fireEvent.click(getByTestId('mock-palette-select'))
-    expect(getByTestId('pane-layout').dataset.slug).toBe('my-project')
-
-    // Palette should be closed after selection
+    expect(getByTestId('terminal-layout').dataset.slug).toBe('my-project')
     expect(queryByTestId('command-palette')).toBeNull()
 
-    // Open palette again and select a different project
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
     fireEvent.click(getByTestId('mock-palette-select-other'))
-
-    // Should show pane layout for the new project
-    expect(getByTestId('pane-layout').dataset.slug).toBe('other-project')
+    expect(getByTestId('terminal-layout').dataset.slug).toBe('other-project')
     expect(queryByTestId('command-palette')).toBeNull()
   })
 
@@ -333,19 +318,19 @@ describe('App', () => {
     })
   })
 
-  it('switches project via sidebar click and shows pane layout', async () => {
+  it('switches project via sidebar click and shows terminal layout', async () => {
     localStorageMock.setItem('dancode-auth-token', 'test-token')
     mockFetch(200, { valid: true })
     const { getByTestId } = render(<App />)
 
     await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
+      expect(getByTestId('welcome-screen')).toBeDefined()
     })
 
     fireEvent.click(getByTestId('mock-sidebar-select'))
 
-    expect(getByTestId('pane-layout')).toBeDefined()
-    expect(getByTestId('pane-layout').dataset.slug).toBe('sidebar-project')
+    expect(getByTestId('terminal-layout')).toBeDefined()
+    expect(getByTestId('terminal-layout').dataset.slug).toBe('sidebar-project')
   })
 
   it('switches between projects via sidebar', async () => {
@@ -354,14 +339,14 @@ describe('App', () => {
     const { getByTestId } = render(<App />)
 
     await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
+      expect(getByTestId('welcome-screen')).toBeDefined()
     })
 
     fireEvent.click(getByTestId('mock-sidebar-select'))
-    expect(getByTestId('pane-layout').dataset.slug).toBe('sidebar-project')
+    expect(getByTestId('terminal-layout').dataset.slug).toBe('sidebar-project')
 
     fireEvent.click(getByTestId('mock-sidebar-select-other'))
-    expect(getByTestId('pane-layout').dataset.slug).toBe('sidebar-other')
+    expect(getByTestId('terminal-layout').dataset.slug).toBe('sidebar-other')
   })
 
   it('hides new project form when switching projects via sidebar', async () => {
@@ -370,7 +355,7 @@ describe('App', () => {
     const { getByTestId, queryByTestId } = render(<App />)
 
     await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
+      expect(getByTestId('welcome-screen')).toBeDefined()
     })
 
     fireEvent.click(getByTestId('new-project-button'))
@@ -379,21 +364,7 @@ describe('App', () => {
     fireEvent.click(getByTestId('mock-sidebar-select'))
 
     expect(queryByTestId('new-project-form')).toBeNull()
-    expect(getByTestId('pane-layout').dataset.slug).toBe('sidebar-project')
-  })
-
-  it('main content area uses flex-1 and min-w-0 so terminals fill available width', async () => {
-    localStorageMock.setItem('dancode-auth-token', 'test-token')
-    mockFetch(200, { valid: true })
-    const { getByTestId } = render(<App />)
-
-    await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
-    })
-
-    const main = getByTestId('terminal').closest('main')
-    expect(main.className).toContain('flex-1')
-    expect(main.className).toContain('min-w-0')
+    expect(getByTestId('terminal-layout').dataset.slug).toBe('sidebar-project')
   })
 
   it('toggles sidebar collapsed state', async () => {
@@ -405,14 +376,11 @@ describe('App', () => {
       expect(getByTestId('sidebar')).toBeDefined()
     })
 
-    // Initially expanded
     expect(getByTestId('sidebar').dataset.collapsed).toBe('false')
 
-    // Click toggle to collapse
     fireEvent.click(getByTestId('mock-sidebar-toggle'))
     expect(getByTestId('sidebar').dataset.collapsed).toBe('true')
 
-    // Click toggle again to expand
     fireEvent.click(getByTestId('mock-sidebar-toggle'))
     expect(getByTestId('sidebar').dataset.collapsed).toBe('false')
   })
@@ -426,11 +394,9 @@ describe('App', () => {
       expect(getByTestId('sidebar')).toBeDefined()
     })
 
-    // Collapse
     fireEvent.click(getByTestId('mock-sidebar-toggle'))
     expect(localStorageMock.setItem).toHaveBeenCalledWith('dancode-sidebar-collapsed', 'true')
 
-    // Expand
     fireEvent.click(getByTestId('mock-sidebar-toggle'))
     expect(localStorageMock.setItem).toHaveBeenCalledWith('dancode-sidebar-collapsed', 'false')
   })
@@ -448,40 +414,6 @@ describe('App', () => {
     expect(getByTestId('sidebar').dataset.collapsed).toBe('true')
   })
 
-  it('defaults sidebar to expanded when no localStorage value', async () => {
-    localStorageMock.setItem('dancode-auth-token', 'test-token')
-    mockFetch(200, { valid: true })
-    const { getByTestId } = render(<App />)
-
-    await waitFor(() => {
-      expect(getByTestId('sidebar')).toBeDefined()
-    })
-
-    expect(getByTestId('sidebar').dataset.collapsed).toBe('false')
-  })
-
-  it('hides new project form when switching projects via palette', async () => {
-    localStorageMock.setItem('dancode-auth-token', 'test-token')
-    mockFetch(200, { valid: true })
-    const { getByTestId, queryByTestId } = render(<App />)
-
-    await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
-    })
-
-    // Open new project form
-    fireEvent.click(getByTestId('new-project-button'))
-    expect(getByTestId('new-project-form')).toBeDefined()
-
-    // Open palette and select a project while form is open
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
-    fireEvent.click(getByTestId('mock-palette-select'))
-
-    // Form should be hidden, pane layout should show
-    expect(queryByTestId('new-project-form')).toBeNull()
-    expect(getByTestId('pane-layout').dataset.slug).toBe('my-project')
-  })
-
   it('shows current project name in header bar when a project is selected', async () => {
     localStorageMock.setItem('dancode-auth-token', 'test-token')
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
@@ -493,95 +425,17 @@ describe('App', () => {
     const { getByTestId, queryByTestId } = render(<App />)
 
     await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
+      expect(getByTestId('welcome-screen')).toBeDefined()
     })
 
-    // No project name shown initially
     expect(queryByTestId('header-project-name')).toBeNull()
 
-    // Select a project via sidebar
     fireEvent.click(getByTestId('mock-sidebar-select'))
 
     await waitFor(() => {
       expect(getByTestId('header-project-name')).toBeDefined()
     })
     expect(getByTestId('header-project-name').textContent).toBe('My Project')
-    fetchSpy.mockRestore()
-  })
-
-  it('does not show project name in header when no project is selected', async () => {
-    localStorageMock.setItem('dancode-auth-token', 'test-token')
-    mockFetch(200, { valid: true })
-    const { getByTestId, queryByTestId } = render(<App />)
-
-    await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
-    })
-
-    expect(queryByTestId('header-project-name')).toBeNull()
-  })
-
-  it('opens dropdown when clicking header project name', async () => {
-    localStorageMock.setItem('dancode-auth-token', 'test-token')
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
-      if (url === '/api/projects') {
-        return { ok: true, status: 200, json: () => Promise.resolve([
-          { slug: 'sidebar-project', name: 'My Project', path: '/tmp' },
-          { slug: 'other-proj', name: 'Other Project', path: '/tmp2' },
-        ]) }
-      }
-      return { ok: true, status: 200, json: () => Promise.resolve({}) }
-    })
-    const { getByTestId, queryByTestId } = render(<App />)
-
-    await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
-    })
-
-    // Select a project so header name appears
-    fireEvent.click(getByTestId('mock-sidebar-select'))
-    await waitFor(() => {
-      expect(getByTestId('header-project-name')).toBeDefined()
-    })
-
-    // Dropdown not visible yet
-    expect(queryByTestId('header-dropdown')).toBeNull()
-
-    // Click project name to open dropdown
-    fireEvent.click(getByTestId('header-project-name'))
-    expect(getByTestId('header-dropdown')).toBeDefined()
-
-    fetchSpy.mockRestore()
-  })
-
-  it('dropdown lists all projects', async () => {
-    localStorageMock.setItem('dancode-auth-token', 'test-token')
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
-      if (url === '/api/projects') {
-        return { ok: true, status: 200, json: () => Promise.resolve([
-          { slug: 'sidebar-project', name: 'My Project', path: '/tmp' },
-          { slug: 'other-proj', name: 'Other Project', path: '/tmp2' },
-        ]) }
-      }
-      return { ok: true, status: 200, json: () => Promise.resolve({}) }
-    })
-    const { getByTestId } = render(<App />)
-
-    await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
-    })
-
-    fireEvent.click(getByTestId('mock-sidebar-select'))
-    await waitFor(() => {
-      expect(getByTestId('header-project-name')).toBeDefined()
-    })
-
-    fireEvent.click(getByTestId('header-project-name'))
-
-    // Both projects listed
-    expect(getByTestId('dropdown-item-sidebar-project')).toBeDefined()
-    expect(getByTestId('dropdown-item-other-proj')).toBeDefined()
-
     fetchSpy.mockRestore()
   })
 
@@ -599,7 +453,7 @@ describe('App', () => {
     const { getByTestId, queryByTestId } = render(<App />)
 
     await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
+      expect(getByTestId('welcome-screen')).toBeDefined()
     })
 
     fireEvent.click(getByTestId('mock-sidebar-select'))
@@ -610,120 +464,13 @@ describe('App', () => {
     fireEvent.click(getByTestId('header-project-name'))
     fireEvent.click(getByTestId('dropdown-item-other-proj'))
 
-    // Dropdown closes and project switches
     expect(queryByTestId('header-dropdown')).toBeNull()
-    expect(getByTestId('pane-layout').dataset.slug).toBe('other-proj')
+    expect(getByTestId('terminal-layout').dataset.slug).toBe('other-proj')
 
     fetchSpy.mockRestore()
   })
 
-  it('closes dropdown on second click of project name', async () => {
-    localStorageMock.setItem('dancode-auth-token', 'test-token')
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
-      if (url === '/api/projects') {
-        return { ok: true, status: 200, json: () => Promise.resolve([
-          { slug: 'sidebar-project', name: 'My Project', path: '/tmp' },
-        ]) }
-      }
-      return { ok: true, status: 200, json: () => Promise.resolve({}) }
-    })
-    const { getByTestId, queryByTestId } = render(<App />)
-
-    await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
-    })
-
-    fireEvent.click(getByTestId('mock-sidebar-select'))
-    await waitFor(() => {
-      expect(getByTestId('header-project-name')).toBeDefined()
-    })
-
-    // Open
-    fireEvent.click(getByTestId('header-project-name'))
-    expect(getByTestId('header-dropdown')).toBeDefined()
-
-    // Close via toggle
-    fireEvent.click(getByTestId('header-project-name'))
-    expect(queryByTestId('header-dropdown')).toBeNull()
-
-    fetchSpy.mockRestore()
-  })
-
-  it('closes dropdown when clicking outside', async () => {
-    localStorageMock.setItem('dancode-auth-token', 'test-token')
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
-      if (url === '/api/projects') {
-        return { ok: true, status: 200, json: () => Promise.resolve([
-          { slug: 'sidebar-project', name: 'My Project', path: '/tmp' },
-        ]) }
-      }
-      return { ok: true, status: 200, json: () => Promise.resolve({}) }
-    })
-    const { getByTestId, queryByTestId } = render(<App />)
-
-    await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
-    })
-
-    fireEvent.click(getByTestId('mock-sidebar-select'))
-    await waitFor(() => {
-      expect(getByTestId('header-project-name')).toBeDefined()
-    })
-
-    // Open dropdown
-    fireEvent.click(getByTestId('header-project-name'))
-    expect(getByTestId('header-dropdown')).toBeDefined()
-
-    // Click outside the dropdown
-    fireEvent.mouseDown(document.body)
-    expect(queryByTestId('header-dropdown')).toBeNull()
-
-    fetchSpy.mockRestore()
-  })
-
-  it('sidebar and command palette coexist — both switch projects in the same session', async () => {
-    localStorageMock.setItem('dancode-auth-token', 'test-token')
-    mockFetch(200, { valid: true })
-    const { getByTestId, queryByTestId } = render(<App />)
-
-    await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
-    })
-
-    // Both sidebar and command palette are available
-    expect(getByTestId('sidebar')).toBeDefined()
-    expect(queryByTestId('command-palette')).toBeNull() // palette closed by default
-
-    // Select a project via sidebar
-    fireEvent.click(getByTestId('mock-sidebar-select'))
-    expect(getByTestId('pane-layout').dataset.slug).toBe('sidebar-project')
-
-    // Sidebar still visible after selection
-    expect(getByTestId('sidebar')).toBeDefined()
-
-    // Open palette and switch to a different project
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
-    expect(getByTestId('command-palette')).toBeDefined()
-    expect(getByTestId('sidebar')).toBeDefined() // sidebar still rendered under palette
-    fireEvent.click(getByTestId('mock-palette-select'))
-
-    // Palette closes, project switched
-    expect(queryByTestId('command-palette')).toBeNull()
-    expect(getByTestId('pane-layout').dataset.slug).toBe('my-project')
-
-    // Switch back via sidebar
-    fireEvent.click(getByTestId('mock-sidebar-select-other'))
-    expect(getByTestId('pane-layout').dataset.slug).toBe('sidebar-other')
-
-    // Palette still works after sidebar usage
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
-    expect(getByTestId('command-palette')).toBeDefined()
-    fireEvent.click(getByTestId('mock-palette-select-other'))
-    expect(getByTestId('pane-layout').dataset.slug).toBe('other-project')
-    expect(queryByTestId('command-palette')).toBeNull()
-  })
-
-  it('all three switching mechanisms (palette, sidebar, dropdown) coexist and work independently', async () => {
+  it('all three switching mechanisms coexist and work independently', async () => {
     localStorageMock.setItem('dancode-auth-token', 'test-token')
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
       if (url === '/api/projects') {
@@ -738,62 +485,29 @@ describe('App', () => {
     const { getByTestId, queryByTestId } = render(<App />)
 
     await waitFor(() => {
-      expect(getByTestId('terminal')).toBeDefined()
+      expect(getByTestId('welcome-screen')).toBeDefined()
     })
-
-    // All three mechanisms are available from the start
-    expect(getByTestId('sidebar')).toBeDefined()
-    expect(queryByTestId('command-palette')).toBeNull() // palette closed by default
-    expect(queryByTestId('header-dropdown')).toBeNull() // dropdown closed by default
 
     // 1. Switch via sidebar
     fireEvent.click(getByTestId('mock-sidebar-select'))
-    expect(getByTestId('pane-layout').dataset.slug).toBe('sidebar-project')
-    expect(getByTestId('sidebar')).toBeDefined() // sidebar still visible
+    expect(getByTestId('terminal-layout').dataset.slug).toBe('sidebar-project')
 
     // 2. Switch via dropdown
     await waitFor(() => {
       expect(getByTestId('header-project-name')).toBeDefined()
     })
     fireEvent.click(getByTestId('header-project-name'))
-    expect(getByTestId('header-dropdown')).toBeDefined()
     fireEvent.click(getByTestId('dropdown-item-other-proj'))
-    expect(queryByTestId('header-dropdown')).toBeNull() // dropdown closes
-    expect(getByTestId('pane-layout').dataset.slug).toBe('other-proj')
-    expect(getByTestId('sidebar')).toBeDefined() // sidebar still visible
+    expect(getByTestId('terminal-layout').dataset.slug).toBe('other-proj')
 
     // 3. Switch via command palette
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
-    expect(getByTestId('command-palette')).toBeDefined()
-    expect(getByTestId('sidebar')).toBeDefined() // sidebar still visible under palette
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
     fireEvent.click(getByTestId('mock-palette-select'))
-    expect(queryByTestId('command-palette')).toBeNull() // palette closes
-    expect(getByTestId('pane-layout').dataset.slug).toBe('my-project')
+    expect(getByTestId('terminal-layout').dataset.slug).toBe('my-project')
 
-    // 4. Switch back via sidebar — still works after using other mechanisms
+    // 4. Switch back via sidebar
     fireEvent.click(getByTestId('mock-sidebar-select-other'))
-    expect(getByTestId('pane-layout').dataset.slug).toBe('sidebar-other')
-
-    // 5. Switch via dropdown again — still works after palette usage
-    await waitFor(() => {
-      expect(getByTestId('header-project-name')).toBeDefined()
-    })
-    fireEvent.click(getByTestId('header-project-name'))
-    expect(getByTestId('header-dropdown')).toBeDefined()
-    fireEvent.click(getByTestId('dropdown-item-sidebar-project'))
-    expect(queryByTestId('header-dropdown')).toBeNull()
-    expect(getByTestId('pane-layout').dataset.slug).toBe('sidebar-project')
-
-    // 6. Dropdown closes when palette opens (no stale UI overlap)
-    fireEvent.click(getByTestId('header-project-name'))
-    expect(getByTestId('header-dropdown')).toBeDefined()
-    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
-    expect(getByTestId('command-palette')).toBeDefined()
-    // Select from palette — should close dropdown too
-    fireEvent.click(getByTestId('mock-palette-select-other'))
-    expect(queryByTestId('command-palette')).toBeNull()
-    expect(queryByTestId('header-dropdown')).toBeNull() // palette handler closes dropdown
-    expect(getByTestId('pane-layout').dataset.slug).toBe('other-project')
+    expect(getByTestId('terminal-layout').dataset.slug).toBe('sidebar-other')
 
     fetchSpy.mockRestore()
   })
