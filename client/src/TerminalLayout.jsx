@@ -1,9 +1,12 @@
-import { useState, useCallback, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
+import { useState, useCallback, useEffect, useRef, forwardRef, useImperativeHandle, Fragment, useMemo } from 'react'
 import Terminal from './Terminal.jsx'
+import FileViewer from './FileViewer.jsx'
 import ShortcutBar from './ShortcutBar.jsx'
+import ResizeHandle from './ResizeHandle.jsx'
 
 export const MOBILE_BREAKPOINT = 768
 const TABLET_MAX = 1024
+const MIN_PANE_PCT = 10
 
 /**
  * Returns Tailwind classes for a connection state indicator dot.
@@ -22,8 +25,13 @@ function connectionDotClasses(state) {
   }
 }
 
+function getFileName(filePath) {
+  return filePath.split('/').pop() || filePath
+}
+
 const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) {
   const [terminals, setTerminals] = useState([])
+  const [openFiles, setOpenFiles] = useState([]) // [{ id, filePath, label }]
   const [focusedIndex, setFocusedIndex] = useState(0)
   const [layoutMode, setLayoutMode] = useState('split')
   const [loading, setLoading] = useState(true)
@@ -32,6 +40,9 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
   const [editValue, setEditValue] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
   const [connectionStates, setConnectionStates] = useState({})
+  const [splitDirection, setSplitDirection] = useState('row') // 'row' (side-by-side) | 'column' (stacked)
+  const [paneSizes, setPaneSizes] = useState(null) // null = equal, or array of percentages
+  const splitContainerRef = useRef(null)
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT
   )
@@ -44,6 +55,12 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
   const editInputRef = useRef(null)
   const terminalRefs = useRef({})
   const [fetchAttempt, setFetchAttempt] = useState(0)
+
+  // Unified pane list: terminals first, then open files
+  const allPanes = useMemo(() => [
+    ...terminals.map((t) => ({ ...t, paneType: 'terminal' })),
+    ...openFiles.map((f) => ({ ...f, paneType: 'file' })),
+  ], [terminals, openFiles])
 
   // Responsive breakpoints
   useEffect(() => {
@@ -96,6 +113,12 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
           }
           if (typeof project.layout.activeTab === 'number') {
             setFocusedIndex(project.layout.activeTab)
+          }
+          if (project.layout.direction === 'row' || project.layout.direction === 'column') {
+            setSplitDirection(project.layout.direction)
+          }
+          if (Array.isArray(project.layout.sizes)) {
+            setPaneSizes(project.layout.sizes)
           }
         }
 
@@ -151,7 +174,7 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          layout: { mode: layoutMode, activeTab: focusedIndex },
+          layout: { mode: layoutMode, activeTab: focusedIndex, direction: splitDirection, sizes: paneSizes },
           terminals: terminals.map((t) => t.id),
         }),
       }).catch(() => {})
@@ -159,11 +182,18 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     }
-  }, [layoutMode, focusedIndex, terminals, slug, token])
+  }, [layoutMode, focusedIndex, terminals, slug, token, splitDirection, paneSizes])
+
+  // Reset pane sizes when pane count changes
+  useEffect(() => {
+    if (paneSizes && paneSizes.length !== allPanes.length) {
+      setPaneSizes(null)
+    }
+  }, [allPanes.length, paneSizes])
 
   const effectiveLayout = isMobile ? 'tabs' : layoutMode
 
-  const handleTerminalClick = useCallback((index) => {
+  const handlePaneClick = useCallback((index) => {
     setFocusedIndex(index)
   }, [])
 
@@ -174,6 +204,54 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
   const toggleLayout = useCallback(() => {
     setLayoutMode((prev) => (prev === 'split' ? 'tabs' : 'split'))
   }, [])
+
+  const toggleDirection = useCallback(() => {
+    setSplitDirection((prev) => (prev === 'row' ? 'column' : 'row'))
+  }, [])
+
+  const applyPreset = useCallback((primaryPct) => {
+    const count = allPanes.length
+    if (count < 2) return
+    const remainingPct = 100 - primaryPct
+    const otherPct = remainingPct / (count - 1)
+    setPaneSizes([primaryPct, ...Array(count - 1).fill(otherPct)])
+  }, [allPanes.length])
+
+  const resetSizes = useCallback(() => {
+    setPaneSizes(null)
+  }, [])
+
+  const handleResizeDrag = useCallback((handleIndex, position) => {
+    const container = splitContainerRef.current
+    if (!container) return
+
+    const rect = container.getBoundingClientRect()
+    const isRow = splitDirection === 'row'
+    const totalSize = isRow ? rect.width : rect.height
+    const offset = isRow ? rect.left : rect.top
+
+    const pct = ((position - offset) / totalSize) * 100
+    const count = allPanes.length
+    const currentSizes = paneSizes && paneSizes.length === count
+      ? paneSizes
+      : Array(count).fill(100 / count)
+
+    // Calculate cumulative boundaries
+    const cumulative = [0]
+    for (let i = 0; i < currentSizes.length; i++) {
+      cumulative.push(cumulative[i] + currentSizes[i])
+    }
+
+    const minPos = cumulative[handleIndex] + MIN_PANE_PCT
+    const maxPos = cumulative[handleIndex + 2] - MIN_PANE_PCT
+    const clampedPct = Math.max(minPos, Math.min(maxPos, pct))
+
+    const newSizes = [...currentSizes]
+    newSizes[handleIndex] = clampedPct - cumulative[handleIndex]
+    newSizes[handleIndex + 1] = cumulative[handleIndex + 2] - clampedPct
+
+    setPaneSizes(newSizes)
+  }, [splitDirection, allPanes.length, paneSizes])
 
   // Track connection state per terminal
   const handleConnectionStateChange = useCallback((terminalId, state) => {
@@ -199,10 +277,11 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
       if (res.ok) {
         const newTerm = await res.json()
         setTerminals((prev) => [...prev, newTerm])
-        setFocusedIndex(terminals.length)
+        // Focus the new terminal (index = current terminals + openFiles)
+        setFocusedIndex(terminals.length + openFiles.length)
       }
     } catch {}
-  }, [slug, token, terminals.length])
+  }, [slug, token, terminals.length, openFiles.length])
 
   // Close a terminal with confirmation
   const handleCloseTerminal = useCallback(async (id) => {
@@ -221,10 +300,25 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
           const next = prev.filter((t) => t.id !== id)
           return next
         })
-        setFocusedIndex((prev) => Math.min(prev, terminals.length - 2))
+        setFocusedIndex((prev) => Math.min(prev, allPanes.length - 2))
       }
     } catch {}
-  }, [token, confirmDeleteId, terminals.length])
+  }, [token, confirmDeleteId, allPanes.length])
+
+  // Close a file viewer pane (no confirmation needed)
+  const handleCloseFile = useCallback((fileId) => {
+    setOpenFiles((prev) => prev.filter((f) => f.id !== fileId))
+    setFocusedIndex((prev) => Math.min(prev, allPanes.length - 2))
+  }, [allPanes.length])
+
+  // Close any pane by type
+  const handleClosePane = useCallback((pane) => {
+    if (pane.paneType === 'terminal') {
+      handleCloseTerminal(pane.id)
+    } else {
+      handleCloseFile(pane.id)
+    }
+  }, [handleCloseTerminal, handleCloseFile])
 
   // Start inline editing
   const handleStartEdit = useCallback((id, currentLabel) => {
@@ -239,24 +333,33 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
       setEditingId(null)
       return
     }
-    try {
-      const res = await fetch(`/api/terminals/${id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ label: trimmed }),
-      })
-      if (res.ok) {
-        const updated = await res.json()
-        setTerminals((prev) =>
-          prev.map((t) => (t.id === id ? { ...t, label: updated.label } : t))
-        )
-      }
-    } catch {}
+    // Check if it's a terminal or a file pane
+    const isTerminal = terminals.some((t) => t.id === id)
+    if (isTerminal) {
+      try {
+        const res = await fetch(`/api/terminals/${id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ label: trimmed }),
+        })
+        if (res.ok) {
+          const updated = await res.json()
+          setTerminals((prev) =>
+            prev.map((t) => (t.id === id ? { ...t, label: updated.label } : t))
+          )
+        }
+      } catch {}
+    } else {
+      // File pane label edit
+      setOpenFiles((prev) =>
+        prev.map((f) => (f.id === id ? { ...f, label: trimmed } : f))
+      )
+    }
     setEditingId(null)
-  }, [token, editValue])
+  }, [token, editValue, terminals])
 
   // Cancel inline edit
   const handleCancelEdit = useCallback(() => {
@@ -284,36 +387,64 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
       if (res.ok) {
         const newTerm = await res.json()
         setTerminals((prev) => [...prev, newTerm])
-        setFocusedIndex(terminals.length)
+        setFocusedIndex(terminals.length + openFiles.length)
       }
     } catch {}
-  }, [slug, token, terminals.length])
+  }, [slug, token, terminals.length, openFiles.length])
+
+  // Open a file in the viewer (or focus if already open)
+  const handleOpenFile = useCallback((filePath) => {
+    // Check if already open
+    const existingIndex = allPanes.findIndex(
+      (p) => p.paneType === 'file' && p.filePath === filePath
+    )
+    if (existingIndex >= 0) {
+      setFocusedIndex(existingIndex)
+      return
+    }
+    const newFile = {
+      id: crypto.randomUUID(),
+      filePath,
+      label: getFileName(filePath),
+    }
+    setOpenFiles((prev) => [...prev, newFile])
+    // Focus the new file pane (it'll be at the end of allPanes)
+    setFocusedIndex(terminals.length + openFiles.length)
+  }, [allPanes, terminals.length, openFiles.length])
 
   // Insert text into focused terminal (used by file explorer drag/double-click)
   const insertIntoFocusedTerminal = useCallback((text) => {
-    const focused = terminals[focusedIndex]
-    if (focused && terminalRefs.current[focused.id]) {
+    // Find a focused terminal pane
+    const focused = allPanes[focusedIndex]
+    if (focused && focused.paneType === 'terminal' && terminalRefs.current[focused.id]) {
       terminalRefs.current[focused.id].sendInput(text)
+      return
     }
-  }, [terminals, focusedIndex])
+    // Fallback: find the first terminal
+    const firstTerminal = allPanes.find((p) => p.paneType === 'terminal')
+    if (firstTerminal && terminalRefs.current[firstTerminal.id]) {
+      terminalRefs.current[firstTerminal.id].sendInput(text)
+    }
+  }, [allPanes, focusedIndex])
 
   // Expose methods to parent via ref
   useImperativeHandle(ref, () => ({
     addTerminalWithCwd: handleAddTerminalWithCwd,
     insertIntoFocusedTerminal,
-  }), [handleAddTerminalWithCwd, insertIntoFocusedTerminal])
+    openFile: handleOpenFile,
+  }), [handleAddTerminalWithCwd, insertIntoFocusedTerminal, handleOpenFile])
 
   // Handle file drop from file explorer onto terminal panes
-  const handleFileDrop = useCallback((e, terminalIndex) => {
+  const handleFileDrop = useCallback((e, paneIndex) => {
     const filePath = e.dataTransfer.getData('application/x-dancode-file')
     if (filePath) {
       e.preventDefault()
-      const term = terminals[terminalIndex]
-      if (term && terminalRefs.current[term.id]) {
-        terminalRefs.current[term.id].sendInput(filePath)
+      const pane = allPanes[paneIndex]
+      if (pane && pane.paneType === 'terminal' && terminalRefs.current[pane.id]) {
+        terminalRefs.current[pane.id].sendInput(filePath)
       }
     }
-  }, [terminals])
+  }, [allPanes])
 
   const handleFileDragOver = useCallback((e) => {
     if (e.dataTransfer.types.includes('application/x-dancode-file')) {
@@ -324,21 +455,21 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
 
   // Tablet shortcut bar: send key sequence to focused terminal
   const handleShortcutSend = useCallback((seq) => {
-    const focused = terminals[focusedIndex]
-    if (focused && terminalRefs.current[focused.id]) {
+    const focused = allPanes[focusedIndex]
+    if (focused && focused.paneType === 'terminal' && terminalRefs.current[focused.id]) {
       terminalRefs.current[focused.id].sendInput(seq)
     }
-  }, [terminals, focusedIndex])
+  }, [allPanes, focusedIndex])
 
   const handleShortcutPaste = useCallback(async () => {
     try {
       const text = await navigator.clipboard.readText()
-      const focused = terminals[focusedIndex]
-      if (text && focused && terminalRefs.current[focused.id]) {
+      const focused = allPanes[focusedIndex]
+      if (text && focused && focused.paneType === 'terminal' && terminalRefs.current[focused.id]) {
         terminalRefs.current[focused.id].sendInput(text)
       }
     } catch {}
-  }, [terminals, focusedIndex])
+  }, [allPanes, focusedIndex])
 
   if (loading) {
     return (
@@ -371,47 +502,144 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
     )
   }
 
+  // Render a pane header
+  function renderPaneHeader(pane, index, isFocused) {
+    const isFile = pane.paneType === 'file'
+    const state = isFile ? null : (connectionStates[pane.id] || 'connecting')
+    const isConfirmingDelete = !isFile && confirmDeleteId === pane.id
+
+    return (
+      <div
+        className={`px-3 py-1 text-xs font-medium border-b select-none flex items-center justify-between transition-colors duration-150 ${
+          isFocused
+            ? 'text-base1 bg-blue/10 border-blue/50'
+            : 'text-base01 bg-base02 border-base01/30'
+        }`}
+      >
+        <div className="flex items-center gap-1.5 min-w-0">
+          {isFile ? (
+            <span className="text-[10px] shrink-0">{'\u{1F4C4}'}</span>
+          ) : (
+            <span
+              data-testid={`connection-dot-${index}`}
+              className={`inline-block w-2 h-2 rounded-full shrink-0 ${connectionDotClasses(state)}`}
+            />
+          )}
+          {editingId === pane.id ? (
+            <input
+              ref={editInputRef}
+              data-testid={`pane-edit-${index}`}
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveEdit(pane.id)
+                if (e.key === 'Escape') handleCancelEdit()
+              }}
+              onBlur={() => handleSaveEdit(pane.id)}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-base03 text-base1 text-xs px-1 py-0 rounded border border-blue/50 outline-none w-24"
+            />
+          ) : (
+            <span
+              className="truncate"
+              title={isFile ? pane.filePath : pane.label}
+              onDoubleClick={() => handleStartEdit(pane.id, pane.label)}
+            >
+              {pane.label}
+            </span>
+          )}
+        </div>
+        <button
+          data-testid={`close-${isFile ? 'file' : 'terminal'}-${index}`}
+          onClick={(e) => {
+            e.stopPropagation()
+            handleClosePane(pane)
+          }}
+          className="text-base01 hover:text-red text-xs ml-2 transition-colors"
+          title={isConfirmingDelete ? 'Click again to confirm' : (isFile ? 'Close file' : 'Close terminal')}
+        >
+          {isConfirmingDelete ? 'Confirm?' : '\u00d7'}
+        </button>
+      </div>
+    )
+  }
+
+  // Render pane content
+  function renderPaneContent(pane, index, isFocused) {
+    if (pane.paneType === 'file') {
+      return (
+        <div className="flex-1 min-h-0">
+          <FileViewer
+            token={token}
+            slug={slug}
+            filePath={pane.filePath}
+            focused={isFocused}
+            onFocus={() => setFocusedIndex(index)}
+          />
+        </div>
+      )
+    }
+    return (
+      <div className="flex-1 min-h-0">
+        <Terminal
+          ref={(r) => setTerminalRef(pane.id, r)}
+          token={token}
+          terminalId={pane.id}
+          projectSlug={slug}
+          focused={isFocused}
+          onFocus={() => setFocusedIndex(index)}
+          onConnectionStateChange={handleConnectionStateChange}
+        />
+      </div>
+    )
+  }
+
   return (
     <div data-testid="terminal-layout" data-slug={slug} className="flex flex-col w-full h-full animate-fade-in">
       {/* Layout toolbar */}
       <div className="flex items-center px-2 py-1 bg-base02 border-b border-base01/30">
         {effectiveLayout === 'tabs' && (
           <div className="flex gap-1 mr-2" data-testid="tab-bar">
-            {terminals.map((term, index) => {
+            {allPanes.map((pane, index) => {
               const isActive = focusedIndex === index
-              const state = connectionStates[term.id] || 'connecting'
+              const isFile = pane.paneType === 'file'
+              const state = isFile ? null : (connectionStates[pane.id] || 'connecting')
               return (
                 <button
-                  key={term.id}
+                  key={pane.id}
                   data-testid={`tab-${index}`}
                   onClick={() => setFocusedIndex(index)}
-                  onDoubleClick={() => handleStartEdit(term.id, term.label)}
+                  onDoubleClick={() => handleStartEdit(pane.id, pane.label)}
                   className={`px-3 py-1 text-xs font-medium rounded transition-colors flex items-center gap-1.5 ${
                     isActive
                       ? 'text-base1 bg-base03 border border-blue/50'
                       : 'text-base01 bg-base02 border border-base01/30 hover:text-base0'
                   }`}
                 >
-                  <span
-                    data-testid={`connection-dot-${index}`}
-                    className={`inline-block w-2 h-2 rounded-full shrink-0 ${connectionDotClasses(state)}`}
-                  />
-                  {editingId === term.id ? (
+                  {isFile ? (
+                    <span className="text-[10px] shrink-0">{'\u{1F4C4}'}</span>
+                  ) : (
+                    <span
+                      data-testid={`connection-dot-${index}`}
+                      className={`inline-block w-2 h-2 rounded-full shrink-0 ${connectionDotClasses(state)}`}
+                    />
+                  )}
+                  {editingId === pane.id ? (
                     <input
                       ref={editInputRef}
                       data-testid={`tab-edit-${index}`}
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleSaveEdit(term.id)
+                        if (e.key === 'Enter') handleSaveEdit(pane.id)
                         if (e.key === 'Escape') handleCancelEdit()
                       }}
-                      onBlur={() => handleSaveEdit(term.id)}
+                      onBlur={() => handleSaveEdit(pane.id)}
                       onClick={(e) => e.stopPropagation()}
                       className="bg-base03 text-base1 text-xs px-1 py-0 rounded border border-blue/50 outline-none w-20"
                     />
                   ) : (
-                    term.label
+                    pane.label
                   )}
                 </button>
               )
@@ -426,6 +654,42 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
           +
         </button>
         <div className="flex gap-1 ml-auto">
+          {!isMobile && effectiveLayout === 'split' && allPanes.length >= 2 && (
+            <>
+              <button
+                data-testid="direction-toggle"
+                onClick={toggleDirection}
+                className="px-2 py-1 text-xs text-base01 hover:text-base0 border border-base01/30 rounded transition-colors"
+                title={splitDirection === 'row' ? 'Stack vertically' : 'Split horizontally'}
+              >
+                {splitDirection === 'row' ? '\u2195' : '\u2194'}
+              </button>
+              <button
+                data-testid="preset-equal"
+                onClick={resetSizes}
+                className="px-2 py-1 text-xs text-base01 hover:text-base0 border border-base01/30 rounded transition-colors"
+                title="Equal split"
+              >
+                Equal
+              </button>
+              <button
+                data-testid="preset-75-25"
+                onClick={() => applyPreset(75)}
+                className="px-2 py-1 text-xs text-base01 hover:text-base0 border border-base01/30 rounded transition-colors"
+                title="75/25 split"
+              >
+                75/25
+              </button>
+              <button
+                data-testid="preset-25-75"
+                onClick={() => applyPreset(25)}
+                className="px-2 py-1 text-xs text-base01 hover:text-base0 border border-base01/30 rounded transition-colors"
+                title="25/75 split"
+              >
+                25/75
+              </button>
+            </>
+          )}
           {!isMobile && (
             <button
               data-testid="layout-toggle"
@@ -438,143 +702,69 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
         </div>
       </div>
 
-      {/* Terminal content */}
+      {/* Pane content */}
       {effectiveLayout === 'split' ? (
-        <div key="split" className="flex flex-row flex-1 min-h-0 animate-fade-in">
-          {terminals.map((term, index) => {
-            const isFocused = focusedIndex === index
-            const state = connectionStates[term.id] || 'connecting'
-            return (
-              <div
-                key={term.id}
-                data-testid={`terminal-pane-${index}`}
-                className={`flex-1 min-w-0 flex flex-col border-r last:border-r-0 transition-all duration-150 ${
-                  isFocused
-                    ? 'border-blue/50 border-l-8 border-l-blue'
-                    : 'border-base01/30 border-l-8 border-l-transparent opacity-60'
-                }`}
-                onClick={() => handleTerminalClick(index)}
-                onMouseDown={handlePaneMouseDown}
-                onDragOver={handleFileDragOver}
-                onDrop={(e) => handleFileDrop(e, index)}
-              >
-                <div
-                  className={`px-3 py-1 text-xs font-medium border-b select-none flex items-center justify-between transition-colors duration-150 ${
-                    isFocused
-                      ? 'text-base1 bg-blue/10 border-blue/50'
-                      : 'text-base01 bg-base02 border-base01/30'
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      data-testid={`connection-dot-${index}`}
-                      className={`inline-block w-2 h-2 rounded-full shrink-0 ${connectionDotClasses(state)}`}
+        <div
+          key="split"
+          ref={splitContainerRef}
+          className={`flex ${splitDirection === 'row' ? 'flex-row' : 'flex-col'} flex-1 min-h-0 animate-fade-in`}
+        >
+          {(() => {
+            const sizes = paneSizes && paneSizes.length === allPanes.length
+              ? paneSizes
+              : Array(allPanes.length).fill(100 / allPanes.length)
+            const isRow = splitDirection === 'row'
+
+            return allPanes.map((pane, index) => {
+              const size = sizes[index]
+              const isFocused = focusedIndex === index
+
+              return (
+                <Fragment key={pane.id}>
+                  {index > 0 && (
+                    <ResizeHandle
+                      direction={isRow ? 'vertical' : 'horizontal'}
+                      onDrag={(pos) => handleResizeDrag(index - 1, pos)}
                     />
-                    {editingId === term.id ? (
-                      <input
-                        ref={editInputRef}
-                        data-testid={`pane-edit-${index}`}
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSaveEdit(term.id)
-                          if (e.key === 'Escape') handleCancelEdit()
-                        }}
-                        onBlur={() => handleSaveEdit(term.id)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="bg-base03 text-base1 text-xs px-1 py-0 rounded border border-blue/50 outline-none w-24"
-                      />
-                    ) : (
-                      <span onDoubleClick={() => handleStartEdit(term.id, term.label)}>{term.label}</span>
-                    )}
-                  </div>
-                  <button
-                    data-testid={`close-terminal-${index}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleCloseTerminal(term.id)
+                  )}
+                  <div
+                    data-testid={`terminal-pane-${index}`}
+                    className={`flex flex-col overflow-hidden transition-opacity duration-150 ${
+                      isFocused ? '' : 'opacity-60'
+                    }`}
+                    style={{
+                      flexBasis: `${size}%`,
+                      flexGrow: 0,
+                      flexShrink: 1,
+                      [isRow ? 'minWidth' : 'minHeight']: 0,
                     }}
-                    className="text-base01 hover:text-red text-xs ml-2 transition-colors"
-                    title={confirmDeleteId === term.id ? 'Click again to confirm' : 'Close terminal'}
+                    onClick={() => handlePaneClick(index)}
+                    onMouseDown={handlePaneMouseDown}
+                    onDragOver={pane.paneType === 'terminal' ? handleFileDragOver : undefined}
+                    onDrop={pane.paneType === 'terminal' ? (e) => handleFileDrop(e, index) : undefined}
                   >
-                    {confirmDeleteId === term.id ? 'Confirm?' : '\u00d7'}
-                  </button>
-                </div>
-                <div className="flex-1 min-h-0">
-                  <Terminal
-                    ref={(r) => setTerminalRef(term.id, r)}
-                    token={token}
-                    terminalId={term.id}
-                    projectSlug={slug}
-                    focused={isFocused}
-                    onFocus={() => setFocusedIndex(index)}
-                    onConnectionStateChange={handleConnectionStateChange}
-                  />
-                </div>
-              </div>
-            )
-          })}
+                    {renderPaneHeader(pane, index, isFocused)}
+                    {renderPaneContent(pane, index, isFocused)}
+                  </div>
+                </Fragment>
+              )
+            })
+          })()}
         </div>
       ) : (
         <div key="tabs" className="flex-1 min-h-0 flex flex-col animate-fade-in" data-testid="tabbed-content">
-          {terminals.map((term, index) => {
+          {allPanes.map((pane, index) => {
             const isActive = focusedIndex === index
-            const state = connectionStates[term.id] || 'connecting'
             return (
               <div
-                key={term.id}
+                key={pane.id}
                 data-testid={`terminal-pane-${index}`}
                 className={`flex-1 min-h-0 flex flex-col ${isActive ? '' : 'hidden'}`}
-                onDragOver={handleFileDragOver}
-                onDrop={(e) => handleFileDrop(e, index)}
+                onDragOver={pane.paneType === 'terminal' ? handleFileDragOver : undefined}
+                onDrop={pane.paneType === 'terminal' ? (e) => handleFileDrop(e, index) : undefined}
               >
-                <div
-                  className="px-3 py-1 text-xs font-medium border-b select-none flex items-center justify-between text-base1 bg-blue/10 border-blue/50"
-                >
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      data-testid={`connection-dot-${index}`}
-                      className={`inline-block w-2 h-2 rounded-full shrink-0 ${connectionDotClasses(state)}`}
-                    />
-                    {editingId === term.id ? (
-                      <input
-                        ref={editInputRef}
-                        data-testid={`pane-edit-${index}`}
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSaveEdit(term.id)
-                          if (e.key === 'Escape') handleCancelEdit()
-                        }}
-                        onBlur={() => handleSaveEdit(term.id)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="bg-base03 text-base1 text-xs px-1 py-0 rounded border border-blue/50 outline-none w-24"
-                      />
-                    ) : (
-                      <span onDoubleClick={() => handleStartEdit(term.id, term.label)}>{term.label}</span>
-                    )}
-                  </div>
-                  <button
-                    data-testid={`close-terminal-${index}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleCloseTerminal(term.id)
-                    }}
-                    className="text-base01 hover:text-red text-xs ml-2 transition-colors"
-                    title={confirmDeleteId === term.id ? 'Click again to confirm' : 'Close terminal'}
-                  >
-                    {confirmDeleteId === term.id ? 'Confirm?' : '\u00d7'}
-                  </button>
-                </div>
-                <Terminal
-                  ref={(r) => setTerminalRef(term.id, r)}
-                  token={token}
-                  terminalId={term.id}
-                  projectSlug={slug}
-                  focused={isActive}
-                  onFocus={() => setFocusedIndex(index)}
-                  onConnectionStateChange={handleConnectionStateChange}
-                />
+                {renderPaneHeader(pane, index, true)}
+                {renderPaneContent(pane, index, isActive)}
               </div>
             )
           })}

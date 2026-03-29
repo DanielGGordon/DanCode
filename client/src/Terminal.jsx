@@ -362,11 +362,47 @@ const Terminal = forwardRef(function Terminal({ token, terminalId, projectSlug, 
     }
   }, [])
 
-  // Handle native paste events
+  // Handle native paste events (text + clipboard images)
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
-    const handler = (e) => {
+    const handler = async (e) => {
+      // Check for clipboard image files first
+      const files = e.clipboardData?.files
+      if (files && files.length > 0) {
+        const imageFile = Array.from(files).find((f) => f.type.startsWith('image/'))
+        if (imageFile && projectSlug && token) {
+          e.preventDefault()
+          try {
+            const reader = new FileReader()
+            const dataUrl = await new Promise((resolve, reject) => {
+              reader.onload = () => resolve(reader.result)
+              reader.onerror = reject
+              reader.readAsDataURL(imageFile)
+            })
+            const ext = imageFile.type.split('/')[1] || 'png'
+            const filename = `clipboard-${Date.now()}.${ext}`
+            const res = await fetch(`/api/projects/${projectSlug}/upload`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({ data: dataUrl, filename }),
+            })
+            if (res.ok) {
+              const { path } = await res.json()
+              if (socketRef.current?.connected) {
+                socketRef.current.emit('input', path)
+              }
+            }
+          } catch {
+            // Upload failed silently
+          }
+          return
+        }
+      }
+      // Fall back to text paste
       const text = e.clipboardData?.getData('text')
       if (!text || !termRef.current) return
       e.preventDefault()
@@ -374,7 +410,7 @@ const Terminal = forwardRef(function Terminal({ token, terminalId, projectSlug, 
     }
     container.addEventListener('paste', handler)
     return () => container.removeEventListener('paste', handler)
-  }, [])
+  }, [projectSlug, token])
 
   // Drag-and-drop image upload
   useEffect(() => {

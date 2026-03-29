@@ -17,7 +17,7 @@ function getFileIcon(name, type) {
   return '\u{1F4C3}' // generic file
 }
 
-function TreeNode({ entry, path, depth, token, slug, onContextMenu, expandedDirs, toggleDir, loadChildren, children: childrenMap, showHidden, showIgnored, onDragStart, onDoubleClick, renaming, renameRef, onRenameSubmit, onRenameCancel, newItem, newItemRef, onNewItemSubmit, onNewItemCancel }) {
+function TreeNode({ entry, path, depth, token, slug, onContextMenu, expandedDirs, toggleDir, loadChildren, children: childrenMap, showHidden, showIgnored, onDragStart, onDoubleClick, onFileClick, renaming, renameRef, onRenameSubmit, onRenameCancel, newItem, newItemRef, onNewItemSubmit, onNewItemCancel }) {
   const fullPath = path ? `${path}/${entry.name}` : entry.name
   const isDir = entry.type === 'directory'
   const isExpanded = expandedDirs.has(fullPath)
@@ -30,8 +30,10 @@ function TreeNode({ entry, path, depth, token, slug, onContextMenu, expandedDirs
       if (!isExpanded && !dirChildren) {
         loadChildren(fullPath)
       }
+    } else if (onFileClick) {
+      onFileClick(fullPath)
     }
-  }, [isDir, fullPath, isExpanded, dirChildren, toggleDir, loadChildren])
+  }, [isDir, fullPath, isExpanded, dirChildren, toggleDir, loadChildren, onFileClick])
 
   const handleDragStart = useCallback((e) => {
     if (!isDir) {
@@ -111,6 +113,7 @@ function TreeNode({ entry, path, depth, token, slug, onContextMenu, expandedDirs
               showIgnored={showIgnored}
               onDragStart={onDragStart}
               onDoubleClick={onDoubleClick}
+              onFileClick={onFileClick}
               renaming={renaming}
               renameRef={renameRef}
               onRenameSubmit={onRenameSubmit}
@@ -149,7 +152,7 @@ function TreeNode({ entry, path, depth, token, slug, onContextMenu, expandedDirs
   )
 }
 
-export default function FileExplorer({ token, slug, collapsed, onToggle, onOpenTerminalHere, onInsertPath }) {
+export default function FileExplorer({ token, slug, collapsed, onToggle, onOpenTerminalHere, onInsertPath, onOpenFile, width }) {
   const [rootEntries, setRootEntries] = useState([])
   const [children, setChildren] = useState({}) // { path: entries[] }
   const [expandedDirs, setExpandedDirs] = useState(new Set())
@@ -413,7 +416,8 @@ export default function FileExplorer({ token, slug, collapsed, onToggle, onOpenT
   return (
     <aside
       data-testid="file-explorer"
-      className="w-56 bg-base02 border-r border-base01/30 flex flex-col shrink-0 overflow-hidden"
+      className={`${width ? 'h-full' : 'w-56'} bg-base02 border-r border-base01/30 flex flex-col shrink-0 overflow-hidden`}
+      style={width ? { width } : undefined}
     >
       {/* Header */}
       <div className="flex items-center px-2 py-1.5 border-b border-base01/30">
@@ -489,6 +493,7 @@ export default function FileExplorer({ token, slug, collapsed, onToggle, onOpenT
                 showIgnored={showIgnored}
                 onDragStart={() => {}}
                 onDoubleClick={handleDoubleClick}
+                onFileClick={onOpenFile}
                 renaming={renaming}
                 renameRef={renameRef}
                 onRenameSubmit={handleRenameSubmit}
@@ -528,6 +533,21 @@ export default function FileExplorer({ token, slug, collapsed, onToggle, onOpenT
           className="fixed z-50 min-w-40 bg-base02 border border-base01/30 rounded shadow-lg py-1"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
+          {contextMenu.type === 'file' && onOpenFile && (
+            <>
+              <button
+                data-testid="ctx-open-viewer"
+                className="w-full text-left px-3 py-1.5 text-xs text-base0 hover:bg-base03/50 hover:text-base1 transition-colors"
+                onClick={() => {
+                  onOpenFile(contextMenu.path)
+                  setContextMenu(null)
+                }}
+              >
+                Open in Viewer
+              </button>
+              <div className="border-t border-base01/30 my-1" />
+            </>
+          )}
           {contextMenu.type === 'directory' && (
             <>
               <button

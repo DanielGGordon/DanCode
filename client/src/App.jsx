@@ -6,6 +6,7 @@ import NewProjectForm from './NewProjectForm.jsx'
 import CommandPalette from './CommandPalette.jsx'
 import Sidebar from './Sidebar.jsx'
 import FileExplorer from './FileExplorer.jsx'
+import ResizeHandle from './ResizeHandle.jsx'
 import MobileDashboard from './MobileDashboard.jsx'
 import MobileTerminalList from './MobileTerminalList.jsx'
 import MobileTerminalView from './MobileTerminalView.jsx'
@@ -13,8 +14,11 @@ import MobileTerminalView from './MobileTerminalView.jsx'
 const TOKEN_KEY = 'dancode-auth-token'
 const SIDEBAR_KEY = 'dancode-sidebar-collapsed'
 const FILE_EXPLORER_KEY = 'dancode-file-explorer-collapsed'
+const FILE_EXPLORER_WIDTH_KEY = 'dancode-file-explorer-width'
 const MOBILE_BREAKPOINT = 480
 const TABLET_MAX = 1024
+const MIN_EXPLORER_WIDTH = 120
+const MAX_EXPLORER_WIDTH = 600
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(
@@ -40,8 +44,13 @@ function App() {
   const [projects, setProjects] = useState([])
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === 'true')
   const [fileExplorerCollapsed, setFileExplorerCollapsed] = useState(() => localStorage.getItem(FILE_EXPLORER_KEY) !== 'false')
+  const [fileExplorerWidth, setFileExplorerWidth] = useState(() => {
+    const saved = localStorage.getItem(FILE_EXPLORER_WIDTH_KEY)
+    return saved ? Number(saved) : 224
+  })
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef(null)
+  const fileExplorerRef = useRef(null)
   const terminalLayoutRef = useRef(null)
   const isMobile = useIsMobile()
 
@@ -129,6 +138,21 @@ function App() {
       return () => clearInterval(interval)
     }
   }, [fetchAllTerminalActivity, isMobile, token])
+
+  // Persist file explorer width
+  useEffect(() => {
+    if (!fileExplorerCollapsed) {
+      localStorage.setItem(FILE_EXPLORER_WIDTH_KEY, String(fileExplorerWidth))
+    }
+  }, [fileExplorerWidth, fileExplorerCollapsed])
+
+  const handleExplorerResize = useCallback((pos) => {
+    const el = fileExplorerRef.current
+    if (!el) return
+    const left = el.getBoundingClientRect().left
+    const newWidth = Math.max(MIN_EXPLORER_WIDTH, Math.min(MAX_EXPLORER_WIDTH, pos - left))
+    setFileExplorerWidth(newWidth)
+  }, [])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -495,26 +519,42 @@ function App() {
           })}
         />
         {selectedSlug && !showNewProject && (
-          <FileExplorer
-            token={token}
-            slug={selectedSlug}
-            collapsed={fileExplorerCollapsed}
-            onToggle={() => setFileExplorerCollapsed((prev) => {
-              const next = !prev
-              localStorage.setItem(FILE_EXPLORER_KEY, String(!next))
-              return next
-            })}
-            onOpenTerminalHere={(dirPath) => {
-              if (terminalLayoutRef.current) {
-                terminalLayoutRef.current.addTerminalWithCwd(dirPath)
-              }
-            }}
-            onInsertPath={(path) => {
-              if (terminalLayoutRef.current) {
-                terminalLayoutRef.current.insertIntoFocusedTerminal(path)
-              }
-            }}
-          />
+          <>
+            <div ref={fileExplorerRef} className="shrink-0 h-full">
+              <FileExplorer
+                token={token}
+                slug={selectedSlug}
+                collapsed={fileExplorerCollapsed}
+                width={fileExplorerCollapsed ? undefined : fileExplorerWidth}
+                onToggle={() => setFileExplorerCollapsed((prev) => {
+                  const next = !prev
+                  localStorage.setItem(FILE_EXPLORER_KEY, String(!next))
+                  return next
+                })}
+                onOpenTerminalHere={(dirPath) => {
+                  if (terminalLayoutRef.current) {
+                    terminalLayoutRef.current.addTerminalWithCwd(dirPath)
+                  }
+                }}
+                onInsertPath={(path) => {
+                  if (terminalLayoutRef.current) {
+                    terminalLayoutRef.current.insertIntoFocusedTerminal(path)
+                  }
+                }}
+                onOpenFile={(filePath) => {
+                  if (terminalLayoutRef.current) {
+                    terminalLayoutRef.current.openFile(filePath)
+                  }
+                }}
+              />
+            </div>
+            {!fileExplorerCollapsed && (
+              <ResizeHandle
+                direction="vertical"
+                onDrag={handleExplorerResize}
+              />
+            )}
+          </>
         )}
         <main className="flex-1 min-h-0 min-w-0">
           {showNewProject ? (
