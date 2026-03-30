@@ -55,6 +55,11 @@ const clientDistPath = join(__dirname, '..', '..', 'client', 'dist');
 const hasClientBuild = existsSync(join(clientDistPath, 'index.html'));
 
 if (hasClientBuild) {
+  // Prevent browser from caching sw.js so updates take effect immediately
+  app.get('/sw.js', (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.sendFile(join(clientDistPath, 'sw.js'));
+  });
   app.use(express.static(clientDistPath));
 }
 

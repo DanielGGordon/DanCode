@@ -403,14 +403,19 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
       return
     }
     const newFile = {
-      id: crypto.randomUUID(),
+      id: self.crypto?.randomUUID?.() || (Math.random().toString(36).slice(2) + Date.now().toString(36)),
       filePath,
       label: getFileName(filePath),
     }
-    setOpenFiles((prev) => [...prev, newFile])
-    // Focus the new file pane (it'll be at the end of allPanes)
-    setFocusedIndex(terminals.length + openFiles.length)
-  }, [allPanes, terminals.length, openFiles.length])
+    setOpenFiles((prev) => {
+      const next = [...prev, newFile]
+      // Focus the new file pane — index is terminals.length + new openFiles index
+      setFocusedIndex(terminals.length + next.length - 1)
+      // Reset pane sizes so the new pane gets space
+      setPaneSizes(null)
+      return next
+    })
+  }, [allPanes, terminals.length])
 
   // Insert text into focused terminal (used by file explorer drag/double-click)
   const insertIntoFocusedTerminal = useCallback((text) => {

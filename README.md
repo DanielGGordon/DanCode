@@ -35,6 +35,7 @@ npm run dev          # Start server + client concurrently
 - **Reconnection UX** — Auto-reconnects on disconnect with "Reconnecting..." overlay, 30-second timeout to "Disconnected" with manual button; per-terminal connection state indicator dots (green/yellow/red)
 - **Project creation** — Automatically creates 2 terminals (CLI + Claude) per project
 - **Drag-and-drop image upload** — Drop images onto a terminal to upload and inject the file path
+- **Clipboard image paste** — Ctrl+V a screenshot into a terminal to upload and inject the file path (for sending images to Claude)
 - **Clipboard support** over plain HTTP — Ctrl+C copies selected text, Ctrl+V pastes (uses `execCommand` fallback for non-HTTPS)
 - **Focused pane indicator** — 8px blue accent bar + dimmed unfocused panes
 - **Right-click context menu** on sidebar projects — Rename, Delete
@@ -46,8 +47,9 @@ npm run dev          # Start server + client concurrently
 - **Swipe gestures** — Swipe left/right between terminals with dot pagination indicators; swipe from left edge opens project drawer
 - **Pinch-to-zoom** — Touch gesture for terminal font size on mobile
 - **Tablet support** — Optional side-by-side terminals (768-1024px) with shortcut bar toggle
-- **File explorer** — Collapsible tree-view panel with lazy-loaded directories, file type icons, right-click context menu (rename, delete, copy path, new file, new folder, open terminal here), drag files onto terminals to insert paths, .gitignore filtering with toggle, hidden file toggle
-- **TOTP authentication** — Username/password + TOTP-based login with QR code setup
+- **File explorer** — Collapsible tree-view panel with lazy-loaded directories, file type icons, right-click context menu (rename, delete, copy path, new file, new folder, open terminal here, open in viewer), drag files onto terminals to insert paths, .gitignore filtering with toggle, hidden file toggle
+- **File viewer** — Click a file in the explorer to open it as a pane alongside terminals with syntax highlighting (18 languages via highlight.js), line numbers, edit/save mode (Ctrl+S), Solarized Dark theme; mixed terminal + file panes share the same split/tab/resize layout
+- **TOTP authentication** — Username/password + TOTP-based login with QR code setup; sessions persist across server restarts
 
 ## Development
 

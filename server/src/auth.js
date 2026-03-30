@@ -1,6 +1,6 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import bcrypt from 'bcryptjs';
@@ -118,14 +118,41 @@ export function validateToken(provided, expected) {
 }
 
 /**
- * In-memory session store. Maps session tokens to { username, createdAt }.
- * Sessions live as long as the server process runs.
+ * Session store. Maps session tokens to { username, createdAt }.
+ * Persisted to ~/.dancode/sessions.json so sessions survive server restarts.
  */
 const sessions = new Map();
+const sessionsPath = join(homedir(), '.dancode', 'sessions.json');
+
+function loadSessions() {
+  try {
+    if (existsSync(sessionsPath)) {
+      const data = JSON.parse(readFileSync(sessionsPath, 'utf-8'));
+      for (const [token, session] of Object.entries(data)) {
+        sessions.set(token, session);
+      }
+    }
+  } catch {
+    // Start fresh if file is corrupted
+  }
+}
+
+function saveSessions() {
+  const data = Object.fromEntries(sessions);
+  try {
+    writeFileSync(sessionsPath, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 });
+  } catch {
+    // Ignore write errors
+  }
+}
+
+// Load persisted sessions on module init
+loadSessions();
 
 export function createSession(username) {
   const token = generateSessionToken();
   sessions.set(token, { username, createdAt: Date.now() });
+  saveSessions();
   return token;
 }
 
@@ -136,6 +163,7 @@ export function validateSession(token) {
 
 export function destroySession(token) {
   sessions.delete(token);
+  saveSessions();
 }
 
 export function getSessionCount() {
