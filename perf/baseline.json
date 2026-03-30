@@ -1,0 +1,47 @@
+{
+  "_description": "Performance baseline captured 2026-03-30 on Raspberry Pi 5. Used by perf tests and plan evaluator to detect regressions. Re-run 'npm run test:perf' and replace this file to update.",
+  "timestamp": "2026-03-30T03:17:00.987Z",
+  "config": {
+    "iterations": 50,
+    "concurrent": 20,
+    "platform": "Raspberry Pi 5, Linux 6.12.62+rpt-rpi-v8"
+  },
+  "apiLatency": {
+    "GET /auth/setup/status":  { "mean": 11.15, "p50": 10.16, "p95": 18.15 },
+    "POST /auth/validate":     { "mean":  8.04, "p50":  7.52, "p95": 11.56 },
+    "GET /projects":           { "mean":  9.10, "p50":  8.54, "p95": 12.44 },
+    "GET /projects/:slug":     { "mean":  7.38, "p50":  7.06, "p95":  9.36 },
+    "PATCH /projects/:slug":   { "mean": 13.25, "p50": 11.59, "p95": 28.42 },
+    "GET /terminals":          { "mean":  6.23, "p50":  5.47, "p95": 10.77 },
+    "GET /terminals/:id":      { "mean":  5.67, "p50":  5.11, "p95":  8.92 },
+    "GET /files (list dir)":   { "mean":  9.92, "p50":  8.35, "p95": 19.16 },
+    "GET /files/read":         { "mean":  9.24, "p50":  7.91, "p95": 14.22 },
+    "PUT /files/write":        { "mean": 12.61, "p50": 10.60, "p95": 24.23 },
+    "GET / (HTML page)":       { "mean":  7.67, "p50":  6.75, "p95": 15.37 }
+  },
+  "terminalCrud": {
+    "POST /terminals (create)": { "mean": 200.93, "p50": 193.38, "p95": 266.55 },
+    "DELETE /terminals/:id":    { "mean":  49.12, "p50":  44.48, "p95":  93.22 }
+  },
+  "concurrent": {
+    "totalRequests": 100,
+    "avgPerRequest": 94.42,
+    "effectiveRps": 163
+  },
+  "websocket": {
+    "WS connect":         { "mean": 35.96, "p50": 30.03, "p95": 97.86 },
+    "WS echo round-trip": { "mean":  8.20, "p50":  8.34, "p95": 13.67 }
+  },
+  "frontend": {
+    "totalSize": 768754,
+    "totalGzip": 210723,
+    "js":   { "size": 736043, "gzip": 203022, "count": 2 },
+    "css":  { "size":  29985, "gzip":   6320, "count": 1 },
+    "html": { "size":   1399, "gzip":    636, "count": 1 }
+  },
+  "assetServing": {
+    "GET / (HTML)":        { "mean":  4.61, "p50":  4.01, "p95":  7.15 },
+    "GET JS bundle":       { "mean": 15.14, "p50": 12.71, "p95": 23.43 },
+    "GET CSS bundle":      { "mean":  4.41, "p50":  4.00, "p95":  7.56 }
+  }
+}
