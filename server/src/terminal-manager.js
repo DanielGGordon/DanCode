@@ -26,23 +26,43 @@ export function getTerminalsDir() {
 }
 
 /**
- * Simple ring buffer that keeps the last ~maxSize bytes of text.
+ * Ring buffer that keeps the last ~maxSize bytes of text.
+ * Uses an array of chunks internally to avoid string concatenation and
+ * reduce GC pressure. Only concatenates on getContents().
  */
-class RingBuffer {
+export class RingBuffer {
   constructor(maxSize = RING_BUFFER_SIZE) {
     this.maxSize = maxSize;
-    this.data = '';
+    this.chunks = [];
+    this.totalSize = 0;
   }
 
   append(chunk) {
-    this.data += chunk;
-    if (this.data.length > this.maxSize) {
-      this.data = this.data.slice(this.data.length - this.maxSize);
+    this.chunks.push(chunk);
+    this.totalSize += chunk.length;
+
+    if (this.totalSize > this.maxSize * 2) {
+      this._compact();
+    }
+  }
+
+  _compact() {
+    const combined = this.chunks.join('');
+    if (combined.length > this.maxSize) {
+      this.chunks = [combined.slice(combined.length - this.maxSize)];
+      this.totalSize = this.chunks[0].length;
+    } else {
+      this.chunks = [combined];
+      this.totalSize = combined.length;
     }
   }
 
   getContents() {
-    return this.data;
+    const combined = this.chunks.join('');
+    if (combined.length > this.maxSize) {
+      return combined.slice(combined.length - this.maxSize);
+    }
+    return combined;
   }
 }
 
