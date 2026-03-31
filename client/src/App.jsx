@@ -1,15 +1,24 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import Terminal from './Terminal.jsx'
-import TerminalLayout from './TerminalLayout.jsx'
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import LoginScreen from './LoginScreen.jsx'
 import NewProjectForm from './NewProjectForm.jsx'
 import CommandPalette from './CommandPalette.jsx'
 import Sidebar from './Sidebar.jsx'
-import FileExplorer from './FileExplorer.jsx'
 import ResizeHandle from './ResizeHandle.jsx'
-import MobileDashboard from './MobileDashboard.jsx'
-import MobileTerminalList from './MobileTerminalList.jsx'
-import MobileTerminalView from './MobileTerminalView.jsx'
+
+// Post-auth components loaded via React.lazy for code splitting
+const TerminalLayout = lazy(() => import('./TerminalLayout.jsx'))
+const FileExplorer = lazy(() => import('./FileExplorer.jsx'))
+const MobileDashboard = lazy(() => import('./MobileDashboard.jsx'))
+const MobileTerminalList = lazy(() => import('./MobileTerminalList.jsx'))
+const MobileTerminalView = lazy(() => import('./MobileTerminalView.jsx'))
+
+function LoadingFallback() {
+  return (
+    <div className="flex items-center justify-center w-full h-full bg-base03">
+      <div className="w-6 h-6 border-2 border-base01/30 border-t-blue rounded-full animate-spin" />
+    </div>
+  )
+}
 
 const TOKEN_KEY = 'dancode-auth-token'
 const SIDEBAR_KEY = 'dancode-sidebar-collapsed'
@@ -390,28 +399,32 @@ function App() {
     // Show mobile terminal view
     if (mobileView === 'terminal' && mobileTerminal && selectedSlug) {
       return (
-        <MobileTerminalView
-          token={token}
-          terminal={mobileTerminal}
-          projectSlug={selectedSlug}
-          onBack={handleMobileBackFromTerminal}
-          terminals={mobileTerminals}
-          onSwitchTerminal={handleMobileSwitchTerminal}
-          projects={projects}
-          onSwitchProject={handleMobileSwitchProject}
-        />
+        <Suspense fallback={<LoadingFallback />}>
+          <MobileTerminalView
+            token={token}
+            terminal={mobileTerminal}
+            projectSlug={selectedSlug}
+            onBack={handleMobileBackFromTerminal}
+            terminals={mobileTerminals}
+            onSwitchTerminal={handleMobileSwitchTerminal}
+            projects={projects}
+            onSwitchProject={handleMobileSwitchProject}
+          />
+        </Suspense>
       )
     }
 
     // Show terminal list for selected project
     if (mobileView === 'terminals' && selectedSlug) {
       return (
-        <MobileTerminalList
-          projectName={selectedProjectName}
-          terminals={mobileTerminals}
-          onSelectTerminal={handleMobileSelectTerminal}
-          onBack={handleMobileBackFromList}
-        />
+        <Suspense fallback={<LoadingFallback />}>
+          <MobileTerminalList
+            projectName={selectedProjectName}
+            terminals={mobileTerminals}
+            onSelectTerminal={handleMobileSelectTerminal}
+            onBack={handleMobileBackFromList}
+          />
+        </Suspense>
       )
     }
 
@@ -433,15 +446,17 @@ function App() {
 
     // Mobile dashboard
     return (
-      <MobileDashboard
-        projects={projects}
-        projectTerminals={projectTerminals}
-        onSelectProject={handleMobileSelectProject}
-        onQuickAction={handleMobileQuickAction}
-        onNewProject={() => setShowNewProject(true)}
-        onLogout={handleLogout}
-        onRefresh={handleMobileRefresh}
-      />
+      <Suspense fallback={<LoadingFallback />}>
+        <MobileDashboard
+          projects={projects}
+          projectTerminals={projectTerminals}
+          onSelectProject={handleMobileSelectProject}
+          onQuickAction={handleMobileQuickAction}
+          onNewProject={() => setShowNewProject(true)}
+          onLogout={handleLogout}
+          onRefresh={handleMobileRefresh}
+        />
+      </Suspense>
     )
   }
 
@@ -521,32 +536,34 @@ function App() {
         {selectedSlug && !showNewProject && (
           <>
             <div ref={fileExplorerRef} className="shrink-0 h-full">
-              <FileExplorer
-                token={token}
-                slug={selectedSlug}
-                collapsed={fileExplorerCollapsed}
-                width={fileExplorerCollapsed ? undefined : fileExplorerWidth}
-                onToggle={() => setFileExplorerCollapsed((prev) => {
-                  const next = !prev
-                  localStorage.setItem(FILE_EXPLORER_KEY, String(!next))
-                  return next
-                })}
-                onOpenTerminalHere={(dirPath) => {
-                  if (terminalLayoutRef.current) {
-                    terminalLayoutRef.current.addTerminalWithCwd(dirPath)
-                  }
-                }}
-                onInsertPath={(path) => {
-                  if (terminalLayoutRef.current) {
-                    terminalLayoutRef.current.insertIntoFocusedTerminal(path)
-                  }
-                }}
-                onOpenFile={(filePath) => {
-                  if (terminalLayoutRef.current) {
-                    terminalLayoutRef.current.openFile(filePath)
-                  }
-                }}
-              />
+              <Suspense fallback={<LoadingFallback />}>
+                <FileExplorer
+                  token={token}
+                  slug={selectedSlug}
+                  collapsed={fileExplorerCollapsed}
+                  width={fileExplorerCollapsed ? undefined : fileExplorerWidth}
+                  onToggle={() => setFileExplorerCollapsed((prev) => {
+                    const next = !prev
+                    localStorage.setItem(FILE_EXPLORER_KEY, String(!next))
+                    return next
+                  })}
+                  onOpenTerminalHere={(dirPath) => {
+                    if (terminalLayoutRef.current) {
+                      terminalLayoutRef.current.addTerminalWithCwd(dirPath)
+                    }
+                  }}
+                  onInsertPath={(path) => {
+                    if (terminalLayoutRef.current) {
+                      terminalLayoutRef.current.insertIntoFocusedTerminal(path)
+                    }
+                  }}
+                  onOpenFile={(filePath) => {
+                    if (terminalLayoutRef.current) {
+                      terminalLayoutRef.current.openFile(filePath)
+                    }
+                  }}
+                />
+              </Suspense>
             </div>
             {!fileExplorerCollapsed && (
               <ResizeHandle
@@ -564,7 +581,9 @@ function App() {
               onCancel={() => setShowNewProject(false)}
             />
           ) : selectedSlug ? (
-            <TerminalLayout ref={terminalLayoutRef} key={selectedSlug} token={token} slug={selectedSlug} />
+            <Suspense fallback={<LoadingFallback />}>
+              <TerminalLayout ref={terminalLayoutRef} key={selectedSlug} token={token} slug={selectedSlug} />
+            </Suspense>
           ) : (
             <div data-testid="welcome-screen" className="flex items-center justify-center h-full">
               <div className="text-center">

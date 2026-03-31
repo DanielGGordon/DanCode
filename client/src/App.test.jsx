@@ -66,6 +66,11 @@ vi.mock('./MobileTerminalView.jsx', () => ({
   ),
 }))
 
+// Mock FileExplorer (lazy-loaded)
+vi.mock('./FileExplorer.jsx', () => ({
+  default: () => <div data-testid="file-explorer">FileExplorer</div>,
+}))
+
 // Mock Sidebar
 vi.mock('./Sidebar.jsx', () => ({
   default: ({ projects, currentSlug, onSelect, collapsed, onToggle }) => (
@@ -245,7 +250,9 @@ describe('App', () => {
 
     fireEvent.click(getByTestId('mock-create'))
     expect(queryByTestId('new-project-form')).toBeNull()
-    expect(getByTestId('terminal-layout')).toBeDefined()
+    await waitFor(() => {
+      expect(getByTestId('terminal-layout')).toBeDefined()
+    })
     expect(getByTestId('terminal-layout').dataset.slug).toBe('test')
   })
 
@@ -330,7 +337,9 @@ describe('App', () => {
     fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
     fireEvent.click(getByTestId('mock-palette-select'))
 
-    expect(getByTestId('terminal-layout')).toBeDefined()
+    await waitFor(() => {
+      expect(getByTestId('terminal-layout')).toBeDefined()
+    })
     expect(getByTestId('terminal-layout').dataset.slug).toBe('my-project')
   })
 
@@ -345,12 +354,17 @@ describe('App', () => {
 
     fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
     fireEvent.click(getByTestId('mock-palette-select'))
+    await waitFor(() => {
+      expect(getByTestId('terminal-layout')).toBeDefined()
+    })
     expect(getByTestId('terminal-layout').dataset.slug).toBe('my-project')
     expect(queryByTestId('command-palette')).toBeNull()
 
     fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
     fireEvent.click(getByTestId('mock-palette-select-other'))
-    expect(getByTestId('terminal-layout').dataset.slug).toBe('other-project')
+    await waitFor(() => {
+      expect(getByTestId('terminal-layout').dataset.slug).toBe('other-project')
+    })
     expect(queryByTestId('command-palette')).toBeNull()
   })
 
@@ -374,7 +388,9 @@ describe('App', () => {
 
     fireEvent.click(getByTestId('mock-sidebar-select'))
 
-    expect(getByTestId('terminal-layout')).toBeDefined()
+    await waitFor(() => {
+      expect(getByTestId('terminal-layout')).toBeDefined()
+    })
     expect(getByTestId('terminal-layout').dataset.slug).toBe('sidebar-project')
   })
 
@@ -388,10 +404,14 @@ describe('App', () => {
     })
 
     fireEvent.click(getByTestId('mock-sidebar-select'))
-    expect(getByTestId('terminal-layout').dataset.slug).toBe('sidebar-project')
+    await waitFor(() => {
+      expect(getByTestId('terminal-layout').dataset.slug).toBe('sidebar-project')
+    })
 
     fireEvent.click(getByTestId('mock-sidebar-select-other'))
-    expect(getByTestId('terminal-layout').dataset.slug).toBe('sidebar-other')
+    await waitFor(() => {
+      expect(getByTestId('terminal-layout').dataset.slug).toBe('sidebar-other')
+    })
   })
 
   it('hides new project form when switching projects via sidebar', async () => {
@@ -409,7 +429,9 @@ describe('App', () => {
     fireEvent.click(getByTestId('mock-sidebar-select'))
 
     expect(queryByTestId('new-project-form')).toBeNull()
-    expect(getByTestId('terminal-layout').dataset.slug).toBe('sidebar-project')
+    await waitFor(() => {
+      expect(getByTestId('terminal-layout').dataset.slug).toBe('sidebar-project')
+    })
   })
 
   it('toggles sidebar collapsed state', async () => {
@@ -510,7 +532,9 @@ describe('App', () => {
     fireEvent.click(getByTestId('dropdown-item-other-proj'))
 
     expect(queryByTestId('header-dropdown')).toBeNull()
-    expect(getByTestId('terminal-layout').dataset.slug).toBe('other-proj')
+    await waitFor(() => {
+      expect(getByTestId('terminal-layout').dataset.slug).toBe('other-proj')
+    })
 
     fetchSpy.mockRestore()
   })
@@ -535,7 +559,9 @@ describe('App', () => {
 
     // 1. Switch via sidebar
     fireEvent.click(getByTestId('mock-sidebar-select'))
-    expect(getByTestId('terminal-layout').dataset.slug).toBe('sidebar-project')
+    await waitFor(() => {
+      expect(getByTestId('terminal-layout').dataset.slug).toBe('sidebar-project')
+    })
 
     // 2. Switch via dropdown
     await waitFor(() => {
@@ -543,16 +569,22 @@ describe('App', () => {
     })
     fireEvent.click(getByTestId('header-project-name'))
     fireEvent.click(getByTestId('dropdown-item-other-proj'))
-    expect(getByTestId('terminal-layout').dataset.slug).toBe('other-proj')
+    await waitFor(() => {
+      expect(getByTestId('terminal-layout').dataset.slug).toBe('other-proj')
+    })
 
     // 3. Switch via command palette
     fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
     fireEvent.click(getByTestId('mock-palette-select'))
-    expect(getByTestId('terminal-layout').dataset.slug).toBe('my-project')
+    await waitFor(() => {
+      expect(getByTestId('terminal-layout').dataset.slug).toBe('my-project')
+    })
 
     // 4. Switch back via sidebar
     fireEvent.click(getByTestId('mock-sidebar-select-other'))
-    expect(getByTestId('terminal-layout').dataset.slug).toBe('sidebar-other')
+    await waitFor(() => {
+      expect(getByTestId('terminal-layout').dataset.slug).toBe('sidebar-other')
+    })
 
     fetchSpy.mockRestore()
   })

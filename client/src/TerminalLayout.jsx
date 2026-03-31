@@ -1,8 +1,9 @@
-import { useState, useCallback, useEffect, useRef, forwardRef, useImperativeHandle, Fragment, useMemo } from 'react'
+import { useState, useCallback, useEffect, useRef, forwardRef, useImperativeHandle, Fragment, useMemo, lazy, Suspense } from 'react'
 import Terminal from './Terminal.jsx'
-import FileViewer from './FileViewer.jsx'
 import ShortcutBar from './ShortcutBar.jsx'
 import ResizeHandle from './ResizeHandle.jsx'
+
+const FileViewer = lazy(() => import('./FileViewer.jsx'))
 
 export const MOBILE_BREAKPOINT = 768
 const TABLET_MAX = 1024
@@ -574,13 +575,19 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
     if (pane.paneType === 'file') {
       return (
         <div className="flex-1 min-h-0">
-          <FileViewer
-            token={token}
-            slug={slug}
-            filePath={pane.filePath}
-            focused={isFocused}
-            onFocus={() => setFocusedIndex(index)}
-          />
+          <Suspense fallback={
+            <div className="flex items-center justify-center w-full h-full bg-base03">
+              <div className="w-5 h-5 border-2 border-base01/30 border-t-blue rounded-full animate-spin" />
+            </div>
+          }>
+            <FileViewer
+              token={token}
+              slug={slug}
+              filePath={pane.filePath}
+              focused={isFocused}
+              onFocus={() => setFocusedIndex(index)}
+            />
+          </Suspense>
         </div>
       )
     }

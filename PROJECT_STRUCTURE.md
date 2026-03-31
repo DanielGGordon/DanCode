@@ -9,12 +9,12 @@ DanCode/
 │   │   ├── icon-512.svg        # PWA icon 512x512 (SVG, maskable)
 │   │   └── sw.js               # Service worker: caches app shell, network-first for navigation
 │   ├── src/
-│   │   ├── App.jsx             # Root React component (auth gate, mobile/desktop routing, project form, command palette, sidebar, file explorer, terminal activity)
+│   │   ├── App.jsx             # Root React component (auth gate with React.lazy code splitting, mobile/desktop routing, project form, command palette, sidebar)
 │   │   ├── App.test.jsx        # App unit tests (login/terminal/mobile/command-palette/sidebar/header-dropdown rendering)
 │   │   ├── CommandPalette.jsx  # Command palette overlay with fuzzy search for project switching (Ctrl+K)
 │   │   ├── FileExplorer.jsx   # Collapsible file explorer panel: lazy-loaded tree view, context menu, drag-to-terminal, click-to-view, .gitignore/.hidden toggles
 │   │   ├── FileExplorer.test.jsx # FileExplorer unit tests (tree view, context menu, toggles, drag, expand)
-│   │   ├── FileViewer.jsx     # File viewer pane: syntax highlighting (highlight.js, 18 languages), line numbers, edit/save mode, Solarized Dark theme
+│   │   ├── FileViewer.jsx     # File viewer pane: syntax highlighting (highlight.js dynamically imported, 18 languages), line numbers, edit/save mode, Solarized Dark theme
 │   │   ├── CommandPalette.test.jsx # CommandPalette unit tests (fuzzy match, filtering, open/close, selection)
 │   │   ├── LoginScreen.jsx     # Username/password + TOTP login form
 │   │   ├── LoginScreen.test.jsx # LoginScreen component unit tests
@@ -32,7 +32,8 @@ DanCode/
 │   │   ├── TerminalLayout.test.jsx # TerminalLayout component unit tests
 │   │   ├── Sidebar.jsx         # Collapsible left sidebar listing all projects by name with active highlight
 │   │   ├── Sidebar.test.jsx    # Sidebar component unit tests
-│   │   ├── Terminal.jsx        # xterm.js terminal with forwardRef, pinch-to-zoom, readFirst mode, clipboard image paste
+│   │   ├── ResizeHandle.jsx    # Drag-to-resize handle component for split pane layouts (vertical/horizontal)
+│   │   ├── Terminal.jsx        # xterm.js terminal with forwardRef, pinch-to-zoom, readFirst mode, clipboard image paste (xterm dynamically imported)
 │   │   ├── Terminal.test.jsx   # Terminal component unit tests
 │   │   ├── poc-terminal.js     # POC: standalone xterm.js page for new terminal API (E2E testing)
 │   │   ├── index.css           # Tailwind + Solarized Dark theme

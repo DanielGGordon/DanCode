@@ -1,8 +1,19 @@
 import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react'
-import { Terminal as XTerm } from '@xterm/xterm'
-import { FitAddon } from '@xterm/addon-fit'
 import { io } from 'socket.io-client'
-import '@xterm/xterm/css/xterm.css'
+
+// xterm.js is dynamically imported on first use for code splitting
+let xtermCache = null
+export function loadXterm() {
+  if (xtermCache) return Promise.resolve(xtermCache)
+  return Promise.all([
+    import('@xterm/xterm'),
+    import('@xterm/addon-fit'),
+    import('@xterm/xterm/css/xterm.css'),
+  ]).then(([xtermMod, fitMod]) => {
+    xtermCache = { XTerm: xtermMod.Terminal, FitAddon: fitMod.FitAddon }
+    return xtermCache
+  })
+}
 
 /**
  * Connection state values:
@@ -39,6 +50,22 @@ const Terminal = forwardRef(function Terminal({ token, terminalId, projectSlug, 
   const reconnectTimerRef = useRef(null)
   const hasConnectedRef = useRef(false)
   const stateRef = useRef('connecting')
+  // Initialize synchronously from cache if available (avoids async render cycle)
+  const xtermModsRef = useRef(xtermCache)
+  const [xtermReady, setXtermReady] = useState(xtermCache !== null)
+
+  // Load xterm modules on mount (skipped if already cached)
+  useEffect(() => {
+    if (xtermModsRef.current) return
+    let cancelled = false
+    loadXterm().then((mods) => {
+      if (!cancelled) {
+        xtermModsRef.current = mods
+        setXtermReady(true)
+      }
+    })
+    return () => { cancelled = true }
+  }, [])
 
   // Helper to update both state and ref synchronously
   const updateState = useCallback((newState) => {
@@ -85,7 +112,8 @@ const Terminal = forwardRef(function Terminal({ token, terminalId, projectSlug, 
 
   const connect = useCallback(() => {
     const container = containerRef.current
-    if (!container || !terminalId) return
+    if (!container || !terminalId || !xtermModsRef.current) return
+    const { XTerm, FitAddon } = xtermModsRef.current
 
     // Clean up any previous terminal
     if (termRef.current) {
@@ -269,14 +297,15 @@ const Terminal = forwardRef(function Terminal({ token, terminalId, projectSlug, 
     }
 
     return cleanup
-  }, [token, terminalId, clearReconnectTimer, updateState])
+  }, [token, terminalId, clearReconnectTimer, updateState, xtermReady])
 
   useEffect(() => {
+    if (!xtermReady) return
     const cleanup = connect()
     return () => {
       if (cleanup) cleanup()
     }
-  }, [connect])
+  }, [connect, xtermReady])
 
   // Focus the xterm instance when the focused prop becomes true (skip if readFirst)
   useEffect(() => {
