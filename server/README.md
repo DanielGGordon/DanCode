@@ -71,12 +71,14 @@ Terminals are managed via the TerminalManager: REST CRUD at `/api/terminals` + S
 ## Exports (src/files.js)
 
 - `safePath(projectRoot, requestedPath)` — Resolve and validate a path stays within the project directory. Resolves symlinks.
-- `listDirectory(projectRoot, relativePath, options?)` — List directory contents with metadata. Options: `showHidden`, `showIgnored`. Returns `[{ name, type, size, modified }]`.
+- `listDirectory(projectRoot, relativePath, options?)` — List directory contents with metadata. Options: `showHidden`, `showIgnored`. Returns `[{ name, type, size, modified }]`. Uses a per-project-root gitignore cache with 30-second TTL to avoid redundant `.gitignore` reads.
 - `readFileContent(projectRoot, relativePath)` — Read file as UTF-8 text (max 1MB).
 - `writeFileContent(projectRoot, relativePath, content)` — Write content to a file. Creates parent dirs.
 - `createDirectory(projectRoot, relativePath)` — Create a directory (recursive).
 - `renameFile(projectRoot, oldRelPath, newRelPath)` — Rename or move a file/directory.
 - `deleteFile(projectRoot, relativePath)` — Delete a file or directory recursively.
+- `clearGitignoreCache()` — Clear the gitignore cache (for testing).
+- `getGitignoreCache()` — Get the gitignore cache Map (for testing/inspection).
 
 ## Exports (src/tmux.js)
 
@@ -98,6 +100,7 @@ Module emptied in Phase 2. All exports removed.
 ## Exports (src/terminal-manager.js)
 
 - `getTerminalsDir()` — Returns the path to `~/.dancode/terminals/`.
+- `RingBuffer` — Ring buffer class using array-of-chunks internally; concatenates only on `getContents()`.
 - `TerminalManager` — Class managing tmux-backed PTY terminal processes:
   - `constructor(terminalsDir?)` — Create a manager with optional custom metadata directory.
   - `create({ projectSlug, label, command, cols, rows, cwd })` — Create tmux session, attach node-pty, persist metadata, return `{ id, projectSlug, label, createdAt, lastActivity }`. `lastActivity` is updated on every PTY output event.

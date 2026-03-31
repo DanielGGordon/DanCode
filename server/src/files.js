@@ -4,6 +4,14 @@ import { join, resolve, relative, dirname } from 'node:path';
 import ignore from 'ignore';
 
 const MAX_FILE_SIZE = 1024 * 1024; // 1MB
+const GITIGNORE_TTL_MS = 30_000; // 30-second cache TTL
+
+/**
+ * Per-project-root gitignore cache.
+ * Each entry stores { ig, timestamp } where ig is an ignore() instance
+ * and timestamp is when it was created. Entries expire after GITIGNORE_TTL_MS.
+ */
+const gitignoreCache = new Map();
 
 /**
  * Resolve a requested path against a project root and validate it stays within bounds.
@@ -32,12 +40,21 @@ export async function safePath(projectRoot, requestedPath) {
 }
 
 /**
- * Load .gitignore patterns from a project root directory.
- * Returns an ignore instance that can test paths against the patterns.
+ * Load .gitignore patterns from a project root directory, with caching.
+ * Returns a cached ignore instance if one exists and hasn't expired (30s TTL).
+ * Otherwise reads .gitignore from disk and creates a new cached instance.
  */
 async function loadGitignore(projectRoot) {
+  const absRoot = resolve(projectRoot);
+  const now = Date.now();
+  const cached = gitignoreCache.get(absRoot);
+
+  if (cached && (now - cached.timestamp) < GITIGNORE_TTL_MS) {
+    return cached.ig;
+  }
+
   const ig = ignore();
-  const gitignorePath = join(projectRoot, '.gitignore');
+  const gitignorePath = join(absRoot, '.gitignore');
   if (existsSync(gitignorePath)) {
     try {
       const content = await readFile(gitignorePath, 'utf-8');
@@ -48,7 +65,23 @@ async function loadGitignore(projectRoot) {
   }
   // Always ignore .git directory
   ig.add('.git');
+
+  gitignoreCache.set(absRoot, { ig, timestamp: now });
   return ig;
+}
+
+/**
+ * Clear the gitignore cache. Exported for testing.
+ */
+export function clearGitignoreCache() {
+  gitignoreCache.clear();
+}
+
+/**
+ * Get the gitignore cache (read-only). Exported for testing.
+ */
+export function getGitignoreCache() {
+  return gitignoreCache;
 }
 
 /**

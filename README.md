@@ -51,6 +51,7 @@ npm run dev          # Start server + client concurrently
 - **File viewer** — Click a file in the explorer to open it as a pane alongside terminals with syntax highlighting (18 languages via highlight.js), line numbers, edit/save mode (Ctrl+S), Solarized Dark theme; mixed terminal + file panes share the same split/tab/resize layout
 - **TOTP authentication** — Username/password + TOTP-based login with QR code setup; sessions persist across server restarts with 30-day TTL, automatic expiry cleanup on startup and hourly, async debounced disk writes
 - **Response optimization** — Gzip compression on all HTTP responses; Vite-hashed static assets cached immutably for 1 year, `index.html` served with `no-cache` for instant updates
+- **Server I/O optimization** — Gitignore rules cached per project root with 30-second TTL; terminal ring buffer uses array-of-chunks internally to reduce GC pressure
 
 ## Development
 

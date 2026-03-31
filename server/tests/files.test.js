@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdir, writeFile, rm, symlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -11,6 +11,8 @@ import {
   createDirectory,
   renameFile,
   deleteFile,
+  clearGitignoreCache,
+  getGitignoreCache,
 } from '../src/files.js';
 
 let testRoot;
@@ -21,6 +23,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  clearGitignoreCache();
   await rm(testRoot, { recursive: true, force: true });
 });
 
@@ -297,5 +300,105 @@ describe('deleteFile', () => {
 
   it('rejects path traversal', async () => {
     await expect(deleteFile(testRoot, '../somefile')).rejects.toThrow();
+  });
+});
+
+// ---------- gitignore cache ----------
+
+describe('gitignore cache', () => {
+  it('reuses cached ignore instance within TTL window', async () => {
+    await writeFile(join(testRoot, '.gitignore'), 'node_modules/\n');
+    await mkdir(join(testRoot, 'node_modules'));
+    await writeFile(join(testRoot, 'app.js'), 'code');
+
+    // First call populates the cache
+    await listDirectory(testRoot, '.');
+    const cache = getGitignoreCache();
+    expect(cache.size).toBe(1);
+
+    const firstEntry = [...cache.values()][0];
+    const firstIg = firstEntry.ig;
+
+    // Second call should reuse the cached instance
+    await listDirectory(testRoot, '.');
+    const secondEntry = [...cache.values()][0];
+    expect(secondEntry.ig).toBe(firstIg);
+  });
+
+  it('no re-read of .gitignore within TTL window', async () => {
+    await writeFile(join(testRoot, '.gitignore'), 'node_modules/\n');
+    await mkdir(join(testRoot, 'node_modules'));
+    await writeFile(join(testRoot, 'app.js'), 'code');
+
+    // First listing: node_modules excluded
+    const entries1 = await listDirectory(testRoot, '.', { showHidden: true });
+    expect(entries1.map(e => e.name)).not.toContain('node_modules');
+
+    // Modify .gitignore to allow node_modules — but cache should still exclude it
+    await writeFile(join(testRoot, '.gitignore'), '# nothing ignored\n');
+
+    const entries2 = await listDirectory(testRoot, '.', { showHidden: true });
+    // Cache still in effect — node_modules should still be excluded
+    expect(entries2.map(e => e.name)).not.toContain('node_modules');
+  });
+
+  it('invalidates cache after TTL expires', async () => {
+    vi.useFakeTimers();
+
+    try {
+      await writeFile(join(testRoot, '.gitignore'), 'node_modules/\n');
+      await mkdir(join(testRoot, 'node_modules'));
+      await writeFile(join(testRoot, 'app.js'), 'code');
+
+      // First listing: node_modules excluded
+      await listDirectory(testRoot, '.', { showHidden: true });
+
+      // Modify .gitignore to allow node_modules
+      await writeFile(join(testRoot, '.gitignore'), '# nothing ignored\n');
+
+      // Advance time past the 30s TTL
+      vi.advanceTimersByTime(31_000);
+
+      // Now node_modules should appear (cache invalidated, .gitignore re-read)
+      const entries = await listDirectory(testRoot, '.', { showHidden: true });
+      expect(entries.map(e => e.name)).toContain('node_modules');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('caches per project root independently', async () => {
+    const testRoot2 = join(tmpdir(), `dancode-files-test2-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    await mkdir(testRoot2, { recursive: true });
+
+    try {
+      await writeFile(join(testRoot, '.gitignore'), '*.log\n');
+      await writeFile(join(testRoot, 'debug.log'), 'log');
+      await writeFile(join(testRoot, 'app.js'), 'code');
+
+      await writeFile(join(testRoot2, '.gitignore'), '*.txt\n');
+      await writeFile(join(testRoot2, 'notes.txt'), 'notes');
+      await writeFile(join(testRoot2, 'app.js'), 'code');
+
+      await listDirectory(testRoot, '.');
+      await listDirectory(testRoot2, '.');
+
+      const cache = getGitignoreCache();
+      expect(cache.size).toBe(2);
+    } finally {
+      await rm(testRoot2, { recursive: true, force: true });
+    }
+  });
+
+  it('showIgnored bypasses cache usage', async () => {
+    await writeFile(join(testRoot, '.gitignore'), 'node_modules/\n');
+    await mkdir(join(testRoot, 'node_modules'));
+    await writeFile(join(testRoot, 'app.js'), 'code');
+
+    // showIgnored=true should not use the cache
+    const entries = await listDirectory(testRoot, '.', { showHidden: true, showIgnored: true });
+    const names = entries.map(e => e.name);
+    expect(names).toContain('node_modules');
+    expect(names).toContain('app.js');
   });
 });

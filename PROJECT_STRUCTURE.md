@@ -84,7 +84,8 @@ DanCode/
 │   │   │   ├── file-explorer.spec.js # Playwright E2E test (expand dirs, create/rename/delete files, drag to terminal)
 │   │   │   ├── mobile-pwa.spec.js    # Playwright mobile emulation E2E (Pixel 5 viewport, PWA, dashboard nav, dots, swipe)
 │   │   │   └── visual.spec.js  # Midscene AI visual assertion test (DOM-based on Pi 5)
-│   │   ├── files.test.js       # File API unit tests (CRUD, path traversal rejection, gitignore filtering)
+│   │   ├── files.test.js       # File API unit tests (CRUD, path traversal rejection, gitignore filtering, gitignore cache)
+│   │   ├── ring-buffer.test.js # RingBuffer unit tests (chunk storage, compaction, size limits)
 │   │   ├── auth.test.js        # Auth account setup, login, session management tests
 │   │   ├── projects.test.js    # Project config CRUD, slug generation, validation tests
 │   │   ├── server.test.js      # Server unit tests (routes, auth middleware, project API)
