@@ -9,7 +9,7 @@ import { writeFile } from 'node:fs/promises';
 import { isAccountSetUp, createAccount, verifyLogin, createSession, validateSession, destroySession, getCredentialsPath, startSessionCleanupInterval } from './auth.js';
 import { validateProjectInput, createProject, listProjects, getProject, updateProject, deleteProject, getProjectsDir, slugify, isValidSlug } from './projects.js';
 import { TerminalManager, setupTerminalManagerNamespace, getTerminalsDir } from './terminal-manager.js';
-import { listDirectory, readFileContent, writeFileContent, createDirectory, renameFile, deleteFile, safePath } from './files.js';
+import { listDirectory, readFileContent, writeFileContent, createDirectory, renameFile, deleteFile, safePath, getFileStats } from './files.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -466,6 +466,17 @@ app.get('/api/files/read', async (req, res) => {
   if (!filePath) return res.status(400).json({ error: 'path is required' });
 
   try {
+    // Compute ETag from file mtime + size
+    const stats = await getFileStats(projectRoot, filePath);
+    const etag = `"${Math.floor(stats.mtimeMs).toString(36)}-${stats.size.toString(36)}"`;
+    res.setHeader('ETag', etag);
+
+    // Handle conditional request
+    const ifNoneMatch = req.headers['if-none-match'];
+    if (ifNoneMatch && ifNoneMatch === etag) {
+      return res.status(304).end();
+    }
+
     const content = await readFileContent(projectRoot, filePath);
     res.json({ content });
   } catch (err) {

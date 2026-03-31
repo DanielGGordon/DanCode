@@ -13,6 +13,7 @@ import {
   deleteFile,
   clearGitignoreCache,
   getGitignoreCache,
+  getFileStats,
 } from '../src/files.js';
 
 let testRoot;
@@ -275,6 +276,21 @@ describe('renameFile', () => {
   it('rejects path traversal on destination', async () => {
     await writeFile(join(testRoot, 'file.txt'), 'content');
     await expect(renameFile(testRoot, 'file.txt', '../escape.txt')).rejects.toThrow();
+  });
+});
+
+// ---------- getFileStats ----------
+
+describe('getFileStats', () => {
+  it('returns mtimeMs and size for a file', async () => {
+    await writeFile(join(testRoot, 'stats.txt'), 'hello world');
+    const stats = await getFileStats(testRoot, 'stats.txt');
+    expect(stats.mtimeMs).toBeGreaterThan(0);
+    expect(stats.size).toBe(11);
+  });
+
+  it('rejects path traversal', async () => {
+    await expect(getFileStats(testRoot, '../../etc/passwd')).rejects.toThrow();
   });
 });
 

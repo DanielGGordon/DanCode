@@ -158,6 +158,16 @@ export async function readFileContent(projectRoot, relativePath) {
 }
 
 /**
+ * Get file stats for ETag computation.
+ * Returns { mtimeMs, size } for a file within the project root.
+ */
+export async function getFileStats(projectRoot, relativePath) {
+  const absPath = await safePath(projectRoot, relativePath);
+  const stats = await stat(absPath);
+  return { mtimeMs: stats.mtimeMs, size: stats.size };
+}
+
+/**
  * Write content to a file. Creates parent directories if needed.
  */
 export async function writeFileContent(projectRoot, relativePath, content) {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, fireEvent, cleanup } from '@testing-library/react'
 import MobileDashboard from './MobileDashboard.jsx'
 
@@ -165,5 +165,137 @@ describe('MobileDashboard', () => {
     )
     // Initially no indicator
     expect(queryByTestId('pull-to-refresh-indicator')).toBeNull()
+  })
+
+  // Visibility-aware polling tests
+  describe('visibility-aware polling', () => {
+    let visibilityState
+    let visibilityListeners
+
+    beforeEach(() => {
+      vi.useFakeTimers()
+      visibilityState = 'visible'
+      visibilityListeners = []
+
+      Object.defineProperty(document, 'visibilityState', {
+        get: () => visibilityState,
+        configurable: true,
+      })
+
+      const originalAddEventListener = document.addEventListener.bind(document)
+      const originalRemoveEventListener = document.removeEventListener.bind(document)
+
+      vi.spyOn(document, 'addEventListener').mockImplementation((type, handler, options) => {
+        if (type === 'visibilitychange') {
+          visibilityListeners.push(handler)
+        }
+        return originalAddEventListener(type, handler, options)
+      })
+
+      vi.spyOn(document, 'removeEventListener').mockImplementation((type, handler, options) => {
+        if (type === 'visibilitychange') {
+          visibilityListeners = visibilityListeners.filter((h) => h !== handler)
+        }
+        return originalRemoveEventListener(type, handler, options)
+      })
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+      vi.restoreAllMocks()
+    })
+
+    it('registers a visibilitychange event listener', () => {
+      const onRefresh = vi.fn()
+      render(
+        <MobileDashboard
+          projects={mockProjects}
+          onSelectProject={() => {}}
+          onRefresh={onRefresh}
+        />
+      )
+      expect(document.addEventListener).toHaveBeenCalledWith(
+        'visibilitychange',
+        expect.any(Function)
+      )
+    })
+
+    it('calls onRefresh on the polling interval when visible', () => {
+      const onRefresh = vi.fn()
+      render(
+        <MobileDashboard
+          projects={mockProjects}
+          onSelectProject={() => {}}
+          onRefresh={onRefresh}
+        />
+      )
+      onRefresh.mockClear()
+      vi.advanceTimersByTime(30000)
+      expect(onRefresh).toHaveBeenCalled()
+    })
+
+    it('does not call onRefresh when document is hidden', () => {
+      const onRefresh = vi.fn()
+      render(
+        <MobileDashboard
+          projects={mockProjects}
+          onSelectProject={() => {}}
+          onRefresh={onRefresh}
+        />
+      )
+      onRefresh.mockClear()
+
+      // Simulate tab becoming hidden
+      visibilityState = 'hidden'
+      for (const listener of visibilityListeners) listener()
+
+      // Advance past several polling intervals
+      vi.advanceTimersByTime(90000)
+      expect(onRefresh).not.toHaveBeenCalled()
+    })
+
+    it('resumes polling when document becomes visible again', () => {
+      const onRefresh = vi.fn()
+      render(
+        <MobileDashboard
+          projects={mockProjects}
+          onSelectProject={() => {}}
+          onRefresh={onRefresh}
+        />
+      )
+      onRefresh.mockClear()
+
+      // Hide
+      visibilityState = 'hidden'
+      for (const listener of visibilityListeners) listener()
+
+      // Show again
+      visibilityState = 'visible'
+      for (const listener of visibilityListeners) listener()
+
+      // onRefresh should be called immediately on becoming visible
+      expect(onRefresh).toHaveBeenCalled()
+      onRefresh.mockClear()
+
+      // And polling should resume
+      vi.advanceTimersByTime(30000)
+      expect(onRefresh).toHaveBeenCalled()
+    })
+
+    it('cleans up visibilitychange listener on unmount', () => {
+      const onRefresh = vi.fn()
+      const { unmount } = render(
+        <MobileDashboard
+          projects={mockProjects}
+          onSelectProject={() => {}}
+          onRefresh={onRefresh}
+        />
+      )
+      unmount()
+      expect(document.removeEventListener).toHaveBeenCalledWith(
+        'visibilitychange',
+        expect.any(Function)
+      )
+    })
   })
 })

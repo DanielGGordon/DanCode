@@ -42,7 +42,7 @@ npm run dev          # Start server + client concurrently
 - **Keyboard shortcuts** — Ctrl+K command palette, Alt+arrows project switching, Ctrl+wheel font sizing
 - **PWA installable** — manifest.json with DanCode branding, Solarized Dark theme color (#002b36), standalone display; service worker caches app shell for offline-capable fast loading; installable on Android home screen
 - **Mobile terminal** — Full-screen read-first terminal on mobile (<1024px) with thin top bar, keyboard toggle, and horizontal shortcut bar (Ctrl+C/V/D, Tab, arrows, Esc) with 44px tap targets
-- **Mobile dashboard** — Project card grid with activity indicators (active/idle), terminal labels, last activity timestamps, pull-to-refresh, and long-press quick actions (open CLI/Claude terminal)
+- **Mobile dashboard** — Project card grid with activity indicators (active/idle), terminal labels, last activity timestamps, pull-to-refresh, long-press quick actions (open CLI/Claude terminal), and visibility-aware polling that pauses when the browser tab is hidden to save battery
 - **Mobile navigation** — Three-level flow: dashboard → terminal list → full-screen terminal, with back button at each level
 - **Swipe gestures** — Swipe left/right between terminals with dot pagination indicators; swipe from left edge opens project drawer
 - **Pinch-to-zoom** — Touch gesture for terminal font size on mobile
@@ -50,7 +50,7 @@ npm run dev          # Start server + client concurrently
 - **File explorer** — Collapsible tree-view panel with lazy-loaded directories, file type icons, right-click context menu (rename, delete, copy path, new file, new folder, open terminal here, open in viewer), drag files onto terminals to insert paths, .gitignore filtering with toggle, hidden file toggle
 - **File viewer** — Click a file in the explorer to open it as a pane alongside terminals with syntax highlighting (18 languages via highlight.js), line numbers, edit/save mode (Ctrl+S), Solarized Dark theme; mixed terminal + file panes share the same split/tab/resize layout
 - **TOTP authentication** — Username/password + TOTP-based login with QR code setup; sessions persist across server restarts with 30-day TTL, automatic expiry cleanup on startup and hourly, async debounced disk writes
-- **Response optimization** — Gzip compression on all HTTP responses; Vite-hashed static assets cached immutably for 1 year, `index.html` served with `no-cache` for instant updates
+- **Response optimization** — Gzip compression on all HTTP responses; Vite-hashed static assets cached immutably for 1 year, `index.html` served with `no-cache` for instant updates; file read API returns ETag headers (computed from file mtime + size) with `304 Not Modified` support for conditional requests
 - **Server I/O optimization** — Gitignore rules cached per project root with 30-second TTL; terminal ring buffer uses array-of-chunks internally to reduce GC pressure
 
 ## Development

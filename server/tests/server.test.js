@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll, beforeAll } from 'vitest';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -528,6 +528,96 @@ describe('DanCode server', () => {
         body: JSON.stringify({ layout: { mode: 'tabs' } }),
       });
       expect(res.status).toBe(401);
+    });
+  });
+
+  describe('GET /api/files/read ETag support', () => {
+    const authHeaders = () => ({
+      Authorization: `Bearer ${storedToken}`,
+    });
+
+    let etagProjectDir;
+
+    beforeAll(async () => {
+      // Create a project with a real directory for file API tests
+      etagProjectDir = join(tempDir, 'etag-project-dir');
+      await mkdir(etagProjectDir, { recursive: true });
+      await writeFile(join(etagProjectDir, 'test.txt'), 'hello etag');
+
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${storedToken}`,
+        },
+        body: JSON.stringify({ name: 'ETag Test', path: etagProjectDir }),
+      });
+      expect(res.status).toBe(201);
+    });
+
+    it('returns an ETag header on GET /api/files/read', async () => {
+      const res = await fetch(
+        `http://localhost:${TEST_PORT}/api/files/read?project=etag-test&path=test.txt`,
+        { headers: authHeaders() }
+      );
+      expect(res.status).toBe(200);
+      const etag = res.headers.get('etag');
+      expect(etag).toBeTruthy();
+      expect(etag).toMatch(/^"[a-z0-9]+-[a-z0-9]+"$/);
+    });
+
+    it('returns 304 when If-None-Match matches the ETag', async () => {
+      // First request to get the ETag
+      const res1 = await fetch(
+        `http://localhost:${TEST_PORT}/api/files/read?project=etag-test&path=test.txt`,
+        { headers: authHeaders() }
+      );
+      const etag = res1.headers.get('etag');
+      expect(etag).toBeTruthy();
+
+      // Second request with If-None-Match
+      const res2 = await fetch(
+        `http://localhost:${TEST_PORT}/api/files/read?project=etag-test&path=test.txt`,
+        {
+          headers: {
+            ...authHeaders(),
+            'If-None-Match': etag,
+          },
+        }
+      );
+      expect(res2.status).toBe(304);
+      const body = await res2.text();
+      expect(body).toBe('');
+    });
+
+    it('returns 200 with new ETag after file is modified', async () => {
+      // Get initial ETag
+      const res1 = await fetch(
+        `http://localhost:${TEST_PORT}/api/files/read?project=etag-test&path=test.txt`,
+        { headers: authHeaders() }
+      );
+      const etag1 = res1.headers.get('etag');
+
+      // Modify the file (with a small delay to ensure mtime changes)
+      await new Promise((r) => setTimeout(r, 50));
+      await writeFile(join(etagProjectDir, 'test.txt'), 'modified content');
+
+      // Request with old ETag should return 200
+      const res2 = await fetch(
+        `http://localhost:${TEST_PORT}/api/files/read?project=etag-test&path=test.txt`,
+        {
+          headers: {
+            ...authHeaders(),
+            'If-None-Match': etag1,
+          },
+        }
+      );
+      expect(res2.status).toBe(200);
+      const etag2 = res2.headers.get('etag');
+      expect(etag2).toBeTruthy();
+      expect(etag2).not.toBe(etag1);
+      const data = await res2.json();
+      expect(data.content).toBe('modified content');
     });
   });
 });

@@ -28,6 +28,8 @@ function timeAgo(isoString) {
   return `${Math.floor(diff / 86400000)}d ago`
 }
 
+const POLL_INTERVAL_MS = 30000
+
 export default function MobileDashboard({
   projects,
   projectTerminals,
@@ -45,6 +47,45 @@ export default function MobileDashboard({
   const scrollRef = useRef(null)
   const pullStartY = useRef(null)
   const [pullDistance, setPullDistance] = useState(0)
+  const pollIntervalRef = useRef(null)
+
+  // Visibility-aware polling: pause when tab is hidden, resume when visible
+  useEffect(() => {
+    function startPolling() {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = setInterval(() => {
+        onRefresh?.()
+      }, POLL_INTERVAL_MS)
+    }
+
+    function stopPolling() {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+        pollIntervalRef.current = null
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'hidden') {
+        stopPolling()
+      } else {
+        onRefresh?.()
+        startPolling()
+      }
+    }
+
+    // Start polling initially (only if visible)
+    if (document.visibilityState !== 'hidden') {
+      startPolling()
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      stopPolling()
+    }
+  }, [onRefresh])
 
   // Close quick menu on outside tap
   useEffect(() => {
