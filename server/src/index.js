@@ -1,4 +1,5 @@
 import express from 'express';
+import compression from 'compression';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
 import { fileURLToPath } from 'node:url';
@@ -22,6 +23,9 @@ const io = new Server(httpServer, { transports: ['websocket'] });
 let projectsDir = null;
 let credentialsPath = null;
 export let terminalManager = null;
+
+// Gzip/deflate/brotli compression on all HTTP responses
+app.use(compression());
 
 app.use(express.json({ limit: '20mb' }));
 
@@ -60,7 +64,21 @@ if (hasClientBuild) {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(join(clientDistPath, 'sw.js'));
   });
-  app.use(express.static(clientDistPath));
+
+  // Vite-hashed assets (JS/CSS in assets/) get aggressive immutable caching
+  app.use('/assets', express.static(join(clientDistPath, 'assets'), {
+    maxAge: '1y',
+    immutable: true,
+  }));
+
+  // index.html and other root-level static files get no-cache so app updates propagate
+  app.use(express.static(clientDistPath, {
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    },
+  }));
 }
 
 const placeholderHTML = `<!DOCTYPE html>
@@ -530,6 +548,7 @@ app.get('{*path}', (req, res) => {
     return res.status(404).json({ error: 'Not found' });
   }
   if (hasClientBuild) {
+    res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(join(clientDistPath, 'index.html'));
   } else {
     res.type('html').send(placeholderHTML);

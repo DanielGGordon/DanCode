@@ -6,6 +6,8 @@ Express + Socket.io backend for DanCode.
 
 Serves the DanCode web application and manages WebSocket connections for real-time terminal communication. On startup, initializes the TerminalManager and reconciles tmux sessions from any previous run. Serves the compiled React client from `client/dist/` when available, falling back to a Solarized Dark placeholder page.
 
+All HTTP responses are gzip-compressed via the `compression` middleware. Static assets use a tiered caching strategy: Vite-hashed files in `assets/` get `Cache-Control: public, max-age=31536000, immutable`; `index.html` gets `no-cache` so app updates propagate immediately; `sw.js` gets `no-cache, no-store, must-revalidate`.
+
 Terminals are managed via the TerminalManager: REST CRUD at `/api/terminals` + Socket.io `/terminal/{uuid}` namespace. Each terminal runs inside an invisible tmux session (`dancode-{slug}-{id}`), with node-pty providing I/O relay. Processes survive server restarts. Ring buffer (~50KB) replays on reconnection, repopulated from tmux scrollback on restart.
 
 ## Public interface
