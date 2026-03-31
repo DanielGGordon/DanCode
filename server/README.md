@@ -46,10 +46,14 @@ Terminals are managed via the TerminalManager: REST CRUD at `/api/terminals` + S
 - `isAccountSetUp(credPath?)` — Check if an account has been set up (credentials file exists with valid data).
 - `createAccount(username, password, credPath?)` — Create a new account: hash password, generate TOTP secret, save to disk. Returns `{ totpSecret, otpauthUrl, qrCodeDataUrl }`.
 - `verifyLogin(username, password, totpCode, credPath?)` — Verify credentials. Returns boolean.
-- `createSession(username)` — Create an in-memory session. Returns the session token.
-- `validateSession(token)` — Check if a session token is valid. Returns boolean.
+- `createSession(username)` — Create an in-memory session with `createdAt` timestamp. Persists via debounced async write. Returns the session token.
+- `validateSession(token)` — Check if a session token is valid and within 30-day TTL. Expired sessions are removed on access. Returns boolean.
 - `destroySession(token)` — Remove a session from the store.
-- `clearSessions()` — Clear all sessions (for tests).
+- `cleanExpiredSessions()` — Remove all expired sessions (>30 days) from memory and persist. Returns count cleaned.
+- `startSessionCleanupInterval()` — Start hourly cleanup of expired sessions.
+- `stopSessionCleanupInterval()` — Stop the hourly cleanup interval.
+- `flushSessionSave()` — Flush any pending debounced session save immediately (for tests).
+- `clearSessions()` — Clear all sessions and cancel pending saves (for tests).
 
 ## Exports (src/projects.js)
 

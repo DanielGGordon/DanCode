@@ -1,6 +1,6 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import bcrypt from 'bcryptjs';
@@ -9,6 +9,7 @@ import QRCode from 'qrcode';
 
 const SESSION_TOKEN_LENGTH = 32; // 32 bytes = 64 hex characters
 const BCRYPT_ROUNDS = 12;
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 /**
  * Returns the path to the credentials file.
@@ -135,12 +136,43 @@ function loadSessions() {
   } catch {
     // Start fresh if file is corrupted
   }
+
+  // Clean expired sessions on startup
+  const cleaned = cleanExpiredSessions();
+  if (cleaned > 0) {
+    console.log(`[auth] Cleaned ${cleaned} expired session(s) on startup`);
+  }
 }
 
+/** Debounce timer for batching disk writes. */
+let saveTimer = null;
+
+/**
+ * Persist sessions to disk using async writeFile with 100ms debounce.
+ * Multiple rapid calls batch into a single disk write.
+ */
 function saveSessions() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    saveTimer = null;
+    const data = Object.fromEntries(sessions);
+    try {
+      await writeFile(sessionsPath, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 });
+    } catch {
+      // Ignore write errors
+    }
+  }, 100);
+}
+
+/** Flush any pending debounced save immediately. Useful for tests. */
+export async function flushSessionSave() {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
   const data = Object.fromEntries(sessions);
   try {
-    writeFileSync(sessionsPath, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 });
+    await writeFile(sessionsPath, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 });
   } catch {
     // Ignore write errors
   }
@@ -158,7 +190,17 @@ export function createSession(username) {
 
 export function validateSession(token) {
   if (typeof token !== 'string') return false;
-  return sessions.has(token);
+  const session = sessions.get(token);
+  if (!session) return false;
+
+  // Check 30-day TTL
+  if (Date.now() - session.createdAt > SESSION_TTL_MS) {
+    sessions.delete(token);
+    saveSessions();
+    return false;
+  }
+
+  return true;
 }
 
 export function destroySession(token) {
@@ -170,7 +212,48 @@ export function getSessionCount() {
   return sessions.size;
 }
 
+/**
+ * Remove all expired sessions from the in-memory Map.
+ * Persists the cleanup via debounced save. Returns number cleaned.
+ */
+export function cleanExpiredSessions() {
+  const now = Date.now();
+  let cleaned = 0;
+  for (const [token, session] of sessions) {
+    if (now - session.createdAt > SESSION_TTL_MS) {
+      sessions.delete(token);
+      cleaned++;
+    }
+  }
+  if (cleaned > 0) {
+    saveSessions();
+  }
+  return cleaned;
+}
+
+/** Periodic cleanup interval handle. */
+let cleanupInterval = null;
+
+/** Start hourly cleanup of expired sessions. */
+export function startSessionCleanupInterval() {
+  if (cleanupInterval) return;
+  cleanupInterval = setInterval(cleanExpiredSessions, 60 * 60 * 1000);
+  cleanupInterval.unref(); // Don't prevent process exit
+}
+
+/** Stop the hourly cleanup interval. */
+export function stopSessionCleanupInterval() {
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+    cleanupInterval = null;
+  }
+}
+
 /** Clear all sessions (useful for tests). */
 export function clearSessions() {
   sessions.clear();
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
 }

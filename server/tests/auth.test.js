@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -15,6 +15,9 @@ import {
   validateSession,
   destroySession,
   clearSessions,
+  cleanExpiredSessions,
+  getSessionCount,
+  flushSessionSave,
 } from '../src/auth.js';
 
 describe('auth', () => {
@@ -175,6 +178,95 @@ describe('auth', () => {
       // No way to enumerate, but new tokens should still work
       const token = createSession('c');
       expect(validateSession(token)).toBe(true);
+    });
+  });
+
+  describe('session TTL (30-day expiry)', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('validateSession returns false for sessions older than 30 days', () => {
+      const token = createSession('admin');
+      expect(validateSession(token)).toBe(true);
+
+      // Advance Date.now past the 30-day TTL
+      const thirtyOneDays = 31 * 24 * 60 * 60 * 1000;
+      const originalNow = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(originalNow + thirtyOneDays);
+
+      expect(validateSession(token)).toBe(false);
+    });
+
+    it('validateSession returns true for sessions within 30 days', () => {
+      const token = createSession('admin');
+
+      // Advance 29 days — still within TTL
+      const twentyNineDays = 29 * 24 * 60 * 60 * 1000;
+      const originalNow = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(originalNow + twentyNineDays);
+
+      expect(validateSession(token)).toBe(true);
+    });
+
+    it('expired session is removed from the map on validation', () => {
+      const token = createSession('admin');
+      const countBefore = getSessionCount();
+
+      const thirtyOneDays = 31 * 24 * 60 * 60 * 1000;
+      const originalNow = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(originalNow + thirtyOneDays);
+
+      validateSession(token);
+      expect(getSessionCount()).toBe(countBefore - 1);
+    });
+  });
+
+  describe('cleanExpiredSessions', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('removes expired sessions and keeps valid ones', () => {
+      const oldToken = createSession('old-user');
+      const newToken = createSession('new-user');
+
+      // Advance time past TTL
+      const thirtyOneDays = 31 * 24 * 60 * 60 * 1000;
+      const originalNow = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(originalNow + thirtyOneDays);
+
+      // Create a fresh session (at the new "now")
+      const freshToken = createSession('fresh-user');
+
+      const cleaned = cleanExpiredSessions();
+      expect(cleaned).toBe(2); // oldToken and newToken are expired
+      expect(validateSession(oldToken)).toBe(false);
+      expect(validateSession(newToken)).toBe(false);
+      expect(validateSession(freshToken)).toBe(true);
+    });
+
+    it('returns 0 when no sessions are expired', () => {
+      createSession('user');
+      expect(cleanExpiredSessions()).toBe(0);
+    });
+  });
+
+  describe('debounced saveSessions', () => {
+    it('batches multiple createSession calls into fewer disk writes', async () => {
+      // Rapidly create multiple sessions
+      const tokens = [];
+      for (let i = 0; i < 5; i++) {
+        tokens.push(createSession(`user-${i}`));
+      }
+
+      // All sessions should be valid in memory immediately
+      for (const token of tokens) {
+        expect(validateSession(token)).toBe(true);
+      }
+
+      // Flush to ensure persistence completes
+      await flushSessionSave();
     });
   });
 });

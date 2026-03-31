@@ -49,7 +49,7 @@ npm run dev          # Start server + client concurrently
 - **Tablet support** — Optional side-by-side terminals (768-1024px) with shortcut bar toggle
 - **File explorer** — Collapsible tree-view panel with lazy-loaded directories, file type icons, right-click context menu (rename, delete, copy path, new file, new folder, open terminal here, open in viewer), drag files onto terminals to insert paths, .gitignore filtering with toggle, hidden file toggle
 - **File viewer** — Click a file in the explorer to open it as a pane alongside terminals with syntax highlighting (18 languages via highlight.js), line numbers, edit/save mode (Ctrl+S), Solarized Dark theme; mixed terminal + file panes share the same split/tab/resize layout
-- **TOTP authentication** — Username/password + TOTP-based login with QR code setup; sessions persist across server restarts
+- **TOTP authentication** — Username/password + TOTP-based login with QR code setup; sessions persist across server restarts with 30-day TTL, automatic expiry cleanup on startup and hourly, async debounced disk writes
 - **Response optimization** — Gzip compression on all HTTP responses; Vite-hashed static assets cached immutably for 1 year, `index.html` served with `no-cache` for instant updates
 
 ## Development

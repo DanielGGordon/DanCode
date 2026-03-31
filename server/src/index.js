@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync, mkdirSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
-import { isAccountSetUp, createAccount, verifyLogin, createSession, validateSession, destroySession, getCredentialsPath } from './auth.js';
+import { isAccountSetUp, createAccount, verifyLogin, createSession, validateSession, destroySession, getCredentialsPath, startSessionCleanupInterval } from './auth.js';
 import { validateProjectInput, createProject, listProjects, getProject, updateProject, deleteProject, getProjectsDir, slugify, isValidSlug } from './projects.js';
 import { TerminalManager, setupTerminalManagerNamespace, getTerminalsDir } from './terminal-manager.js';
 import { listDirectory, readFileContent, writeFileContent, createDirectory, renameFile, deleteFile, safePath } from './files.js';
@@ -581,6 +581,9 @@ export async function startServer(port = PORT, { credentialsPath: credPath, proj
     setupTerminalManagerNamespace(io, terminalManager);
     terminalManagerNamespaceRegistered = true;
   }
+
+  // Start hourly cleanup of expired sessions (30-day TTL)
+  startSessionCleanupInterval();
 
   return new Promise((resolve) => {
     httpServer.listen(port, () => {
