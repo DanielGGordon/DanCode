@@ -4,6 +4,8 @@ Web-based project terminal manager. Provides browser-based terminal access with 
 
 Built for Raspberry Pi 5, accessed via Tailscale.
 
+![DanCode screenshot](docs/screenshot.png)
+
 ## Tech Stack
 
 - **Backend:** Node.js + Express + Socket.io

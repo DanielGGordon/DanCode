@@ -31,6 +31,7 @@ export async function createSession(name, { cols = 80, rows = 24, cwd } = {}) {
   // Disable all tmux chrome so the full terminal area is available to the shell pane.
   // DanCode tmux sessions are invisible to the client — no UI chrome needed.
   await execFileAsync(TMUX, ['set-option', '-t', name, 'status', 'off']);
+  await execFileAsync(TMUX, ['set-option', '-t', name, 'escape-time', '0']);
   await execFileAsync(TMUX, ['set-window-option', '-t', name, 'pane-border-status', 'off']);
   // Reclaim any rows freed by turning off status/borders.
   await execFileAsync(TMUX, ['resize-pane', '-t', name, '-y', String(rows)]);
