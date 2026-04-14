@@ -38,6 +38,7 @@ describe('Terminal Manager', () => {
       credentialsPath: join(tempDir, 'credentials.json'),
       projectsDir: join(tempDir, 'projects'),
       terminalsDir,
+      reconcileRetryDelay: 0,
     });
 
     // Set up auth

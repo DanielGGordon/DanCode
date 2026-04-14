@@ -75,9 +75,14 @@ export class RingBuffer {
 export class TerminalManager {
   /**
    * @param {string} [terminalsDir] - directory for terminal metadata JSON files
+   * @param {object} [options]
+   * @param {number} [options.reconcileRetryDelay=8000] - ms to wait before
+   *   retrying missing tmux sessions during reconcile (gives tmux-resurrect
+   *   time to restore sessions after a tmux server restart)
    */
-  constructor(terminalsDir) {
+  constructor(terminalsDir, { reconcileRetryDelay = 8000 } = {}) {
     this.terminalsDir = terminalsDir || getTerminalsDir();
+    this.reconcileRetryDelay = reconcileRetryDelay;
     this.terminals = new Map();
   }
 
@@ -167,10 +172,63 @@ export class TerminalManager {
   }
 
   /**
+   * Reattach a single terminal to its existing tmux session.
+   * Spawns a node-pty process, populates the ring buffer from scrollback,
+   * and registers it in the terminals map.
+   */
+  async _reattach(meta) {
+    const tmuxName = meta.tmuxSessionName;
+
+    const ringBuffer = new RingBuffer();
+    const scrollback = await tmuxCapturePane(tmuxName);
+    if (scrollback) {
+      ringBuffer.append(scrollback);
+    }
+
+    const ptyProcess = pty.spawn('tmux', ['attach-session', '-t', tmuxName], {
+      name: 'xterm-256color',
+      cols: 80,
+      rows: 24,
+      env: process.env,
+    });
+
+    ptyProcess.onData((data) => {
+      ringBuffer.append(data);
+      const terminal = this.terminals.get(meta.id);
+      if (terminal) {
+        for (const socket of terminal.sockets) {
+          socket.emit('output', data);
+        }
+      }
+    });
+
+    ptyProcess.onExit(async () => {
+      const terminal = this.terminals.get(meta.id);
+      if (!terminal) return;
+
+      const alive = await tmuxHasSession(tmuxName);
+      if (!alive) {
+        terminal.exited = true;
+        for (const socket of terminal.sockets) {
+          socket.emit('session-exit', { exitCode: 0 });
+        }
+      }
+    });
+
+    this.terminals.set(meta.id, {
+      ...meta,
+      pty: ptyProcess,
+      ringBuffer,
+      sockets: new Set(),
+      exited: false,
+    });
+  }
+
+  /**
    * Reconcile tmux sessions with terminal metadata on server startup.
    * - Reattaches to orphaned tmux sessions (metadata exists, tmux session alive)
    * - Cleans up stale metadata (metadata exists, tmux session gone)
-   * - Logs warnings for stale entries
+   * - Waits before cleaning to avoid racing tmux-resurrect session restoration
    */
   async reconcile() {
     if (!existsSync(this.terminalsDir)) {
@@ -182,7 +240,9 @@ export class TerminalManager {
 
     let reattached = 0;
     let cleaned = 0;
+    const missing = []; // { meta, metaPath } entries to retry
 
+    // First pass: reattach live sessions, collect missing ones
     for (const file of metaFiles) {
       const metaPath = join(this.terminalsDir, file);
       let meta;
@@ -204,60 +264,33 @@ export class TerminalManager {
       const sessionAlive = await tmuxHasSession(tmuxName);
 
       if (sessionAlive) {
-        // Populate ring buffer from tmux scrollback BEFORE attaching
-        // (attaching triggers tmux rendering output that would mix with scrollback)
-        const ringBuffer = new RingBuffer();
-        const scrollback = await tmuxCapturePane(tmuxName);
-        if (scrollback) {
-          ringBuffer.append(scrollback);
-        }
-
-        // Reattach: spawn node-pty to connect to the existing tmux session
-        const ptyProcess = pty.spawn('tmux', ['attach-session', '-t', tmuxName], {
-          name: 'xterm-256color',
-          cols: 80,
-          rows: 24,
-          env: process.env,
-        });
-
-        ptyProcess.onData((data) => {
-          ringBuffer.append(data);
-          const terminal = this.terminals.get(meta.id);
-          if (terminal) {
-            for (const socket of terminal.sockets) {
-              socket.emit('output', data);
-            }
-          }
-        });
-
-        ptyProcess.onExit(async () => {
-          const terminal = this.terminals.get(meta.id);
-          if (!terminal) return;
-
-          const alive = await tmuxHasSession(tmuxName);
-          if (!alive) {
-            terminal.exited = true;
-            for (const socket of terminal.sockets) {
-              socket.emit('session-exit', { exitCode: 0 });
-            }
-          }
-        });
-
-        this.terminals.set(meta.id, {
-          ...meta,
-          pty: ptyProcess,
-          ringBuffer,
-          sockets: new Set(),
-          exited: false,
-        });
-
+        await this._reattach(meta);
         reattached++;
         console.log(`[reconcile] Reattached terminal ${meta.id} → tmux session ${tmuxName}`);
       } else {
-        // Stale metadata: tmux session is gone
-        console.warn(`[reconcile] Stale metadata for terminal ${meta.id}: tmux session ${tmuxName} not found. Cleaning up.`);
-        await rm(metaPath);
-        cleaned++;
+        missing.push({ meta, metaPath });
+      }
+    }
+
+    // Second pass: if any sessions were missing, wait for tmux-resurrect
+    // to finish restoring, then retry before cleaning up.
+    if (missing.length > 0) {
+      const delay = this.reconcileRetryDelay;
+      console.log(`[reconcile] ${missing.length} session(s) not found — waiting ${delay}ms for tmux-resurrect…`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+
+      for (const { meta, metaPath } of missing) {
+        const sessionAlive = await tmuxHasSession(meta.tmuxSessionName);
+
+        if (sessionAlive) {
+          await this._reattach(meta);
+          reattached++;
+          console.log(`[reconcile] Reattached terminal ${meta.id} → tmux session ${meta.tmuxSessionName} (after retry)`);
+        } else {
+          console.warn(`[reconcile] Stale metadata for terminal ${meta.id}: tmux session ${meta.tmuxSessionName} not found. Cleaning up.`);
+          await rm(metaPath);
+          cleaned++;
+        }
       }
     }
 

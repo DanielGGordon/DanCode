@@ -574,13 +574,14 @@ export { app, httpServer, io };
 
 let terminalManagerNamespaceRegistered = false;
 
-export async function startServer(port = PORT, { credentialsPath: credPath, projectsDir: projDir, terminalsDir: termDir } = {}) {
+export async function startServer(port = PORT, { credentialsPath: credPath, projectsDir: projDir, terminalsDir: termDir, reconcileRetryDelay } = {}) {
   credentialsPath = credPath || getCredentialsPath();
   projectsDir = projDir || getProjectsDir();
 
   // Set up TerminalManager (PTY backed by invisible tmux sessions)
   const terminalsDir = termDir || getTerminalsDir();
-  terminalManager = new TerminalManager(terminalsDir);
+  const tmOpts = reconcileRetryDelay !== undefined ? { reconcileRetryDelay } : {};
+  terminalManager = new TerminalManager(terminalsDir, tmOpts);
 
   // Reconcile: reattach to surviving tmux sessions from a previous run
   const { reattached, cleaned } = await terminalManager.reconcile();
