@@ -391,59 +391,49 @@ const Terminal = forwardRef(function Terminal({ token, terminalId, projectSlug, 
     }
   }, [])
 
-  // Handle native paste events (text + clipboard images)
-  // Listen on document in capture phase — image-only pastes may not fire on xterm's textarea
+  // Intercept clipboard-image pastes only; text pastes are handled natively by xterm.
+  // Listen on document in capture phase — image-only pastes may not fire on xterm's textarea.
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
     const handler = async (e) => {
-      // Only handle paste if this terminal's container has focus
       if (!container.contains(document.activeElement) && document.activeElement !== container) return
-      // Check for clipboard images via items (browsers expose screenshots here)
       const items = e.clipboardData?.items
-      if (items) {
-        for (const item of items) {
-          if (item.type.startsWith('image/')) {
-            const blob = item.getAsFile()
-            if (blob && projectSlug && token) {
-              e.preventDefault()
-              e.stopPropagation()
-              try {
-                const reader = new FileReader()
-                const dataUrl = await new Promise((resolve, reject) => {
-                  reader.onload = () => resolve(reader.result)
-                  reader.onerror = reject
-                  reader.readAsDataURL(blob)
-                })
-                const ext = item.type.split('/')[1] || 'png'
-                const filename = `clipboard-${Date.now()}.${ext}`
-                const res = await fetch(`/api/projects/${projectSlug}/upload`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                  },
-                  body: JSON.stringify({ data: dataUrl, filename }),
-                })
-                if (res.ok) {
-                  const { path } = await res.json()
-                  if (socketRef.current?.connected) {
-                    socketRef.current.emit('input', path)
-                  }
-                }
-              } catch {
-                // Upload failed silently
-              }
-              return
+      if (!items) return
+      for (const item of items) {
+        if (!item.type.startsWith('image/')) continue
+        const blob = item.getAsFile()
+        if (!blob || !projectSlug || !token) continue
+        e.preventDefault()
+        e.stopPropagation()
+        try {
+          const reader = new FileReader()
+          const dataUrl = await new Promise((resolve, reject) => {
+            reader.onload = () => resolve(reader.result)
+            reader.onerror = reject
+            reader.readAsDataURL(blob)
+          })
+          const ext = item.type.split('/')[1] || 'png'
+          const filename = `clipboard-${Date.now()}.${ext}`
+          const res = await fetch(`/api/projects/${projectSlug}/upload`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ data: dataUrl, filename }),
+          })
+          if (res.ok) {
+            const { path } = await res.json()
+            if (socketRef.current?.connected) {
+              socketRef.current.emit('input', path)
             }
           }
+        } catch {
+          // Upload failed silently
         }
+        return
       }
-      // Fall back to text paste
-      const text = e.clipboardData?.getData('text')
-      if (!text || !termRef.current) return
-      e.preventDefault()
-      termRef.current.paste(text)
     }
     document.addEventListener('paste', handler, true)
     return () => document.removeEventListener('paste', handler, true)
