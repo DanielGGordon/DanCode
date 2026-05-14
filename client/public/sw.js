@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dancode-v3';
+const CACHE_NAME = 'dancode-v4';
 const APP_SHELL = [
   '/',
   '/manifest.json',
