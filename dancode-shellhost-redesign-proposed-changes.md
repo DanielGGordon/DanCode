@@ -71,3 +71,24 @@
   consolidating to a single `playwright.config.js` with a single shellhost
   globalSetup and ports 3002/5175, deprecating the legacy 3001/5174 pair
   as Phase 9 removes tmux.
+
+- **Playwright globalSetup ordering gotcha.** In Playwright, `webServer`
+  entries start BEFORE `globalSetup` runs, so anything required by the
+  server (like a UNIX socket) cannot be created in globalSetup. Phase 1
+  uses a `boot-stack.mjs` wrapper inside the server's webServer entry to
+  spawn shellhost as a child of the server process. Future phases that
+  need additional out-of-band setup (e.g. tmux fixtures in Phase 9) should
+  follow the same pattern instead of adding more globalSetups.
+
+- **E2E isolation via temp HOME.** Phase 1's shellhost E2E creates a temp
+  HOME per run so account setup is deterministic and doesn't depend on the
+  dev machine's `~/.dancode/credentials.json`. Future shellhost-backed
+  E2E specs should reuse `DANCODE_E2E_HOME` (already exported from
+  `playwright.shellhost.config.js`) so all paths under `~/.dancode` are
+  isolated together.
+
+- **Tailscale serves on port 3002.** The dev Pi exposes port 3002 via
+  Tailscale `serve`. Phase 1 moved shellhost-backed E2E to 3102/5175 to
+  avoid the EADDRINUSE. Future phases that need test ports should pick
+  numbers that don't collide with Tailscale serve/funnel entries (check
+  `tailscale serve status`).
