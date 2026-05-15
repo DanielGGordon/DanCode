@@ -137,6 +137,9 @@ const Terminal = forwardRef(function Terminal({ token, terminalId, projectSlug, 
       cursorBlink: true,
       fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', Menlo, monospace",
       fontSize: fontSizeRef.current,
+      // Generous scrollback so the disk-backed replay (~50KB; up to ~25k
+      // lines of short output like `yes`) is fully retained client-side.
+      scrollback: 100_000,
       theme: {
         background: '#002b36',
         foreground: '#839496',
@@ -167,6 +170,13 @@ const Terminal = forwardRef(function Terminal({ token, terminalId, projectSlug, 
 
     termRef.current = term
     fitAddonRef.current = fitAddon
+
+    // Expose for E2E inspection (read xterm buffer via Playwright). Harmless
+    // in production: only the live instance is exposed under its id.
+    if (typeof window !== 'undefined') {
+      if (!window.__dancodeTerminals) window.__dancodeTerminals = new Map()
+      window.__dancodeTerminals.set(terminalId, term)
+    }
 
     // Intercept Ctrl+C/V before xterm processes them as terminal input.
     term.attachCustomKeyEventHandler((e) => {
@@ -294,6 +304,9 @@ const Terminal = forwardRef(function Terminal({ token, terminalId, projectSlug, 
       }
       term.dispose()
       termRef.current = null
+      if (typeof window !== 'undefined' && window.__dancodeTerminals) {
+        window.__dancodeTerminals.delete(terminalId)
+      }
     }
 
     return cleanup

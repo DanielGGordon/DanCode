@@ -41,6 +41,11 @@ export default defineConfig({
   timeout: 600_000,
   retries: 0,
   reporter: 'list',
+  // Account setup + temp-HOME credentials are not parallel-safe: parallel
+  // workers race to POST /api/auth/setup and the loser can't read credentials
+  // from the server's E2E_HOME. Run shellhost E2Es serially.
+  workers: 1,
+  fullyParallel: false,
   globalTeardown: './tests/e2e-shellhost/global-teardown.js',
   use: {
     channel: 'chromium',

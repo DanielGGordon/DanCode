@@ -47,8 +47,13 @@ export async function login(page) {
     password = TEST_PASSWORD;
     totpSecret = setupData.totpSecret;
   } else {
-    // Account exists — read credentials from disk
-    const credPath = join(homedir(), '.dancode', 'credentials.json');
+    // Account exists — read credentials from the server's HOME. Shellhost
+    // E2E runs the server under a temp `DANCODE_E2E_HOME` so it doesn't
+    // share state with the developer's real ~/.dancode account; the test
+    // process must look in the same directory to find the matching TOTP
+    // secret, otherwise login fails with 401.
+    const credsHome = process.env.DANCODE_E2E_HOME || homedir();
+    const credPath = join(credsHome, '.dancode', 'credentials.json');
     const creds = JSON.parse(await readFile(credPath, 'utf-8'));
     username = creds.username;
     totpSecret = creds.totpSecret;
@@ -57,7 +62,7 @@ export async function login(page) {
     password = process.env.DANCODE_PASSWORD;
     if (!password) {
       try {
-        const pwPath = join(homedir(), '.dancode', 'e2e-password');
+        const pwPath = join(credsHome, '.dancode', 'e2e-password');
         password = (await readFile(pwPath, 'utf-8')).trim();
       } catch {
         password = TEST_PASSWORD;
