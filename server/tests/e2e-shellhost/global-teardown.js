@@ -2,17 +2,18 @@ import { existsSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 
 /**
- * Mirror of global-setup.js: tear down the shellhost child process and its
- * temp socket. globalSetup tracks the child PID in `process.env.__SHELLHOST_PID`.
+ * Cleans up after the shellhost E2E run: the temp HOME directory used for
+ * isolating auth/projects/terminal state, and the shellhost UNIX socket if
+ * Playwright didn't already remove it. Playwright manages the webServer
+ * subprocess lifetime itself, so we don't need to kill anything here.
  */
 export default async function globalTeardown() {
-  const pidStr = process.env.__SHELLHOST_PID;
   const socketPath = process.env.DANCODE_SHELLHOST_SOCKET;
-  if (pidStr) {
-    const pid = Number(pidStr);
-    try { process.kill(pid, 'SIGTERM'); } catch { /* not running */ }
-  }
   if (socketPath && existsSync(socketPath)) {
     try { await rm(socketPath); } catch { /* ignore */ }
+  }
+  const home = process.env.DANCODE_E2E_HOME;
+  if (home && home.includes('dancode-e2e-home-') && existsSync(home)) {
+    try { await rm(home, { recursive: true, force: true }); } catch { /* ignore */ }
   }
 }

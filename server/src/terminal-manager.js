@@ -314,6 +314,7 @@ export class TerminalManager {
       projectSlug: meta.projectSlug,
       label: meta.label,
       createdAt: meta.createdAt,
+      lastActivity: meta.lastActivity,
     };
   }
 
