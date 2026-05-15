@@ -4,19 +4,22 @@
 DanCode/
 ├── bin/
 │   └── check-setup.mjs         # `npm run check:setup` preflight (Node version, build deps, socket-dir writability)
-├── shellhost/                  # Phase 1: standalone PTY-owning Node process (dancode-shellhost)
+├── shellhost/                  # Phase 1+: standalone PTY-owning Node process (dancode-shellhost)
 │   ├── bin/dancode-shellhost.js # CLI entry alias
 │   ├── src/
-│   │   ├── index.js            # Entry: starts a server on ~/.dancode/shellhost.sock (override with DANCODE_SHELLHOST_SOCKET)
-│   │   ├── server.js           # UNIX-socket server + op dispatch (spawn/attach/detach/write/resize/kill/list/inspect)
-│   │   ├── pty-manager.js      # Owns the in-memory map of live PTYs and their listeners
+│   │   ├── index.js            # Entry: starts a server on ~/.dancode/shellhost.sock with disk-backed scrollback under ~/.dancode/terminals/
+│   │   ├── server.js           # UNIX-socket server + op dispatch (spawn/attach/detach/write/resize/kill/list/inspect/getScrollback)
+│   │   ├── pty-manager.js      # Owns the in-memory map of live PTYs; appends PTY output to scrollback write-through
+│   │   ├── scrollback.js       # Phase 2: ScrollbackStore — append-only `<baseDir>/<id>/scrollback.log` with 1MB rotation + tail read
 │   │   ├── client.js           # Client library used by dancode-server to call shellhost
 │   │   └── wire.js             # Length-prefixed JSON frame codec (encode/decode/streaming framer)
 │   ├── tests/
 │   │   ├── wire.test.js        # Frame codec unit tests
 │   │   ├── pty-manager.test.js # PTYManager unit tests (fake spawn)
 │   │   ├── ops.test.js         # Per-op dispatch unit tests
-│   │   └── integration.test.js # Boots a real shellhost on a temp socket, drives via client
+│   │   ├── scrollback.test.js  # ScrollbackStore unit tests (append, rotate, readTail, disk-usage)
+│   │   ├── scrollback-ops.test.js # Wire-op tests for scrollback replay on attach
+│   │   └── integration.test.js # Boots a real shellhost on a temp socket; in-process 2.5MB disk-usage test
 │   ├── package.json
 │   ├── vitest.config.js
 │   └── README.md
@@ -73,7 +76,7 @@ DanCode/
 │   │   ├── index.js            # Server entry point (Express, Socket.io, REST API routes, terminal CRUD, file API)
 │   │   ├── projects.js         # Project config CRUD (create, list, get, delete) in ~/.dancode/projects/
 │   │   ├── terminal-manager.js # Legacy tmux-backed TerminalManager (fallback when DANCODE_SHELLHOST_SOCKET unset; removed in Phase 9)
-│   │   ├── shellhost-terminal-manager.js # Phase 1: server-side adapter that fronts dancode-shellhost over a UNIX socket
+│   │   ├── shellhost-terminal-manager.js # Phase 1+2: server-side adapter that fronts dancode-shellhost; replays disk scrollback to new sockets (no in-memory ring buffer)
 │   │   ├── terminal.js         # (Legacy, emptied) Socket.io /terminal namespace
 │   │   └── tmux.js             # Tmux utility: create/kill/query sessions, capture pane, resize, send keys
 │   ├── tests/
@@ -103,8 +106,14 @@ DanCode/
 │   │   │   ├── file-explorer.spec.js # Playwright E2E test (expand dirs, create/rename/delete files, drag to terminal)
 │   │   │   ├── mobile-pwa.spec.js    # Playwright mobile emulation E2E (Pixel 5 viewport, PWA, dashboard nav, dots, swipe)
 │   │   │   └── visual.spec.js  # Midscene AI visual assertion test (DOM-based on Pi 5)
+│   │   ├── e2e-shellhost/
+│   │   │   ├── boot-stack.mjs  # Spawns shellhost + loads server inline so Playwright webServer can wait on a single port
+│   │   │   ├── global-teardown.js # Cleans up the temp E2E HOME after the run
+│   │   │   ├── shellhost-terminal.spec.js # Phase 1: shellhost-backed terminal E2E (typed input + clipboard paste)
+│   │   │   └── scrollback-replay.spec.js  # Phase 2: disk-backed scrollback survives reload; no duplicate replay on double-reload
+│   │   ├── shellhost-integration.test.js # Phase 1+2: server <-> shellhost integration over UNIX socket (incl. disk replay on reconnect)
 │   │   ├── files.test.js       # File API unit tests (CRUD, path traversal rejection, gitignore filtering, gitignore cache)
-│   │   ├── ring-buffer.test.js # RingBuffer unit tests (chunk storage, compaction, size limits)
+│   │   ├── ring-buffer.test.js # Legacy tmux-backend RingBuffer unit tests (removed from shellhost path in Phase 2)
 │   │   ├── auth.test.js        # Auth account setup, login, session management tests
 │   │   ├── projects.test.js    # Project config CRUD, slug generation, validation tests
 │   │   ├── server.test.js      # Server unit tests (routes, auth middleware, project API)
@@ -114,6 +123,7 @@ DanCode/
 │   ├── .env                    # Midscene.js config (git-ignored): Ollama endpoint, model settings
 │   ├── package.json
 │   ├── playwright.config.js    # Playwright config (Midscene reporter, system Chromium, webServer on :3001)
+│   ├── playwright.shellhost.config.js # Playwright config for shellhost-backed E2E (temp HOME, workers:1)
 │   ├── vitest.config.js        # Vitest config (excludes e2e tests)
 │   └── README.md
 ├── package.json                # Root workspace config + top-level scripts
