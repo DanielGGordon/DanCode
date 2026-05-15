@@ -12,7 +12,8 @@
     "dev": "DANCODE_SHELLHOST_SOCKET=${DANCODE_SHELLHOST_SOCKET:-/tmp/dancode-shellhost-dev.sock} node --watch src/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "npx playwright test"
+    "test:e2e": "npx playwright test",
+    "test:e2e:shellhost": "npx playwright test -c playwright.shellhost.config.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

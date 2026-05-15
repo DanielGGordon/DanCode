@@ -8,9 +8,9 @@ Built for Raspberry Pi 5, accessed via Tailscale.
 
 ## Tech Stack
 
-- **Backend:** Node.js + Express + Socket.io
+- **Backend:** Node.js + Express + Socket.io + standalone `dancode-shellhost` (UNIX-socket PTY owner)
 - **Frontend:** React + Vite + Tailwind CSS
-- **Terminal:** xterm.js + node-pty + tmux (PTY inside invisible tmux sessions via TerminalManager)
+- **Terminal:** xterm.js + node-pty owned by `dancode-shellhost` (legacy tmux-backed `TerminalManager` is still available as a fallback for environments without shellhost; removed in Phase 9)
 - **Theme:** Solarized Dark (#002b36)
 - **Testing:** Vitest + Playwright + Midscene.js
 
@@ -25,9 +25,12 @@ See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the full file tree.
 ## Getting Started
 
 ```bash
-npm install          # Install all workspace dependencies
-npm run dev          # Start server + client concurrently
+npm install              # Install all workspace dependencies
+npm run check:setup      # Verify Node version, build deps, socket-dir writability
+npm run dev              # Start shellhost + server + client concurrently
 ```
+
+`npm run dev` listens on `/tmp/dancode-shellhost-dev.sock` so it doesn't collide with a production shellhost on `~/.dancode/shellhost.sock`. Override either with the `DANCODE_SHELLHOST_SOCKET` env var.
 
 ## Features
 

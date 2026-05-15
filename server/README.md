@@ -8,7 +8,12 @@ Serves the DanCode web application and manages WebSocket connections for real-ti
 
 All HTTP responses are gzip-compressed via the `compression` middleware. Static assets use a tiered caching strategy: Vite-hashed files in `assets/` get `Cache-Control: public, max-age=31536000, immutable`; `index.html` gets `no-cache` so app updates propagate immediately; `sw.js` gets `no-cache, no-store, must-revalidate`.
 
-Terminals are managed via the TerminalManager: REST CRUD at `/api/terminals` + Socket.io `/terminal/{uuid}` namespace. Each terminal runs inside an invisible tmux session (`dancode-{slug}-{id}`), with node-pty providing I/O relay. Processes survive server restarts. Ring buffer (~50KB) replays on reconnection, repopulated from tmux scrollback on restart.
+Terminals are managed via one of two backends, picked at startup:
+
+1. **shellhost (default for production / `npm run dev`)** — when `DANCODE_SHELLHOST_SOCKET` points to a reachable UNIX socket, the server uses `ShellhostTerminalManager` (see `src/shellhost-terminal-manager.js`). It speaks the length-prefixed JSON wire protocol from `shellhost/src/wire.js`, asks shellhost to spawn/attach/write/kill PTYs, and forwards bytes between Socket.io clients and the shellhost socket. Shellhost owns the PTYs, so a server restart does not affect running shells.
+2. **legacy tmux (fallback for unit tests / environments without a shellhost)** — `TerminalManager` spawns PTYs inside invisible tmux sessions (`dancode-{slug}-{id}`). Processes survive server restarts via tmux. Ring buffer (~50KB) replays on reconnection, repopulated from tmux scrollback on restart. Removed in Phase 9.
+
+Both backends expose the same REST and Socket.io surface (`/api/terminals` + `/terminal/{uuid}` namespace).
 
 ## Public interface
 

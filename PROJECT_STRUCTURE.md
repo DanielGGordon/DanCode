@@ -2,6 +2,24 @@
 
 ```
 DanCode/
+├── bin/
+│   └── check-setup.mjs         # `npm run check:setup` preflight (Node version, build deps, socket-dir writability)
+├── shellhost/                  # Phase 1: standalone PTY-owning Node process (dancode-shellhost)
+│   ├── bin/dancode-shellhost.js # CLI entry alias
+│   ├── src/
+│   │   ├── index.js            # Entry: starts a server on ~/.dancode/shellhost.sock (override with DANCODE_SHELLHOST_SOCKET)
+│   │   ├── server.js           # UNIX-socket server + op dispatch (spawn/attach/detach/write/resize/kill/list/inspect)
+│   │   ├── pty-manager.js      # Owns the in-memory map of live PTYs and their listeners
+│   │   ├── client.js           # Client library used by dancode-server to call shellhost
+│   │   └── wire.js             # Length-prefixed JSON frame codec (encode/decode/streaming framer)
+│   ├── tests/
+│   │   ├── wire.test.js        # Frame codec unit tests
+│   │   ├── pty-manager.test.js # PTYManager unit tests (fake spawn)
+│   │   ├── ops.test.js         # Per-op dispatch unit tests
+│   │   └── integration.test.js # Boots a real shellhost on a temp socket, drives via client
+│   ├── package.json
+│   ├── vitest.config.js
+│   └── README.md
 ├── client/                     # React + Vite + Tailwind frontend
 │   ├── public/                 # Static assets (PWA manifest, icons, service worker)
 │   │   ├── manifest.json       # PWA manifest: app name, theme color, standalone display, icons
@@ -54,7 +72,8 @@ DanCode/
 │   │   ├── files.js            # File system API: list, read, write, mkdir, rename, delete with path traversal protection
 │   │   ├── index.js            # Server entry point (Express, Socket.io, REST API routes, terminal CRUD, file API)
 │   │   ├── projects.js         # Project config CRUD (create, list, get, delete) in ~/.dancode/projects/
-│   │   ├── terminal-manager.js # TerminalManager: tmux-backed PTY spawning, CRUD, ring buffer, reconcile, WebSocket /terminal/{uuid}, lastActivity tracking
+│   │   ├── terminal-manager.js # Legacy tmux-backed TerminalManager (fallback when DANCODE_SHELLHOST_SOCKET unset; removed in Phase 9)
+│   │   ├── shellhost-terminal-manager.js # Phase 1: server-side adapter that fronts dancode-shellhost over a UNIX socket
 │   │   ├── terminal.js         # (Legacy, emptied) Socket.io /terminal namespace
 │   │   └── tmux.js             # Tmux utility: create/kill/query sessions, capture pane, resize, send keys
 │   ├── tests/
