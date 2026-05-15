@@ -163,13 +163,15 @@ describe('server <-> shellhost integration', () => {
   });
 
   it('spawn uses TERM=xterm-256color via shellhost', async () => {
-    // Attach to a live shell PTY and check $TERM. Listening before writing
-    // to avoid races; using a distinctive sentinel so prompt noise doesn't
-    // confuse the regex.
+    // Use a one-shot bash invocation so we don't fight an interactive prompt.
     const createRes = await fetch(`http://localhost:${TEST_PORT}/api/terminals`, {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ projectSlug: 'term-proj', label: 'CLI' }),
+      body: JSON.stringify({
+        projectSlug: 'term-proj',
+        label: 'CLI',
+        command: 'printf "TERMVAL[%s]\\n" "$TERM"; exit 0',
+      }),
     });
     const terminal = await createRes.json();
     const sock = ioClient(`http://localhost:${TEST_PORT}/terminal/${terminal.id}`, {
@@ -186,12 +188,9 @@ describe('server <-> shellhost integration', () => {
           if (/TERMVAL\[xterm-256color\]/.test(seen.join(''))) resolve();
         });
       });
-      // Slight delay so the shell prompt is up before we write.
-      await new Promise((r) => setTimeout(r, 250));
-      sock.emit('input', 'printf "\\nTERMVAL[%s]\\n" "$TERM"\n');
       await Promise.race([
         got,
-        new Promise((_, j) => setTimeout(() => j(new Error('timeout waiting for TERMVAL')), 10000)),
+        new Promise((_, j) => setTimeout(() => j(new Error(`timeout: got ${JSON.stringify(seen.join(''))}`)), 15000)),
       ]);
       expect(seen.join('')).toMatch(/TERMVAL\[xterm-256color\]/);
     } finally {
@@ -201,5 +200,5 @@ describe('server <-> shellhost integration', () => {
         headers: authHeaders(),
       });
     }
-  }, 20000);
+  }, 25000);
 });
