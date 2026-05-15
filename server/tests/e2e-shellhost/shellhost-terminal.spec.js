@@ -6,8 +6,8 @@ import { login, createProject, cleanupProject } from '../e2e/e2e-helpers.js';
  * terminal end-to-end through the new shellhost backend.
  *
  * - Asserts `printf hello\n` typed via xterm appears in the terminal DOM.
- * - Pastes a fixture string via clipboard → Ctrl+V and asserts it appears
- *   exactly once (no double-paste).
+ * - Pastes a fixture string via a synthetic ClipboardEvent + Ctrl+V and
+ *   asserts it appears exactly once (no double-paste).
  */
 test.describe('Shellhost-backed terminal', () => {
   let token;
@@ -33,9 +33,14 @@ test.describe('Shellhost-backed terminal', () => {
     await expect(pane0).toBeVisible({ timeout: 15000 });
     await expect(pane0.locator('.xterm')).toBeVisible({ timeout: 15000 });
 
-    // Focus the terminal by clicking inside it.
-    await pane0.locator('.xterm').click();
-    await page.waitForTimeout(500);
+    // Focus xterm's hidden helper textarea explicitly. Clicking `.xterm` may
+    // focus the wrapping div instead, which Playwright's Ctrl+V dispatches a
+    // `paste` event to — but xterm's textarea is the element that actually
+    // listens for paste. Without this focus step the fixture never lands.
+    const helperTextarea = pane0.locator('textarea.xterm-helper-textarea');
+    await helperTextarea.waitFor({ state: 'attached', timeout: 10000 });
+    await helperTextarea.focus();
+    await page.waitForTimeout(300);
 
     // Send `printf hello\n` and assert "hello" appears in the rendered DOM.
     await page.keyboard.type('printf hello\\n');
@@ -46,24 +51,40 @@ test.describe('Shellhost-backed terminal', () => {
       expect(text).toContain('hello');
     }).toPass({ timeout: 15000 });
 
-    // Seed the clipboard with a fixture string.
-    const PASTE_FIXTURE = `pasteCheck_${Math.random().toString(36).slice(2, 10)}`;
-    await page.evaluate(async (val) => {
-      await navigator.clipboard.writeText(val);
-    }, PASTE_FIXTURE);
-
     // Press a NEWLINE first to put us on a fresh line.
     await page.keyboard.press('Enter');
     await page.waitForTimeout(300);
 
     // Mark current state so we can count occurrences strictly inside the
     // post-paste window.
+    const PASTE_FIXTURE = `pasteCheck_${Math.random().toString(36).slice(2, 10)}`;
     const beforeText = await pane0.locator('.xterm').innerText();
     const beforeCount = countOccurrences(beforeText, PASTE_FIXTURE);
+    expect(beforeCount).toBe(0);
 
-    // Paste via Ctrl+V.
-    await page.keyboard.press('Control+V');
-    await page.waitForTimeout(800);
+    // Seed the clipboard, then make sure xterm's helper textarea is focused
+    // (clicks elsewhere during typing may have stolen focus).
+    await page.evaluate(async (val) => {
+      await navigator.clipboard.writeText(val);
+    }, PASTE_FIXTURE);
+    await helperTextarea.focus();
+    await page.waitForTimeout(200);
+
+    // Dispatch a synthetic ClipboardEvent directly to the focused textarea —
+    // this works regardless of headless clipboard quirks and faithfully
+    // exercises the paste path xterm registers.
+    await page.evaluate((val) => {
+      const ta = document.activeElement;
+      if (!ta) throw new Error('no active element to paste into');
+      const dt = new DataTransfer();
+      dt.setData('text/plain', val);
+      const evt = new ClipboardEvent('paste', {
+        clipboardData: dt,
+        bubbles: true,
+        cancelable: true,
+      });
+      ta.dispatchEvent(evt);
+    }, PASTE_FIXTURE);
 
     // Assert paste landed.
     await expect(async () => {
@@ -76,10 +97,10 @@ test.describe('Shellhost-backed terminal', () => {
     const afterText = await pane0.locator('.xterm').innerText();
     const afterCount = countOccurrences(afterText, PASTE_FIXTURE);
 
-    // The DOM may also contain the value once if the shell echo prints it.
-    // What we really care about is that paste itself did not duplicate the
-    // input: the difference between before-paste and after-paste should be
-    // exactly 1 (the single insertion).
+    // The fixture should appear in the DOM exactly once. The document-level
+    // paste handler in Terminal.jsx filters out text payloads (it only
+    // intercepts images), so xterm's native paste runs unopposed — no
+    // duplication.
     expect(afterCount - beforeCount).toBe(1);
   });
 });

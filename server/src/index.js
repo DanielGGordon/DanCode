@@ -589,9 +589,12 @@ export async function startServer(port = PORT, {
   // route new terminals through dancode-shellhost. Otherwise fall back to the
   // legacy tmux-backed TerminalManager so existing tests keep passing.
   const sockPath = shellhostSocket || process.env.DANCODE_SHELLHOST_SOCKET || null;
-  // When a socket path is supplied (env var or option), poll for ~10s to handle
-  // concurrent boot in `npm run dev`. Otherwise fall back immediately.
-  const shellhostReachable = sockPath ? await waitForShellhost(sockPath, 10000) : false;
+  // DANCODE_REQUIRE_SHELLHOST=1 disables the legacy tmux fallback entirely. When
+  // set, we poll for the socket much longer and throw if it never appears, so
+  // tests that intentionally exercise shellhost cannot silently regress to tmux.
+  const requireShellhost = process.env.DANCODE_REQUIRE_SHELLHOST === '1';
+  const waitMs = requireShellhost ? 60_000 : 10_000;
+  const shellhostReachable = sockPath ? await waitForShellhost(sockPath, waitMs) : false;
 
   if (sockPath && shellhostReachable) {
     terminalManager = new ShellhostTerminalManager({ socketPath: sockPath });
@@ -604,6 +607,9 @@ export async function startServer(port = PORT, {
     console.log(`[startup] Terminals backed by shellhost at ${sockPath}`);
   } else {
     if (sockPath && !shellhostReachable) {
+      if (requireShellhost) {
+        throw new Error(`[startup] DANCODE_REQUIRE_SHELLHOST=1 but shellhost socket ${sockPath} was not reachable after ${waitMs}ms`);
+      }
       console.warn(`[startup] Shellhost socket ${sockPath} not reachable; falling back to legacy tmux backend`);
     }
     // Set up TerminalManager (PTY backed by invisible tmux sessions)

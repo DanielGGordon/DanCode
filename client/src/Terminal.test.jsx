@@ -559,4 +559,81 @@ describe('Terminal', () => {
       reconnectionDelayMax: 5000,
     }))
   })
+
+  // --- Paste handling: regression guard against double-paste ---
+
+  function buildPasteEvent(items) {
+    // jsdom doesn't implement DataTransfer/ClipboardEvent with clipboardData;
+    // build a synthetic event with the minimum shape the handler reads.
+    const evt = new Event('paste', { bubbles: true, cancelable: true })
+    Object.defineProperty(evt, 'clipboardData', {
+      value: { items },
+      configurable: true,
+    })
+    return evt
+  }
+
+  it('does not intercept plain-text paste (xterm handles it natively, no double emit)', async () => {
+    const { getByTestId } = await renderTerminal({
+      token: 'test-token',
+      terminalId: 'term-1',
+      projectSlug: 'demo',
+    })
+    vi.runAllTimers()
+    mockConnected = true
+    mockSocketEmit.mockClear()
+
+    const container = getByTestId('terminal')
+    // Make sure the document-paste handler treats us as focused inside the terminal.
+    Object.defineProperty(document, 'activeElement', { value: container, configurable: true })
+
+    const evt = buildPasteEvent([{ type: 'text/plain', getAsFile: () => null }])
+    const preventSpy = vi.spyOn(evt, 'preventDefault')
+
+    document.dispatchEvent(evt)
+
+    // The document-level handler should NOT preventDefault on plain text — xterm's
+    // own paste handler must be allowed to run, and we must not emit input directly
+    // (doing both would double-paste the same fixture).
+    expect(preventSpy).not.toHaveBeenCalled()
+    expect(mockSocketEmit).not.toHaveBeenCalledWith('input', 'pastedText')
+  })
+
+  it('intercepts image paste and uploads (does not forward to xterm)', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ path: '/tmp/img.png' }),
+    })
+    // jsdom's FileReader doesn't fire onload; stub it deterministically.
+    const origFileReader = globalThis.FileReader
+    globalThis.FileReader = class {
+      readAsDataURL() {
+        setTimeout(() => this.onload && this.onload({ target: { result: 'data:image/png;base64,abc' } }), 0)
+      }
+    }
+
+    const { getByTestId } = await renderTerminal({
+      token: 'test-token',
+      terminalId: 'term-1',
+      projectSlug: 'demo',
+    })
+    vi.runAllTimers()
+    mockConnected = true
+    mockSocketEmit.mockClear()
+
+    const container = getByTestId('terminal')
+    Object.defineProperty(document, 'activeElement', { value: container, configurable: true })
+
+    const fakeBlob = new Blob(['x'], { type: 'image/png' })
+    const evt = buildPasteEvent([{ type: 'image/png', getAsFile: () => fakeBlob }])
+    const preventSpy = vi.spyOn(evt, 'preventDefault')
+
+    document.dispatchEvent(evt)
+    // Allow FileReader microtask + fetch to settle.
+    await vi.runAllTimersAsync()
+
+    expect(preventSpy).toHaveBeenCalled()
+
+    globalThis.FileReader = origFileReader
+  })
 })
