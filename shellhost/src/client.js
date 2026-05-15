@@ -133,6 +133,7 @@ export function createShellhostClient({ socketPath, reconnect = false } = {}) {
     kill(terminalId) { return request('kill', { terminalId }); },
     list(filter = {}) { return request('list', filter); },
     inspect(terminalId) { return request('inspect', { terminalId }); },
+    getScrollback(terminalId) { return request('getScrollback', { terminalId }); },
 
     // Escape hatch for op-extensions (background mode, claude session, etc.) in
     // future phases.

@@ -17,9 +17,13 @@ export class PTYManager {
   /**
    * @param {object} [options]
    * @param {(opts)=>pty.IPty} [options.spawn] - injectable for tests
+   * @param {object} [options.scrollback] - optional ScrollbackStore: when
+   *   provided, every PTY output chunk is appended to it write-through, and
+   *   `getScrollback(id)` returns the tail across rotated files.
    */
-  constructor({ spawn = pty.spawn.bind(pty) } = {}) {
+  constructor({ spawn = pty.spawn.bind(pty), scrollback = null } = {}) {
     this._spawn = spawn;
+    this.scrollback = scrollback;
     this.terminals = new Map();
   }
 
@@ -82,6 +86,11 @@ export class PTYManager {
 
     ptyProcess.onData((data) => {
       terminal.lastActiveAt = new Date().toISOString();
+      // Write-through to disk scrollback BEFORE notifying listeners so a
+      // crash inside a listener cannot drop the recorded byte.
+      if (this.scrollback) {
+        try { this.scrollback.append(id, data); } catch { /* keep streaming */ }
+      }
       for (const fn of terminal.listeners) {
         try { fn(data); } catch { /* listener crash must not stop the stream */ }
       }
@@ -179,7 +188,19 @@ export class PTYManager {
       terminal.pty.kill(signal);
     } catch { /* already dead */ }
     this.terminals.delete(id);
+    if (this.scrollback) {
+      try { this.scrollback.removeTerminal(id); } catch { /* ignore */ }
+    }
     return true;
+  }
+
+  /**
+   * Return the persisted scrollback tail for a terminal as a string. Empty
+   * string when no scrollback exists.
+   */
+  getScrollback(id) {
+    if (!this.scrollback) return '';
+    return this.scrollback.readTail(id);
   }
 
   /**

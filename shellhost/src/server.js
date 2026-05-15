@@ -139,10 +139,16 @@ async function dispatchOp(op, payload, ctx) {
       const { terminalId } = payload;
       if (!terminalId) throw new Error('attach: terminalId required');
       if (attachments.has(terminalId)) {
-        // Already attached on this connection — idempotent.
+        // Already attached on this connection — idempotent. No replay.
         const existing = ptyManager.inspect(terminalId);
         if (!existing) throw new Error(`attach: terminal ${terminalId} not found`);
         return { ok: true, terminal: existing };
+      }
+      // Replay scrollback tail BEFORE registering the live listener so the
+      // attacher sees history then live output in order.
+      const replay = ptyManager.getScrollback(terminalId);
+      if (replay) {
+        send(makeEvent(terminalId, 'output', { data: replay }));
       }
       const onOutput = (data) => {
         send(makeEvent(terminalId, 'output', { data }));
@@ -208,6 +214,13 @@ async function dispatchOp(op, payload, ctx) {
       const terminal = ptyManager.inspect(terminalId);
       if (!terminal) throw new Error(`inspect: terminal ${terminalId} not found`);
       return { terminal };
+    }
+
+    case 'getScrollback': {
+      const { terminalId } = payload;
+      if (!terminalId) throw new Error('getScrollback: terminalId required');
+      const data = ptyManager.getScrollback(terminalId);
+      return { data };
     }
 
     default:

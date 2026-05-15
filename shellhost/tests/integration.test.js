@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readdir, readFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn as spawnChild } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createShellhost } from '../src/server.js';
 import { createShellhostClient } from '../src/client.js';
+import { PTYManager } from '../src/pty-manager.js';
+import { ScrollbackStore } from '../src/scrollback.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -100,6 +102,74 @@ describe('shellhost integration', () => {
     await c2.kill(terminalId);
     c2.close();
   });
+
+  it('exact-2.5MB write produces exactly two files totalling <=2.1MB on disk', async () => {
+    // Rebuild the host on a temp scrollback dir, since the default `host`
+    // built in beforeEach doesn't have a scrollback wired in.
+    try { client.close(); } catch { /* ignore */ }
+    try { await host.close(); } catch { /* ignore */ }
+
+    const sbDir = join(tempDir, 'terminals');
+    const scrollback = new ScrollbackStore({ baseDir: sbDir });
+    const manager = new PTYManager({ scrollback });
+    host = createShellhost({ manager });
+    await host.listen(socketPath);
+    client = createShellhostClient({ socketPath });
+    await client.connect();
+
+    // Spawn a PTY and emit a known sentinel after 2.5MB of payload so we
+    // can wait deterministically until exactly 2.5MB has streamed.
+    const { terminalId } = await client.spawn({ projectSlug: 'big' });
+    await client.attach(terminalId);
+
+    let bytesSeen = 0;
+    const targetBytes = 2_500_000;
+    const reachedP = new Promise((resolve) => {
+      const onOutput = (tid, payload) => {
+        if (tid !== terminalId) return;
+        bytesSeen += payload.data.length;
+        if (bytesSeen >= targetBytes) {
+          client.off('output', onOutput);
+          resolve();
+        }
+      };
+      client.on('output', onOutput);
+    });
+
+    // Emit 2.5MB of X's into the PTY's output stream.
+    await client.write(
+      terminalId,
+      "head -c 2500000 /dev/zero | tr '\\0' X\n"
+    );
+
+    await Promise.race([
+      reachedP,
+      new Promise((_, reject) => setTimeout(
+        () => reject(new Error(`timeout: only saw ${bytesSeen} bytes of ${targetBytes}`)),
+        45_000,
+      )),
+    ]);
+    // Allow the disk write of the final chunk to settle (writeSync is sync,
+    // but the bash printf may emit `__DONE_BIG__` in a separate chunk after
+    // we've already returned from the assertion path).
+    await new Promise((r) => setTimeout(r, 250));
+
+    const dir = join(sbDir, terminalId);
+
+    const files = await readdir(dir);
+    expect(files.sort()).toEqual(['scrollback.log', 'scrollback.log.1']);
+    let total = 0;
+    for (const f of files) total += (await stat(join(dir, f))).size;
+    expect(total).toBeLessThanOrEqual(2_100_000);
+    // Each file individually ≤ ~1MB + small overshoot tolerance for the
+    // chunk that crossed the rotation threshold.
+    for (const f of files) {
+      const s = (await stat(join(dir, f))).size;
+      expect(s).toBeLessThanOrEqual(1_100_000);
+    }
+
+    await client.kill(terminalId);
+  }, 60_000);
 
   it('write + read round-trips through a real bash PTY', async () => {
     const collected = [];
