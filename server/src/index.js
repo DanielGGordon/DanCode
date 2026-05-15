@@ -9,6 +9,7 @@ import { writeFile } from 'node:fs/promises';
 import { isAccountSetUp, createAccount, verifyLogin, createSession, validateSession, destroySession, getCredentialsPath, startSessionCleanupInterval } from './auth.js';
 import { validateProjectInput, createProject, listProjects, getProject, updateProject, deleteProject, getProjectsDir, slugify, isValidSlug } from './projects.js';
 import { TerminalManager, setupTerminalManagerNamespace, getTerminalsDir } from './terminal-manager.js';
+import { ShellhostTerminalManager, setupShellhostNamespace } from './shellhost-terminal-manager.js';
 import { listDirectory, readFileContent, writeFileContent, createDirectory, renameFile, deleteFile, safePath, getFileStats } from './files.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -574,24 +575,52 @@ export { app, httpServer, io };
 
 let terminalManagerNamespaceRegistered = false;
 
-export async function startServer(port = PORT, { credentialsPath: credPath, projectsDir: projDir, terminalsDir: termDir, reconcileRetryDelay } = {}) {
+export async function startServer(port = PORT, {
+  credentialsPath: credPath,
+  projectsDir: projDir,
+  terminalsDir: termDir,
+  reconcileRetryDelay,
+  shellhostSocket,
+} = {}) {
   credentialsPath = credPath || getCredentialsPath();
   projectsDir = projDir || getProjectsDir();
 
-  // Set up TerminalManager (PTY backed by invisible tmux sessions)
-  const terminalsDir = termDir || getTerminalsDir();
-  const tmOpts = reconcileRetryDelay !== undefined ? { reconcileRetryDelay } : {};
-  terminalManager = new TerminalManager(terminalsDir, tmOpts);
+  // Phase 1: if a shellhost socket is configured (env var or explicit option),
+  // route new terminals through dancode-shellhost. Otherwise fall back to the
+  // legacy tmux-backed TerminalManager so existing tests keep passing.
+  const sockPath = shellhostSocket || process.env.DANCODE_SHELLHOST_SOCKET || null;
+  // When a socket path is supplied (env var or option), poll for ~10s to handle
+  // concurrent boot in `npm run dev`. Otherwise fall back immediately.
+  const shellhostReachable = sockPath ? await waitForShellhost(sockPath, 10000) : false;
 
-  // Reconcile: reattach to surviving tmux sessions from a previous run
-  const { reattached, cleaned } = await terminalManager.reconcile();
-  if (reattached > 0 || cleaned > 0) {
-    console.log(`[startup] Reconciled terminals: ${reattached} reattached, ${cleaned} stale cleaned`);
-  }
+  if (sockPath && shellhostReachable) {
+    terminalManager = new ShellhostTerminalManager({ socketPath: sockPath });
+    // Eagerly establish the client connection so output/exit events flow.
+    await terminalManager.client.connect();
+    if (!terminalManagerNamespaceRegistered) {
+      setupShellhostNamespace(io, terminalManager);
+      terminalManagerNamespaceRegistered = true;
+    }
+    console.log(`[startup] Terminals backed by shellhost at ${sockPath}`);
+  } else {
+    if (sockPath && !shellhostReachable) {
+      console.warn(`[startup] Shellhost socket ${sockPath} not reachable; falling back to legacy tmux backend`);
+    }
+    // Set up TerminalManager (PTY backed by invisible tmux sessions)
+    const terminalsDir = termDir || getTerminalsDir();
+    const tmOpts = reconcileRetryDelay !== undefined ? { reconcileRetryDelay } : {};
+    terminalManager = new TerminalManager(terminalsDir, tmOpts);
 
-  if (!terminalManagerNamespaceRegistered) {
-    setupTerminalManagerNamespace(io, terminalManager);
-    terminalManagerNamespaceRegistered = true;
+    // Reconcile: reattach to surviving tmux sessions from a previous run
+    const { reattached, cleaned } = await terminalManager.reconcile();
+    if (reattached > 0 || cleaned > 0) {
+      console.log(`[startup] Reconciled terminals: ${reattached} reattached, ${cleaned} stale cleaned`);
+    }
+
+    if (!terminalManagerNamespaceRegistered) {
+      setupTerminalManagerNamespace(io, terminalManager);
+      terminalManagerNamespaceRegistered = true;
+    }
   }
 
   // Start hourly cleanup of expired sessions (30-day TTL)
@@ -603,6 +632,41 @@ export async function startServer(port = PORT, { credentialsPath: credPath, proj
       resolve(httpServer);
     });
   });
+}
+
+/**
+ * One-shot reachability check for a UNIX domain socket.
+ */
+async function isShellhostReachable(socketPath) {
+  const { connect } = await import('node:net');
+  const { stat } = await import('node:fs/promises');
+  try {
+    const st = await stat(socketPath);
+    if (!st.isSocket()) return false;
+  } catch {
+    return false;
+  }
+  return new Promise((resolve) => {
+    const sock = connect(socketPath);
+    const cleanup = () => { try { sock.destroy(); } catch { /* ignore */ } };
+    const timer = setTimeout(() => { cleanup(); resolve(false); }, 200);
+    sock.once('connect', () => { clearTimeout(timer); cleanup(); resolve(true); });
+    sock.once('error', () => { clearTimeout(timer); cleanup(); resolve(false); });
+  });
+}
+
+/**
+ * Poll for shellhost readiness up to totalTimeoutMs. Returns true as soon as the
+ * socket accepts a connection; returns false if the timeout elapses first.
+ */
+async function waitForShellhost(socketPath, totalTimeoutMs) {
+  if (totalTimeoutMs <= 0) return isShellhostReachable(socketPath);
+  const start = Date.now();
+  while (Date.now() - start < totalTimeoutMs) {
+    if (await isShellhostReachable(socketPath)) return true;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return false;
 }
 
 // Start the server when run directly (not imported for tests)
