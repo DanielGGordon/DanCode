@@ -3,41 +3,11 @@
  * with the same shape the rest of the server expects from `TerminalManager`.
  *
  * Only methods needed by `index.js` are implemented: create, list, get,
- * update, destroy, destroyAll. Plus a small per-terminal output ring buffer
- * is kept in memory so a reconnecting socket replays missed bytes (the
- * Phase 1 stand-in for Phase 2's disk-backed scrollback).
+ * update, destroy, destroyAll. Reconnect replay comes from shellhost's
+ * on-disk scrollback (Phase 2) — no server-memory ring buffer.
  */
 import { validateSession } from './auth.js';
 import { createShellhostClient } from 'dancode-shellhost/src/client.js';
-
-const RING_BUFFER_SIZE = 50 * 1024; // ~50KB
-
-class RingBuffer {
-  constructor(maxSize = RING_BUFFER_SIZE) {
-    this.maxSize = maxSize;
-    this.chunks = [];
-    this.totalSize = 0;
-  }
-  append(chunk) {
-    this.chunks.push(chunk);
-    this.totalSize += chunk.length;
-    if (this.totalSize > this.maxSize * 2) this._compact();
-  }
-  _compact() {
-    const combined = this.chunks.join('');
-    if (combined.length > this.maxSize) {
-      this.chunks = [combined.slice(combined.length - this.maxSize)];
-    } else {
-      this.chunks = [combined];
-    }
-    this.totalSize = this.chunks[0].length;
-  }
-  getContents() {
-    const combined = this.chunks.join('');
-    if (combined.length > this.maxSize) return combined.slice(combined.length - this.maxSize);
-    return combined;
-  }
-}
 
 export class ShellhostTerminalManager {
   /**
@@ -60,7 +30,6 @@ export class ShellhostTerminalManager {
       const t = this.terminals.get(terminalId);
       if (!t) return;
       const data = payload.data;
-      t.ring.append(data);
       t.lastActivity = new Date().toISOString();
       for (const sock of t.sockets) {
         sock.emit('output', data);
@@ -106,7 +75,6 @@ export class ShellhostTerminalManager {
       createdAt,
       lastActivity: createdAt,
       sockets: new Set(),
-      ring: new RingBuffer(),
       exited: false,
       exitCode: null,
     };
@@ -166,14 +134,26 @@ export class ShellhostTerminalManager {
   }
 
   /**
-   * Attach a websocket. Replays buffered output and returns true.
+   * Attach a websocket. Replays disk-backed scrollback from shellhost
+   * before live output starts flowing. Returns true if the terminal exists.
+   *
+   * Replay is fire-and-forget but ordered: we add the socket AFTER the
+   * scrollback has been emitted, so live `output` events broadcast by the
+   * shared shellhost listener cannot interleave ahead of the replay.
    */
   attach(id, socket) {
     const t = this.terminals.get(id);
     if (!t) return false;
-    t.sockets.add(socket);
-    const buffered = t.ring.getContents();
-    if (buffered) socket.emit('output', buffered);
+    this.client.getScrollback(id).then((res) => {
+      if (res?.data) {
+        try { socket.emit('output', res.data); } catch { /* socket may have closed */ }
+      }
+      t.sockets.add(socket);
+    }).catch(() => {
+      // Even if scrollback fetch fails, still wire up the live stream so
+      // the user sees future output.
+      t.sockets.add(socket);
+    });
     return true;
   }
 

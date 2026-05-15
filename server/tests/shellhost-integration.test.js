@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { generate } from 'otplib';
 import { io as ioClient } from 'socket.io-client';
 import { createShellhost } from 'dancode-shellhost/src/server.js';
+import { PTYManager } from 'dancode-shellhost/src/pty-manager.js';
+import { ScrollbackStore } from 'dancode-shellhost/src/scrollback.js';
 import { startServer, httpServer, terminalManager } from '../src/index.js';
 import { clearSessions } from '../src/auth.js';
 
@@ -37,7 +39,9 @@ describe('server <-> shellhost integration', () => {
   beforeAll(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'shellhost-server-int-'));
     socketPath = join(tempDir, 'shellhost.sock');
-    host = createShellhost();
+    const scrollback = new ScrollbackStore({ baseDir: join(tempDir, 'sb-terminals') });
+    const manager = new PTYManager({ scrollback });
+    host = createShellhost({ manager });
     await host.listen(socketPath);
 
     server = await startServer(TEST_PORT, {
@@ -161,6 +165,82 @@ describe('server <-> shellhost integration', () => {
     expect(del.status).toBe(204);
     expect(host.manager.inspect(terminal.id)).toBeNull();
   });
+
+  it('reconnect after disconnect replays disk-backed scrollback (no server ring buffer)', async () => {
+    const createRes = await fetch(`http://localhost:${TEST_PORT}/api/terminals`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ projectSlug: 'replay-proj', label: 'CLI' }),
+    });
+    const terminal = await createRes.json();
+
+    // First socket: generate a known marker, then disconnect.
+    const sock1 = ioClient(`http://localhost:${TEST_PORT}/terminal/${terminal.id}`, {
+      auth: { token: storedToken },
+      transports: ['websocket'],
+      reconnection: false,
+    });
+    try {
+      await new Promise((r, j) => { sock1.on('connect', r); sock1.on('connect_error', j); });
+      const sawMarker = new Promise((resolve) => {
+        const onOutput = (d) => {
+          if (typeof d === 'string' && d.includes('__REPLAY_DISK_MARKER__')) {
+            sock1.off('output', onOutput);
+            resolve();
+          }
+        };
+        sock1.on('output', onOutput);
+      });
+      sock1.emit('input', "printf '__REPLAY_DISK_MARKER__\\n'\n");
+      await Promise.race([
+        sawMarker,
+        new Promise((_, j) => setTimeout(() => j(new Error('marker timeout')), 8000)),
+      ]);
+    } finally {
+      sock1.disconnect();
+    }
+
+    // Independently verify the server does NOT keep a ring buffer for this
+    // terminal: the new shellhost-backed manager should have no per-terminal
+    // memory of past output.
+    const internal = terminalManager.terminals.get(terminal.id);
+    expect(internal).toBeDefined();
+    expect(internal.ring).toBeUndefined();
+
+    // Second socket: connect fresh and assert the disk scrollback is replayed.
+    const sock2 = ioClient(`http://localhost:${TEST_PORT}/terminal/${terminal.id}`, {
+      auth: { token: storedToken },
+      transports: ['websocket'],
+      reconnection: false,
+    });
+    try {
+      await new Promise((r, j) => { sock2.on('connect', r); sock2.on('connect_error', j); });
+      const replayed = [];
+      const sawMarker = new Promise((resolve) => {
+        const onOutput = (d) => {
+          if (typeof d === 'string') {
+            replayed.push(d);
+            if (replayed.join('').includes('__REPLAY_DISK_MARKER__')) {
+              sock2.off('output', onOutput);
+              resolve();
+            }
+          }
+        };
+        sock2.on('output', onOutput);
+      });
+      await Promise.race([
+        sawMarker,
+        new Promise((_, j) => setTimeout(() => j(new Error(`replay timeout: got ${JSON.stringify(replayed.join(''))}`)), 5000)),
+      ]);
+      expect(replayed.join('')).toContain('__REPLAY_DISK_MARKER__');
+    } finally {
+      sock2.disconnect();
+      await fetch(`http://localhost:${TEST_PORT}/api/terminals/${terminal.id}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+    }
+  }, 30000);
 
   it('spawn uses TERM=xterm-256color via shellhost', async () => {
     // Use a one-shot bash invocation so we don't fight an interactive prompt.
