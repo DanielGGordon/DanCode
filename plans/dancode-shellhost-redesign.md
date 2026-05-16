@@ -178,6 +178,7 @@ Human work is confined to:
 
 ---
 
+<!-- PHASE 2 COMPLETE -->
 ## Phase 2: Disk-persisted scrollback
 
 **Delivers**: Every PTY's output is appended to `~/.dancode/terminals/<id>/scrollback.log` as it streams. The log rotates at 1MB (one rotation kept). When a browser reconnects to a still-alive PTY, the last ~50KB of scrollback is replayed before live output resumes — and the replay comes from disk, not from a server-memory ring buffer. After this phase, a browser refresh on a noisy terminal shows the full recent history, not just what's in RAM.
@@ -195,6 +196,7 @@ Human work is confined to:
 
 ---
 
+<!-- PHASE 3 COMPLETE -->
 ## Phase 3: Survive web-server restart
 
 **Delivers**: The DanCode server can be killed and restarted without affecting running PTYs. Shellhost keeps owning the PTYs; on startup the server calls `list` against shellhost and re-establishes its in-memory map of terminals. A browser that was connected during the restart auto-reconnects (existing Socket.IO behavior) and resumes the same PTY with no data loss beyond a brief stream gap (covered by Phase 2's replay).
