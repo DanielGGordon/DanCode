@@ -218,3 +218,69 @@
   If we ever move project configs into per-slug dirs (`~/.dancode/projects/<slug>/project.json`),
   layout.json fits naturally beside it; just plan for the migration when
   it lands.
+
+## After Phase 5 (proposed by Phase 5 generator)
+
+- **`ShellhostTerminalManager.client` now needs `error`+`close` listeners**
+  unconditionally. The bare client emits an `error` event on socket-level
+  ECONNRESET (which happens whenever the shellhost dies), and without a
+  listener attached, Node's EventEmitter rethrows and crashes the server.
+  Phase 5 adds them inside `_wireEvents()`. Phase 7/8 generators that
+  add new clients to shellhost — including any test harnesses — should
+  attach `error` listeners as well, or wrap the client factory to do it
+  centrally.
+
+- **Pidfile written by shellhost is the orchestration primitive for
+  Phase 5+ test reboots.** Path defaults to
+  `<dirname(socket)>/shellhost.pid`, overridable with
+  `DANCODE_SHELLHOST_PIDFILE`. The `/api/test-only/restart-shellhost`
+  endpoint reads it to SIGKILL the right process, and waits for the file
+  to be rewritten with a NEW pid before polling the socket — polling
+  the socket alone races with the still-dying parent. Phase 10's
+  systemd unit can use the same pidfile for `PIDFile=` and `Restart=on-failure`.
+
+- **Boot-stack now auto-respawns shellhost on exit** (mirrors the existing
+  server respawn). The on-exit handler also unlinks the stale socket file
+  before respawning so the new shellhost can bind. Phase 10 should rely
+  on `systemd --user` for the equivalent in production rather than
+  porting boot-stack logic.
+
+- **`PTYManager` constructor now starts a `setInterval` if a `metaStore` is
+  injected.** That interval is `unref()`'d so it doesn't block process
+  exit, but `killAll()` and the shutdown handler in `index.js` both call
+  `stopLastActiveFlusher()` to be tidy. Phase 7 (Claude session id) and
+  Phase 8 (background mode) will likely add their own periodic writes
+  (`noteClaudeSession`, ps-based foreground inspection) — consider
+  consolidating them onto the same 60s tick instead of stacking
+  intervals.
+
+- **`respawn` op + `attach`'s scrollback replay are subtly redundant after
+  respawn.** Phase 5 persists the banner to scrollback BEFORE notifying
+  listeners. Any future attach replays "prior content + banner + new
+  output" by reading the same on-disk log. This means the criterion
+  "before the banner, ~50KB of prior scrollback is replayed" is
+  satisfied by `getScrollback` on the next attach — Phase 5 does NOT
+  emit a synthetic replay-then-banner sequence to ALREADY-attached
+  listeners; only the banner. For Phase 7 (Claude resume), the same
+  pattern works: write the new prompt context to scrollback at respawn
+  time and any browser reload will see it via replay.
+
+- **`/api/projects/:slug/layout` now triggers `respawnForProject(slug)`
+  as a side effect.** The Socket.IO terminal namespace also auto-respawns
+  on connect as a safety net (in case layout-GET ordering races against
+  WebSocket attach during page load). If Phase 7 introduces a "Resume
+  Claude" UX that needs to respawn a single terminal in isolation,
+  reuse `respawnTerminal(id)` — don't add another endpoint that calls
+  it on every page navigation.
+
+- **The Socket.IO terminal namespace connection handler is now `async`.**
+  The `attach()` call gates on `respawnTerminal()` finishing. Reads in
+  the namespace handler are sequential after this change — if a future
+  phase wants per-connection auth/permission checks before attach, drop
+  them into the same async block.
+
+- **Periodic `lastActiveAt` flusher coalesces writes via a `_lastActiveDirty`
+  Set.** Phase 6's CodeMirror integration won't touch this, but Phase 7
+  may want to piggy-back the Claude foreground-process inspection on the
+  same tick. If 5s is the target inspection interval, run that on a
+  separate timer (the lastActive flush is 60s).

@@ -211,6 +211,7 @@ Human work is confined to:
 
 **AI opportunity**: None.
 
+<!-- PHASE 4 COMPLETE -->
 ---
 
 ## Phase 4: Layout persistence + project restore ✅
@@ -232,7 +233,8 @@ Human work is confined to:
 
 ---
 
-## Phase 5: Pi-reboot recovery (respawn with scrollback banner)
+<!-- PHASE 5 COMPLETE -->
+## Phase 5: Pi-reboot recovery (respawn with scrollback banner) ✅
 
 **Delivers**: After the shellhost itself restarts (simulating a Pi reboot via `systemctl --user restart dancode-shellhost`), all known terminals are recoverable. On project open, the server asks shellhost for each terminal in the layout; if the PTY is no longer alive, shellhost re-spawns it at the saved cwd with the saved startup command, prepends a visible banner (`--- prior session ended at <timestamp> ---`) to the new PTY's output buffer using the persisted scrollback, and live output begins. This is the functional equivalent of tmux-resurrect, without tmux.
 

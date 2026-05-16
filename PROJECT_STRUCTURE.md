@@ -7,10 +7,11 @@ DanCode/
 ├── shellhost/                  # Phase 1+: standalone PTY-owning Node process (dancode-shellhost)
 │   ├── bin/dancode-shellhost.js # CLI entry alias
 │   ├── src/
-│   │   ├── index.js            # Entry: starts a server on ~/.dancode/shellhost.sock with disk-backed scrollback under ~/.dancode/terminals/
-│   │   ├── server.js           # UNIX-socket server + op dispatch (spawn/attach/detach/write/resize/kill/list/inspect/getScrollback)
-│   │   ├── pty-manager.js      # Owns the in-memory map of live PTYs; appends PTY output to scrollback write-through
+│   │   ├── index.js            # Entry: starts a server on ~/.dancode/shellhost.sock with disk-backed scrollback under ~/.dancode/terminals/; drops a pidfile so an orchestrator can SIGKILL it (Phase 5)
+│   │   ├── server.js           # UNIX-socket server + op dispatch (spawn/attach/detach/write/resize/kill/list/inspect/getScrollback/respawn)
+│   │   ├── pty-manager.js      # Owns the in-memory map of live + needs-respawn PTYs; appends PTY output to scrollback write-through; respawn() persists yellow banner + spawns at saved cwd/command
 │   │   ├── scrollback.js       # Phase 2: ScrollbackStore — append-only `<baseDir>/<id>/scrollback.log` with 1MB rotation + tail read
+│   │   ├── meta-store.js       # Phase 5: MetaStore — atomic per-terminal `<baseDir>/<id>/meta.json` (write/update/read/list/remove) used to reconstruct terminals on shellhost restart
 │   │   ├── client.js           # Client library used by dancode-server to call shellhost
 │   │   └── wire.js             # Length-prefixed JSON frame codec (encode/decode/streaming framer)
 │   ├── tests/
@@ -19,6 +20,9 @@ DanCode/
 │   │   ├── ops.test.js         # Per-op dispatch unit tests
 │   │   ├── scrollback.test.js  # ScrollbackStore unit tests (append, rotate, readTail, disk-usage)
 │   │   ├── scrollback-ops.test.js # Wire-op tests for scrollback replay on attach
+│   │   ├── meta-store.test.js  # Phase 5: MetaStore unit tests (atomic write, read, list, remove, malformed-file skip)
+│   │   ├── respawn.test.js     # Phase 5: PTYManager loadOrphans/respawn unit tests; periodic lastActiveAt flush
+│   │   ├── respawn-integration.test.js # Phase 5: spawn → write sentinel → SIGKILL shellhost → fresh shellhost on same socket → respawn → assert new PID, banner emitted, scrollback + cwd preserved
 │   │   └── integration.test.js # Boots a real shellhost on a temp socket; in-process 2.5MB disk-usage test
 │   ├── package.json
 │   ├── vitest.config.js
@@ -109,13 +113,14 @@ DanCode/
 │   │   │   ├── mobile-pwa.spec.js    # Playwright mobile emulation E2E (Pixel 5 viewport, PWA, dashboard nav, dots, swipe)
 │   │   │   └── visual.spec.js  # Midscene AI visual assertion test (DOM-based on Pi 5)
 │   │   ├── e2e-shellhost/
-│   │   │   ├── boot-stack.mjs  # Spawns shellhost + supervises a dancode-server child process; respawns server on death (Phase 3 restart E2E)
+│   │   │   ├── boot-stack.mjs  # Spawns shellhost + supervises a dancode-server child process; respawns BOTH shellhost and server on death (Phase 3 + Phase 5 restart E2Es)
 │   │   │   ├── global-teardown.js # Cleans up the temp E2E HOME after the run
 │   │   │   ├── shellhost-terminal.spec.js # Phase 1: shellhost-backed terminal E2E (typed input + clipboard paste)
 │   │   │   ├── scrollback-replay.spec.js  # Phase 2: disk-backed scrollback survives reload; no duplicate replay on double-reload
 │   │   │   ├── server-restart.spec.js     # Phase 3: kill server mid-session → PTY survives, gap output replays, new input lands in same PTY
 │   │   │   ├── layout-restore.spec.js     # Phase 4: 2 terminals (distinct cwds) + open file + vertical split survive logout/login
-│   │   │   └── missing-file-warning.spec.js # Phase 4: deleted file in layout shows banner; Close button removes it and updates layout.json
+│   │   │   ├── missing-file-warning.spec.js # Phase 4: deleted file in layout shows banner; Close button removes it and updates layout.json
+│   │   │   └── shellhost-restart.spec.js  # Phase 5: SIGKILL shellhost via /test-only/restart-shellhost → reload → both terminals re-appear with prior-session banner + prior sentinel in DOM
 │   │   ├── shellhost-integration.test.js # Phase 1+2: server <-> shellhost integration over UNIX socket (incl. disk replay on reconnect)
 │   │   ├── shellhost-restart.test.js     # Phase 3: ShellhostTerminalManager.recover() + startServer() list-based recovery; data-race stress (1MB output during restart cycle)
 │   │   ├── layout.test.js      # Phase 4: layout module — defaultLayout, validateLayout, atomic writeLayout under concurrency, removeMissingFiles

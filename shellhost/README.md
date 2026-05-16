@@ -16,7 +16,7 @@ Every frame is `{ type, requestId?, terminalId?, op, payload }` encoded as JSON,
 prefixed by a 4-byte big-endian length. Three frame types:
 
 - `req` — request from server to shellhost (`spawn`, `attach`, `detach`, `write`,
-  `resize`, `kill`, `list`, `inspect`, `getScrollback`).
+  `resize`, `kill`, `list`, `inspect`, `getScrollback`, `respawn`).
 - `res` — response from shellhost (success: `{ ok: true, result }`, failure:
   `{ ok: false, error }`).
 - `event` — push from shellhost to server (`output`, `exit`).
@@ -32,15 +32,29 @@ See `src/wire.js` for the codec and `src/server.js` for the op handlers.
 ## Layout
 
 - `src/wire.js` — frame encode/decode.
-- `src/pty-manager.js` — owns the in-memory map of PTYs; routes every output
-  chunk through the scrollback store synchronously before notifying listeners.
+- `src/pty-manager.js` — owns the in-memory map of PTYs (live + `needsRespawn`
+  orphans recovered from disk); routes every output chunk through the
+  scrollback store synchronously before notifying listeners. `respawn(id)`
+  persists a yellow banner (`--- prior session ended at <ISO> ---`) into
+  scrollback, emits it to attached listeners, then spawns a fresh PTY at
+  the saved cwd/command. A periodic flusher (default 60s) writes
+  `lastActiveAt` from in-memory back to `meta.json` so the banner shows an
+  accurate timestamp after a Pi reboot.
 - `src/scrollback.js` — `ScrollbackStore`: append-only `<terminalsDir>/<id>/scrollback.log`
   with 1MB rotation (one rotation kept as `scrollback.log.1`) and tail
   reads spanning both files in chronological order.
+- `src/meta-store.js` — `MetaStore`: per-terminal `<terminalsDir>/<id>/meta.json`
+  written atomically (write-tmp + rename). On startup `loadOrphans()` scans
+  this directory and registers each terminal as `needsRespawn` so a fresh
+  `dancode-shellhost` can resume after `systemctl --user restart` or any
+  hard kill.
 - `src/server.js` — UNIX-socket server + op dispatch.
 - `src/index.js` — entry point: starts a server on `DANCODE_SHELLHOST_SOCKET`
-  (defaults to `~/.dancode/shellhost.sock`) with scrollback under
-  `DANCODE_TERMINALS_DIR` (defaults to `~/.dancode/terminals/`).
+  (defaults to `~/.dancode/shellhost.sock`) with scrollback + meta under
+  `DANCODE_TERMINALS_DIR` (defaults to `~/.dancode/terminals/`). Drops a
+  pidfile at `DANCODE_SHELLHOST_PIDFILE` (defaults to a sibling of the
+  socket) so a co-located server or test orchestrator can SIGKILL the
+  shellhost to simulate a Pi reboot.
 - `src/client.js` — client library used by `dancode-server` to call into shellhost.
 - `bin/dancode-shellhost.js` — CLI entry alias for `src/index.js`.
 
