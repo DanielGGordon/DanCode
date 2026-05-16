@@ -39,6 +39,11 @@ function requireAuth(req, res, next) {
   if (req.path === '/auth/login' || req.path === '/auth/setup' || req.path === '/auth/setup/status' || req.path === '/auth/validate') {
     return next();
   }
+  // Phase 3: test-only kill endpoint is gated by NODE_ENV=test inside the
+  // handler itself; allow it through without a session token.
+  if (req.path === '/test-only/kill-server' && process.env.NODE_ENV === 'test') {
+    return next();
+  }
 
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -553,6 +558,19 @@ app.delete('/api/files', async (req, res) => {
   }
 });
 
+// Test-only endpoint: kill the server process. Used by Phase 3's restart
+// E2E to simulate a hard SIGTERM in a way that Playwright can trigger from
+// the browser. Guarded by NODE_ENV=test so it cannot be reached in any
+// non-test deployment.
+app.post('/api/test-only/kill-server', (req, res) => {
+  if (process.env.NODE_ENV !== 'test') {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  res.json({ ok: true });
+  // Defer the actual exit so the response can flush.
+  setTimeout(() => process.exit(0), 10);
+});
+
 // SPA fallback: serve index.html for client-side routes only
 // Skip /api paths (should 404 as JSON) and file-like asset paths (should 404 normally)
 app.get('{*path}', (req, res) => {
@@ -600,8 +618,19 @@ export async function startServer(port = PORT, {
     terminalManager = new ShellhostTerminalManager({ socketPath: sockPath });
     // Eagerly establish the client connection so output/exit events flow.
     await terminalManager.client.connect();
+    // Phase 3: rebuild the in-memory terminal map from shellhost's `list`.
+    // This is the server-restart recovery primitive — PTYs spawned before
+    // the previous server died are still alive in shellhost, and we pick
+    // them back up here without disturbing them.
+    const recovered = await terminalManager.recover();
+    if (recovered > 0) {
+      console.log(`[startup] Recovered ${recovered} terminal${recovered === 1 ? '' : 's'} from shellhost`);
+    }
     if (!terminalManagerNamespaceRegistered) {
-      setupShellhostNamespace(io, terminalManager);
+      // Pass a getter so the namespace handler always resolves the current
+      // module-level `terminalManager` — important when a single Node process
+      // simulates a server restart in tests.
+      setupShellhostNamespace(io, () => terminalManager);
       terminalManagerNamespaceRegistered = true;
     }
     console.log(`[startup] Terminals backed by shellhost at ${sockPath}`);

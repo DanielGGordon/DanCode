@@ -92,3 +92,56 @@
   avoid the EADDRINUSE. Future phases that need test ports should pick
   numbers that don't collide with Tailscale serve/funnel entries (check
   `tailscale serve status`).
+
+## After Phase 3 (proposed by Phase 3 generator)
+
+- **TOTP-based auth in vitest tests is timing-fragile.** otplib defaults
+  to `epochTolerance: 0`, so any test that does generate→verify across a
+  30-second boundary flakes — especially when bcrypt rounds bump the
+  elapsed time on the Pi. Phase 3's restart test bypasses HTTP login
+  entirely by calling `createSession()` directly from the auth module
+  (the function is already exported for tests). Phase 4 onwards should
+  prefer the same trick over `await generate(); POST /api/auth/login;` in
+  vitest, or set `epochTolerance: 1` in `verifyLogin`.
+
+- **Socket.IO namespace closure captures the manager reference once.**
+  Phase 1 wired `setupShellhostNamespace(io, manager)` which captured
+  the manager in the connection handler. After Phase 3's in-process
+  restart, the closure pointed at the closed/old manager. Phase 3 changed
+  the signature to accept either a manager OR a getter and the server
+  now passes `() => terminalManager` so the resolution is always lazy.
+  Future phases that swap the manager (Phase 7's Claude-session updates,
+  for example) get correct routing automatically.
+
+- **Server-restart supervisor in Playwright.** Phase 3's restart E2E
+  needs a real new server process after `process.exit(0)`. Inline server
+  loading inside `boot-stack.mjs` (the Phase 1 pattern) doesn't survive
+  process.exit. Phase 3 changed the supervisor to spawn the server as a
+  child and respawn on death. Playwright's webServer happily polls the
+  port across the gap (browsers' Socket.IO reconnects automatically).
+
+- **`/api/test-only/kill-server` is the cleanest restart primitive.**
+  Endpoint gated by `NODE_ENV=test` and the requireAuth bypass keeps the
+  test driver simple: a plain `request.post(...)` from Playwright. If
+  Phase 7 needs a restart-resume flow for Claude, the same endpoint
+  works without auth complications.
+
+- **Module-level `httpServer` singleton, revisited.** Phase 1's note
+  about a re-entrant `startServer` still stands. Phase 3 worked around it
+  by carefully closing and re-listing on the same module-level
+  httpServer, but multiple parallel in-process restart scenarios will
+  hit the limit. Phase 5+ should refactor.
+
+- **Disk-scrollback rotation must include the rotation file in
+  consumption checks.** The 1MB stress test almost asserted on
+  `scrollback.log` alone — but when 1MB lands at exactly the rotation
+  threshold, most of the X bytes live in `scrollback.log.1`. Tests that
+  verify total bytes must read both files. Phase 5's reboot-recovery
+  tests will face the same trap.
+
+- **Shell input echo races marker-based sentinels.** Same gotcha as
+  Phase 2: typing `printf '__MARKER__\n'` to a PTY echoes the literal
+  marker back via the TTY layer BEFORE the command runs. The 1MB stress
+  test originally waited on the END marker and was firing on the input
+  echo. The fix is to wait on byte count or build the marker via shell
+  concatenation. Phase 5's reboot tests should keep this in mind.

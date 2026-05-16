@@ -51,6 +51,47 @@ export class ShellhostTerminalManager {
   }
 
   /**
+   * Rebuild the in-memory terminal map from shellhost. Called once on server
+   * startup so that a fresh server process can pick up PTYs spawned before
+   * its restart. Re-attaches to each terminal so output/exit events flow
+   * through this manager again.
+   *
+   * Returns the number of terminals recovered.
+   */
+  async recover() {
+    await this._ensureConnected();
+    const { terminals } = await this.client.list();
+    if (!Array.isArray(terminals)) return 0;
+    let recovered = 0;
+    for (const t of terminals) {
+      if (!t?.id) continue;
+      if (this.terminals.has(t.id)) continue;
+      const createdAt = t.createdAt || new Date().toISOString();
+      const entry = {
+        id: t.id,
+        projectSlug: t.projectSlug,
+        // No prior label is known after a server restart; downstream UI uses
+        // the terminal id as the label when none is recorded.
+        label: 'Terminal',
+        command: t.command || null,
+        cwd: t.cwd || null,
+        createdAt,
+        lastActivity: t.lastActiveAt || createdAt,
+        sockets: new Set(),
+        exited: !!t.exited,
+        exitCode: t.exitCode ?? null,
+      };
+      this.terminals.set(t.id, entry);
+      // Subscribe to live events for the recovered terminal. The attach op is
+      // idempotent on the same client connection: repeated calls do not
+      // re-trigger scrollback replay (handled by the shellhost server).
+      try { await this.client.attach(t.id); } catch { /* ignore */ }
+      recovered++;
+    }
+    return recovered;
+  }
+
+  /**
    * Create a new terminal in shellhost. Returns public metadata.
    */
   async create({ projectSlug, label, command, cols = 80, rows = 24, cwd } = {}) {
@@ -201,7 +242,13 @@ export class ShellhostTerminalManager {
  * manager. Mirrors `setupTerminalManagerNamespace` from the legacy
  * terminal-manager but writes go through shellhost.
  */
-export function setupShellhostNamespace(io, manager) {
+export function setupShellhostNamespace(io, managerOrGetter) {
+  // Accept either a manager instance or a getter so the namespace resolves to
+  // the current manager after an in-process server restart.
+  const resolve = typeof managerOrGetter === 'function'
+    ? managerOrGetter
+    : () => managerOrGetter;
+
   const ns = io.of(/^\/terminal\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/);
 
   ns.use((socket, next) => {
@@ -214,6 +261,7 @@ export function setupShellhostNamespace(io, manager) {
 
   ns.on('connection', (socket) => {
     const terminalId = socket.nsp.name.split('/').pop();
+    const manager = resolve();
 
     const ok = manager.attach(terminalId, socket);
     if (!ok) {
@@ -225,18 +273,18 @@ export function setupShellhostNamespace(io, manager) {
     socket.on('input', (data) => {
       // socket.io sometimes wraps Buffer'd payloads; coerce to string.
       const str = typeof data === 'string' ? data : (data?.toString?.('utf8') ?? '');
-      if (str) manager.write(terminalId, str).catch(() => {});
+      if (str) resolve().write(terminalId, str).catch(() => {});
     });
 
     socket.on('resize', (payload) => {
       if (payload == null || typeof payload !== 'object') return;
       const { cols, rows } = payload;
       if (!Number.isInteger(cols) || !Number.isInteger(rows) || cols < 1 || rows < 1) return;
-      manager.resize(terminalId, cols, rows).catch(() => {});
+      resolve().resize(terminalId, cols, rows).catch(() => {});
     });
 
     socket.on('disconnect', () => {
-      manager.detach(terminalId, socket);
+      resolve().detach(terminalId, socket);
     });
   });
 

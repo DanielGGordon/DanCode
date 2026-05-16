@@ -107,11 +107,13 @@ DanCode/
 │   │   │   ├── mobile-pwa.spec.js    # Playwright mobile emulation E2E (Pixel 5 viewport, PWA, dashboard nav, dots, swipe)
 │   │   │   └── visual.spec.js  # Midscene AI visual assertion test (DOM-based on Pi 5)
 │   │   ├── e2e-shellhost/
-│   │   │   ├── boot-stack.mjs  # Spawns shellhost + loads server inline so Playwright webServer can wait on a single port
+│   │   │   ├── boot-stack.mjs  # Spawns shellhost + supervises a dancode-server child process; respawns server on death (Phase 3 restart E2E)
 │   │   │   ├── global-teardown.js # Cleans up the temp E2E HOME after the run
 │   │   │   ├── shellhost-terminal.spec.js # Phase 1: shellhost-backed terminal E2E (typed input + clipboard paste)
-│   │   │   └── scrollback-replay.spec.js  # Phase 2: disk-backed scrollback survives reload; no duplicate replay on double-reload
+│   │   │   ├── scrollback-replay.spec.js  # Phase 2: disk-backed scrollback survives reload; no duplicate replay on double-reload
+│   │   │   └── server-restart.spec.js     # Phase 3: kill server mid-session → PTY survives, gap output replays, new input lands in same PTY
 │   │   ├── shellhost-integration.test.js # Phase 1+2: server <-> shellhost integration over UNIX socket (incl. disk replay on reconnect)
+│   │   ├── shellhost-restart.test.js     # Phase 3: ShellhostTerminalManager.recover() + startServer() list-based recovery; data-race stress (1MB output during restart cycle)
 │   │   ├── files.test.js       # File API unit tests (CRUD, path traversal rejection, gitignore filtering, gitignore cache)
 │   │   ├── ring-buffer.test.js # Legacy tmux-backend RingBuffer unit tests (removed from shellhost path in Phase 2)
 │   │   ├── auth.test.js        # Auth account setup, login, session management tests
