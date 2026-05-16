@@ -223,6 +223,13 @@ async function dispatchOp(op, payload, ctx) {
       return { data };
     }
 
+    case 'respawn': {
+      const { terminalId } = payload;
+      if (!terminalId) throw new Error('respawn: terminalId required');
+      const meta = ptyManager.respawn(terminalId);
+      return { ok: true, terminal: meta };
+    }
+
     default:
       throw new Error(`unknown op: ${op}`);
   }
