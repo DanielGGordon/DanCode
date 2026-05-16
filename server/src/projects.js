@@ -187,6 +187,81 @@ export async function updateProject(slug, updates, projectsDir = getProjectsDir(
 }
 
 /**
+ * Rename a project. Generates a new slug from `newName`, moves the config file
+ * to `<projectsDir>/<newSlug>.json`, and (if `layoutsBaseDir` is provided and
+ * the source layout dir exists) moves `<layoutsBaseDir>/<oldSlug>` →
+ * `<layoutsBaseDir>/<newSlug>`. Returns the updated project, or `null` if the
+ * source project doesn't exist. Throws if the target slug already exists or
+ * if `newName` doesn't slugify.
+ */
+export async function renameProject(slug, newName, {
+  projectsDir = getProjectsDir(),
+  layoutsBaseDir = null,
+} = {}) {
+  if (!isValidSlug(slug)) {
+    throw new Error('Invalid project slug');
+  }
+  if (typeof newName !== 'string' || !newName.trim()) {
+    const err = new Error('Project name is required');
+    err.code = 'INVALID_NAME';
+    throw err;
+  }
+  const trimmed = newName.trim();
+  const newSlug = slugify(trimmed);
+  if (!newSlug) {
+    const err = new Error('Project name must contain at least one alphanumeric character');
+    err.code = 'INVALID_NAME';
+    throw err;
+  }
+
+  const oldPath = getProjectConfigPath(slug, projectsDir);
+  if (!existsSync(oldPath)) {
+    return null;
+  }
+
+  // Same-slug rename: just update the name (idempotent on slug)
+  if (newSlug === slug) {
+    return updateProject(slug, { name: trimmed }, projectsDir);
+  }
+
+  const newPath = getProjectConfigPath(newSlug, projectsDir);
+  if (existsSync(newPath)) {
+    const err = new Error(`A project with the name "${trimmed}" already exists`);
+    err.code = 'CONFLICT';
+    throw err;
+  }
+
+  const content = await readFile(oldPath, 'utf-8');
+  const project = JSON.parse(content);
+  const updated = { ...project, name: trimmed, slug: newSlug };
+
+  // 1. Write new project config
+  await writeFile(newPath, JSON.stringify(updated, null, 2) + '\n');
+
+  // 2. Move layout directory (if it exists)
+  if (layoutsBaseDir) {
+    const { rename } = await import('node:fs/promises');
+    const oldLayoutDir = join(layoutsBaseDir, slug);
+    const newLayoutDir = join(layoutsBaseDir, newSlug);
+    if (existsSync(oldLayoutDir)) {
+      try {
+        await rename(oldLayoutDir, newLayoutDir);
+      } catch (e) {
+        // Roll back: remove the new config and re-throw
+        await rm(newPath);
+        throw e;
+      }
+    }
+  }
+
+  // 3. Remove old project config (last, so a crash mid-rename leaves the new
+  // config present rather than losing the project entirely)
+  await rm(oldPath);
+
+  return updated;
+}
+
+/**
  * Delete a project config by slug. Returns true if deleted, false if not found.
  */
 export async function deleteProject(slug, projectsDir = getProjectsDir()) {

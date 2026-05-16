@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { existsSync, mkdirSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { isAccountSetUp, createAccount, verifyLogin, createSession, validateSession, destroySession, getCredentialsPath, startSessionCleanupInterval } from './auth.js';
-import { validateProjectInput, createProject, listProjects, getProject, updateProject, deleteProject, getProjectsDir, slugify, isValidSlug } from './projects.js';
+import { validateProjectInput, createProject, listProjects, getProject, updateProject, deleteProject, renameProject, getProjectsDir, slugify, isValidSlug } from './projects.js';
 import { TerminalManager, setupTerminalManagerNamespace, getTerminalsDir } from './terminal-manager.js';
 import { ShellhostTerminalManager, setupShellhostNamespace } from './shellhost-terminal-manager.js';
 import { listDirectory, readFileContent, writeFileContent, createDirectory, renameFile, deleteFile, safePath, getFileStats } from './files.js';
@@ -260,6 +260,34 @@ app.patch('/api/projects/:slug', async (req, res) => {
     return res.status(400).json({ error: 'Invalid project slug' });
   }
   const body = req.body || {};
+
+  // Rename support: when `name` is provided, slugify the new name and (if it
+  // differs from the current slug) move both the config file and the per-
+  // project layout directory.
+  let workingSlug = slug;
+  let renamed = null;
+  if (typeof body.name === 'string' && body.name.trim()) {
+    try {
+      const r = await renameProject(slug, body.name, {
+        projectsDir,
+        layoutsBaseDir,
+      });
+      if (!r) {
+        return res.status(404).json({ error: 'Project not found' });
+      }
+      workingSlug = r.slug;
+      renamed = r;
+    } catch (err) {
+      if (err.code === 'INVALID_NAME') {
+        return res.status(400).json({ error: err.message });
+      }
+      if (err.code === 'CONFLICT') {
+        return res.status(409).json({ error: err.message });
+      }
+      return res.status(500).json({ error: `Failed to rename project: ${err.message}` });
+    }
+  }
+
   const updates = {};
   if (body.layout && typeof body.layout === 'object') {
     updates.layout = body.layout;
@@ -267,18 +295,16 @@ app.patch('/api/projects/:slug', async (req, res) => {
   if (Array.isArray(body.terminals)) {
     updates.terminals = body.terminals;
   }
-  if (typeof body.name === 'string' && body.name.trim()) {
-    updates.name = body.name.trim();
-  }
   if (body.fileExplorer && typeof body.fileExplorer === 'object') {
     updates.fileExplorer = body.fileExplorer;
   }
 
   if (Object.keys(updates).length === 0) {
+    if (renamed) return res.json(renamed);
     return res.status(400).json({ error: 'No valid fields to update' });
   }
   try {
-    const updated = await updateProject(slug, updates, projectsDir);
+    const updated = await updateProject(workingSlug, updates, projectsDir);
     if (!updated) {
       return res.status(404).json({ error: 'Project not found' });
     }
