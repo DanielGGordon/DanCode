@@ -145,3 +145,76 @@
   test originally waited on the END marker and was firing on the input
   echo. The fix is to wait on byte count or build the marker via shell
   concatenation. Phase 5's reboot tests should keep this in mind.
+
+## After Phase 4 (proposed by Phase 4 generator)
+
+- **Per-slug write lock + atomic rename is enough for the concurrency
+  acceptance.** Twenty concurrent in-process PUTs serialize through a
+  Promise-chain Map keyed by `<baseDir>::<slug>`; the final state always
+  matches exactly one input. If we ever spread the server across multiple
+  processes (we won't on the Pi), the lock evaporates — `rename(2)` is
+  atomic per filesystem, so torn writes still can't happen, but the
+  final-winner identity becomes nondeterministic. Document the single-
+  process assumption in Phase 10's prod install notes.
+
+- **Layout schema is intentionally permissive about pane ids.** The schema
+  forbids unknown top-level fields and unknown keys inside terminal/openFile
+  entries, but the `splits` tree only validates structural shape (type,
+  direction, ratio, children). Pane ids in `openFiles[].pane` and
+  `splits.leaf.id` are not cross-checked. Phase 5/6 may want to add
+  consistency validation (every leaf id appears in either terminals or
+  openFiles, no duplicate ids) — defer until a real failure mode appears.
+
+- **xterm column-width line wrapping bites E2E pwd asserts.** The pwd
+  output for a long /tmp path wrapped across two xterm rows mid-string,
+  and the parser was reading only the first line. The fix is to join all
+  non-empty lines between the two sentinels. Phase 5/7 should similarly
+  reconstruct multi-line shell output; relying on `lines[0]` is fragile
+  for anything longer than the pane's column width.
+
+- **Server `POST /api/terminals` accepts both absolute and relative
+  cwd.** Relative cwds are resolved against the project root and validated
+  to stay within it; absolute cwds are passed through verbatim (no
+  containment check). Phase 4's layout E2E exploits this to spawn two
+  terminals with distinct cwds. If Phase 8 (background mode) or Phase 10
+  (multi-tenant install) wants to enforce containment for absolute cwds
+  too, add a `startsWith(project.path + '/')` check in the absolute branch.
+
+- **TerminalLayout's pane id model is implicit.** Panes are identified by
+  array index, not by stable id, so `openFiles[].pane` ids written into
+  layout.json are pseudo-names like `file-0`. On reload they're treated as
+  ordering hints only. When Phase 5 introduces real splits the tree leaf
+  ids should become first-class and persist across reloads — the schema
+  already supports that; only the client needs updating.
+
+- **Project rename order matters for crash safety.** `renameProject`
+  writes the new project config, moves the layout dir, and only then
+  removes the old config. A crash between steps 1 and 3 leaves both
+  configs on disk — listProjects skips malformed entries but happily
+  surfaces two copies of the same project. Phase 5+ could add a startup
+  reconciliation pass that detects "two configs share a path", picks the
+  newer mtime, and removes the older. Not blocking; current model is
+  forward-only.
+
+- **`renameProject` does NOT touch terminal meta.** Terminals are
+  referenced by id, not slug, so rename is safe in the shellhost model.
+  But the legacy `TerminalManager` (still active via fallback) bakes the
+  slug into tmux session names (`dancode-{slug}-{id}`). Renaming a
+  project in legacy mode would orphan those sessions. Phase 9 removes
+  tmux entirely so we did not patch that case — just be aware before
+  Phase 9 ships.
+
+- **Phase 4 added `cwd` and `command` to `/api/terminals` response.** The
+  shellhost-backed manager and legacy tmux-backed manager both now
+  include these in `_publicMeta`. Phase 7 (Claude-aware resume) and
+  Phase 8 (background mode) will likely add more fields; keep the public
+  shape symmetric between the two managers until Phase 9.
+
+- **layout.json placement collides with project config directory only by
+  accident.** Plan put both under `~/.dancode/projects/`: project config
+  is `~/.dancode/projects/<slug>.json` (flat file) and layout is
+  `~/.dancode/projects/<slug>/layout.json` (per-slug directory). On Linux
+  this is fine — a file and a directory at the same depth don't collide.
+  If we ever move project configs into per-slug dirs (`~/.dancode/projects/<slug>/project.json`),
+  layout.json fits naturally beside it; just plan for the migration when
+  it lands.

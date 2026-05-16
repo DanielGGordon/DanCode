@@ -65,7 +65,8 @@ DanCode/
 │   ├── package.json            # Includes vitest test scripts
 │   └── README.md
 ├── docs/
-│   └── PRD.md                  # Product requirements document
+│   ├── PRD.md                  # Product requirements document
+│   └── layout-schema.md        # Phase 4: per-project layout.json schema (terminals, openFiles, splits, focusedPane)
 ├── plans/
 │   ├── dancode-mvp.md          # MVP implementation plan
 │   └── dancode-future-phases.md
@@ -74,7 +75,8 @@ DanCode/
 │   │   ├── auth.js             # TOTP-based auth: account setup, login, session management (~/.dancode/credentials.json), persistent sessions (~/.dancode/sessions.json)
 │   │   ├── files.js            # File system API: list, read, write, mkdir, rename, delete with path traversal protection
 │   │   ├── index.js            # Server entry point (Express, Socket.io, REST API routes, terminal CRUD, file API)
-│   │   ├── projects.js         # Project config CRUD (create, list, get, delete) in ~/.dancode/projects/
+│   │   ├── projects.js         # Project config CRUD (create, list, get, update, rename, delete) in ~/.dancode/projects/. Phase 4 renameProject moves slug + layout dir
+│   │   ├── layout.js           # Phase 4: per-project layout persistence (defaultLayout, validateLayout, readLayout, writeLayout w/ atomic .tmp+fsync+rename, removeMissingFiles)
 │   │   ├── terminal-manager.js # Legacy tmux-backed TerminalManager (fallback when DANCODE_SHELLHOST_SOCKET unset; removed in Phase 9)
 │   │   ├── shellhost-terminal-manager.js # Phase 1+2: server-side adapter that fronts dancode-shellhost; replays disk scrollback to new sockets (no in-memory ring buffer)
 │   │   ├── terminal.js         # (Legacy, emptied) Socket.io /terminal namespace
@@ -111,9 +113,14 @@ DanCode/
 │   │   │   ├── global-teardown.js # Cleans up the temp E2E HOME after the run
 │   │   │   ├── shellhost-terminal.spec.js # Phase 1: shellhost-backed terminal E2E (typed input + clipboard paste)
 │   │   │   ├── scrollback-replay.spec.js  # Phase 2: disk-backed scrollback survives reload; no duplicate replay on double-reload
-│   │   │   └── server-restart.spec.js     # Phase 3: kill server mid-session → PTY survives, gap output replays, new input lands in same PTY
+│   │   │   ├── server-restart.spec.js     # Phase 3: kill server mid-session → PTY survives, gap output replays, new input lands in same PTY
+│   │   │   ├── layout-restore.spec.js     # Phase 4: 2 terminals (distinct cwds) + open file + vertical split survive logout/login
+│   │   │   └── missing-file-warning.spec.js # Phase 4: deleted file in layout shows banner; Close button removes it and updates layout.json
 │   │   ├── shellhost-integration.test.js # Phase 1+2: server <-> shellhost integration over UNIX socket (incl. disk replay on reconnect)
 │   │   ├── shellhost-restart.test.js     # Phase 3: ShellhostTerminalManager.recover() + startServer() list-based recovery; data-race stress (1MB output during restart cycle)
+│   │   ├── layout.test.js      # Phase 4: layout module — defaultLayout, validateLayout, atomic writeLayout under concurrency, removeMissingFiles
+│   │   ├── layout-api.test.js  # Phase 4: GET/PUT /api/projects/:slug/layout integration (20-parallel-PUT non-torn assertion, missingFiles annotation, schema rejection)
+│   │   ├── project-rename.test.js # Phase 4: PATCH renames slug + moves layout dir; 409 on conflict; idempotent same-name rename
 │   │   ├── files.test.js       # File API unit tests (CRUD, path traversal rejection, gitignore filtering, gitignore cache)
 │   │   ├── ring-buffer.test.js # Legacy tmux-backend RingBuffer unit tests (removed from shellhost path in Phase 2)
 │   │   ├── auth.test.js        # Auth account setup, login, session management tests

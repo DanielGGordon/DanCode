@@ -213,7 +213,7 @@ Human work is confined to:
 
 ---
 
-## Phase 4: Layout persistence + project restore
+## Phase 4: Layout persistence + project restore ✅
 
 **Delivers**: Each project gets a `layout.json` describing its terminals (id, cwd, command, claudeSessionId, background), open files (path, pane index, scroll position), and split/tab structure. The server writes this file atomically (write to temp, fsync, rename) every time the layout changes. When a project is opened, the server reads `layout.json` and reconstructs the workspace UI — including which files were open, which terminal was focused, and the split layout. Missing files surface as a yellow warning banner ("File X no longer exists"), not a crash.
 
