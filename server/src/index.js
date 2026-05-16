@@ -11,6 +11,7 @@ import { validateProjectInput, createProject, listProjects, getProject, updatePr
 import { TerminalManager, setupTerminalManagerNamespace, getTerminalsDir } from './terminal-manager.js';
 import { ShellhostTerminalManager, setupShellhostNamespace } from './shellhost-terminal-manager.js';
 import { listDirectory, readFileContent, writeFileContent, createDirectory, renameFile, deleteFile, safePath, getFileStats } from './files.js';
+import { defaultLayout, validateLayout, readLayout, writeLayout, removeMissingFiles, getLayoutsBaseDir } from './layout.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -23,6 +24,7 @@ const io = new Server(httpServer, { transports: ['websocket'] });
 
 let projectsDir = null;
 let credentialsPath = null;
+let layoutsBaseDir = null;
 export let terminalManager = null;
 
 // Gzip/deflate/brotli compression on all HTTP responses
@@ -283,6 +285,51 @@ app.patch('/api/projects/:slug', async (req, res) => {
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: 'Failed to update project' });
+  }
+});
+
+app.get('/api/projects/:slug/layout', async (req, res) => {
+  const { slug } = req.params;
+  if (!isValidSlug(slug)) {
+    return res.status(400).json({ error: 'Invalid project slug' });
+  }
+  try {
+    const project = await getProject(slug, projectsDir);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    const layout = await readLayout(slug, layoutsBaseDir);
+    const { layout: cleaned, missing } = await removeMissingFiles(layout, project.path);
+    // Include all openFiles in the response (the client decides what to do with
+    // each), but annotate which ones are missing so the UI can render banners.
+    res.json({ ...layout, missingFiles: missing });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to read layout: ${err.message}` });
+  }
+});
+
+app.put('/api/projects/:slug/layout', async (req, res) => {
+  const { slug } = req.params;
+  if (!isValidSlug(slug)) {
+    return res.status(400).json({ error: 'Invalid project slug' });
+  }
+  const payload = req.body;
+  const v = validateLayout(payload);
+  if (!v.valid) {
+    return res.status(400).json({ error: v.error });
+  }
+  try {
+    const project = await getProject(slug, projectsDir);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    await writeLayout(slug, payload, layoutsBaseDir);
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code === 'INVALID_LAYOUT') {
+      return res.status(400).json({ error: err.message });
+    }
+    res.status(500).json({ error: `Failed to write layout: ${err.message}` });
   }
 });
 
@@ -597,11 +644,13 @@ export async function startServer(port = PORT, {
   credentialsPath: credPath,
   projectsDir: projDir,
   terminalsDir: termDir,
+  layoutsBaseDir: layoutBase,
   reconcileRetryDelay,
   shellhostSocket,
 } = {}) {
   credentialsPath = credPath || getCredentialsPath();
   projectsDir = projDir || getProjectsDir();
+  layoutsBaseDir = layoutBase || getLayoutsBaseDir();
 
   // Phase 1: if a shellhost socket is configured (env var or explicit option),
   // route new terminals through dancode-shellhost. Otherwise fall back to the

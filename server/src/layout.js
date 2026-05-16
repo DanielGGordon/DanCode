@@ -12,6 +12,15 @@
 import { mkdir, readFile, writeFile, open, rename, unlink, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { homedir } from 'node:os';
+
+/**
+ * Returns the default base directory for per-project layout storage.
+ * `<baseDir>/<slug>/layout.json` is the full path for a given project.
+ */
+export function getLayoutsBaseDir() {
+  return join(homedir(), '.dancode', 'projects');
+}
 
 const VALID_TERMINAL_KEYS = new Set([
   'id',
