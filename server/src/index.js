@@ -664,6 +664,7 @@ app.post('/api/test-only/restart-shellhost', async (req, res) => {
   if (process.env.NODE_ENV !== 'test') {
     return res.status(404).json({ error: 'Not found' });
   }
+  let stage = 'init';
   try {
     const { readFileSync } = await import('node:fs');
     const pidFile = process.env.DANCODE_SHELLHOST_PIDFILE;
@@ -681,6 +682,7 @@ app.post('/api/test-only/restart-shellhost', async (req, res) => {
     }
     // Kill the running shellhost. The supervisor (boot-stack) auto-respawns
     // it on the same socket; we wait for the new shellhost to come up.
+    stage = `kill pid=${pid}`;
     try { process.kill(pid, 'SIGKILL'); } catch { /* already dead */ }
 
     const sockPath = process.env.DANCODE_SHELLHOST_SOCKET;
@@ -689,21 +691,53 @@ app.post('/api/test-only/restart-shellhost', async (req, res) => {
     }
 
     // Wait briefly for the supervisor to bring up the replacement shellhost.
+    stage = 'wait-for-new-shellhost';
+    // Give the supervisor a beat to detect the exit and start the respawn
+    // before we begin polling the socket.
+    await new Promise((r) => setTimeout(r, 250));
+    // Also wait until the pidfile reflects a DIFFERENT pid than the one we
+    // killed — that confirms shellhost wrote a new pidfile, so we're not
+    // racing the polling against the dying socket.
+    const newPidReady = await waitForNewShellhostPid(pidFile, pid, 30_000);
+    if (!newPidReady) {
+      return res.status(500).json({ error: 'Replacement shellhost did not write a new pidfile in time' });
+    }
     const newReady = await waitForShellhost(sockPath, 30_000);
     if (!newReady) {
       return res.status(500).json({ error: 'Replacement shellhost did not come up in time' });
     }
 
     // Reconnect the in-process manager and recover the orphan list.
+    stage = 'reconnect';
     if (terminalManager?.reconnect) {
       await terminalManager.reconnect(sockPath);
     }
 
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: `restart-shellhost failed: ${err.message}` });
+    console.error(`[restart-shellhost] failed at stage=${stage}:`, err);
+    res.status(500).json({ error: `restart-shellhost failed at stage=${stage}: ${err.message}` });
   }
 });
+
+/**
+ * Poll the pidfile until it contains a pid != killedPid. Returns true on
+ * success, false on timeout.
+ */
+async function waitForNewShellhostPid(pidFile, killedPid, totalTimeoutMs) {
+  const { readFileSync, existsSync: ex } = await import('node:fs');
+  const start = Date.now();
+  while (Date.now() - start < totalTimeoutMs) {
+    if (ex(pidFile)) {
+      try {
+        const cur = parseInt(readFileSync(pidFile, 'utf8').trim(), 10);
+        if (Number.isInteger(cur) && cur !== killedPid && cur > 0) return true;
+      } catch { /* ignore transient file races */ }
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return false;
+}
 
 // SPA fallback: serve index.html for client-side routes only
 // Skip /api paths (should 404 as JSON) and file-like asset paths (should 404 normally)

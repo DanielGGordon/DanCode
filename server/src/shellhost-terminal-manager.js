@@ -44,6 +44,17 @@ export class ShellhostTerminalManager {
         sock.emit('session-exit', { exitCode: payload.exitCode });
       }
     });
+    // Swallow client-side socket errors so a SIGKILLed shellhost (Phase 5
+    // reboot simulation) doesn't crash the server with an "Unhandled error"
+    // exception. The shellhost reconnect flow is driven explicitly by the
+    // /test-only/restart-shellhost handler.
+    this.client.on('error', (err) => {
+      console.warn('[shellhost client] error:', err?.message || err);
+    });
+    this.client.on('close', () => {
+      // Don't auto-reconnect here; reconnect is explicit (Phase 5 test
+      // endpoint) so terminals stay in a known state during the gap.
+    });
   }
 
   async _ensureConnected() {
