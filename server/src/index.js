@@ -46,6 +46,11 @@ function requireAuth(req, res, next) {
   if (req.path === '/test-only/kill-server' && process.env.NODE_ENV === 'test') {
     return next();
   }
+  // Phase 5: test-only shellhost-restart endpoint is gated by NODE_ENV=test
+  // inside the handler; allow it through without a session token.
+  if (req.path === '/test-only/restart-shellhost' && process.env.NODE_ENV === 'test') {
+    return next();
+  }
 
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -326,6 +331,13 @@ app.get('/api/projects/:slug/layout', async (req, res) => {
     }
     const layout = await readLayout(slug, layoutsBaseDir);
     const { layout: cleaned, missing } = await removeMissingFiles(layout, project.path);
+    // Phase 5: opening a project triggers respawn of any terminals in the
+    // project that are still marked needs-respawn (because the shellhost
+    // restarted between the prior session and now). We fire-and-await so
+    // the client can immediately attach via WebSocket below.
+    if (terminalManager?.respawnForProject) {
+      try { await terminalManager.respawnForProject(slug); } catch { /* best-effort */ }
+    }
     // Include all openFiles in the response (the client decides what to do with
     // each), but annotate which ones are missing so the UI can render banners.
     res.json({ ...layout, missingFiles: missing });
@@ -642,6 +654,55 @@ app.post('/api/test-only/kill-server', (req, res) => {
   res.json({ ok: true });
   // Defer the actual exit so the response can flush.
   setTimeout(() => process.exit(0), 10);
+});
+
+// Test-only endpoint: SIGKILL the running shellhost (the supervisor will
+// respawn it), then reconnect the server's UNIX-socket client to the new
+// shellhost. Used by Phase 5's Pi-reboot-simulation E2E. Guarded by
+// NODE_ENV=test inside the handler.
+app.post('/api/test-only/restart-shellhost', async (req, res) => {
+  if (process.env.NODE_ENV !== 'test') {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  try {
+    const { readFileSync } = await import('node:fs');
+    const pidFile = process.env.DANCODE_SHELLHOST_PIDFILE;
+    if (!pidFile) {
+      return res.status(500).json({ error: 'DANCODE_SHELLHOST_PIDFILE not set' });
+    }
+    let pid;
+    try {
+      pid = parseInt(readFileSync(pidFile, 'utf8').trim(), 10);
+    } catch (err) {
+      return res.status(500).json({ error: `Failed to read pidfile: ${err.message}` });
+    }
+    if (!Number.isInteger(pid) || pid <= 0) {
+      return res.status(500).json({ error: `Invalid pid in pidfile: ${pid}` });
+    }
+    // Kill the running shellhost. The supervisor (boot-stack) auto-respawns
+    // it on the same socket; we wait for the new shellhost to come up.
+    try { process.kill(pid, 'SIGKILL'); } catch { /* already dead */ }
+
+    const sockPath = process.env.DANCODE_SHELLHOST_SOCKET;
+    if (!sockPath) {
+      return res.status(500).json({ error: 'DANCODE_SHELLHOST_SOCKET not set' });
+    }
+
+    // Wait briefly for the supervisor to bring up the replacement shellhost.
+    const newReady = await waitForShellhost(sockPath, 30_000);
+    if (!newReady) {
+      return res.status(500).json({ error: 'Replacement shellhost did not come up in time' });
+    }
+
+    // Reconnect the in-process manager and recover the orphan list.
+    if (terminalManager?.reconnect) {
+      await terminalManager.reconnect(sockPath);
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: `restart-shellhost failed: ${err.message}` });
+  }
 });
 
 // SPA fallback: serve index.html for client-side routes only

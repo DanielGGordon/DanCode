@@ -33,37 +33,66 @@ const SERVER_ENTRY = join(REPO_ROOT, 'server', 'src', 'index.js');
 
 const socketPath = process.env.DANCODE_SHELLHOST_SOCKET
   || '/tmp/dancode-shellhost-e2e.sock';
+const pidFile = process.env.DANCODE_SHELLHOST_PIDFILE
+  || join(dirname(socketPath), 'shellhost.pid');
 
 if (existsSync(socketPath)) {
   try { await rm(socketPath); } catch { /* ignore */ }
 }
+if (existsSync(pidFile)) {
+  try { await rm(pidFile); } catch { /* ignore */ }
+}
 
-const shellhostChild = spawn(process.execPath, [SHELLHOST_ENTRY], {
-  env: { ...process.env, DANCODE_SHELLHOST_SOCKET: socketPath },
-  stdio: ['ignore', 'pipe', 'pipe'],
-});
+let shellhostChild = null;
+let shellhostShuttingDown = false;
 
-shellhostChild.stdout.on('data', (b) => process.stdout.write(`[shellhost] ${b}`));
-shellhostChild.stderr.on('data', (b) => process.stderr.write(`[shellhost stderr] ${b}`));
-
-await new Promise((resolve, reject) => {
-  const timer = setTimeout(
-    () => reject(new Error('shellhost did not start within 15s')),
-    15_000
-  );
-  const onStdout = (b) => {
-    if (b.toString('utf8').includes('listening on')) {
-      clearTimeout(timer);
-      shellhostChild.stdout.off('data', onStdout);
-      resolve();
-    }
-  };
-  shellhostChild.stdout.on('data', onStdout);
-  shellhostChild.once('exit', (code, signal) => {
-    clearTimeout(timer);
-    reject(new Error(`shellhost exited prematurely (code=${code} signal=${signal})`));
+function spawnShellhost() {
+  const child = spawn(process.execPath, [SHELLHOST_ENTRY], {
+    env: {
+      ...process.env,
+      DANCODE_SHELLHOST_SOCKET: socketPath,
+      DANCODE_SHELLHOST_PIDFILE: pidFile,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
-});
+  child.stdout.on('data', (b) => process.stdout.write(`[shellhost] ${b}`));
+  child.stderr.on('data', (b) => process.stderr.write(`[shellhost stderr] ${b}`));
+  child.once('exit', async (code, signal) => {
+    if (shellhostShuttingDown) return;
+    console.log(`[supervisor] shellhost exited (code=${code} signal=${signal}); respawning`);
+    // Clean up stale socket so the new shellhost can bind.
+    if (existsSync(socketPath)) {
+      try { await rm(socketPath); } catch { /* ignore */ }
+    }
+    shellhostChild = spawnShellhost();
+    await waitForShellhostListening(shellhostChild);
+  });
+  return child;
+}
+
+async function waitForShellhostListening(child) {
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error('shellhost did not start within 15s')),
+      15_000
+    );
+    const onStdout = (b) => {
+      if (b.toString('utf8').includes('listening on')) {
+        clearTimeout(timer);
+        child.stdout.off('data', onStdout);
+        resolve();
+      }
+    };
+    child.stdout.on('data', onStdout);
+    child.once('exit', (code, signal) => {
+      clearTimeout(timer);
+      reject(new Error(`shellhost exited prematurely (code=${code} signal=${signal})`));
+    });
+  });
+}
+
+shellhostChild = spawnShellhost();
+await waitForShellhostListening(shellhostChild);
 
 let serverChild = null;
 let shuttingDown = false;
@@ -74,6 +103,7 @@ function spawnServer() {
     env: {
       ...process.env,
       DANCODE_SHELLHOST_SOCKET: socketPath,
+      DANCODE_SHELLHOST_PIDFILE: pidFile,
       DANCODE_REQUIRE_SHELLHOST: '1',
       NODE_ENV: 'test',
       PORT: process.env.PORT || '3001',
@@ -99,15 +129,17 @@ serverChild = spawnServer();
 function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
+  shellhostShuttingDown = true;
   try { serverChild?.kill(signal || 'SIGTERM'); } catch { /* ignore */ }
-  try { shellhostChild.kill(signal || 'SIGTERM'); } catch { /* ignore */ }
+  try { shellhostChild?.kill(signal || 'SIGTERM'); } catch { /* ignore */ }
   setTimeout(() => process.exit(0), 2000).unref();
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('exit', () => {
+  shellhostShuttingDown = true;
   try { serverChild?.kill('SIGTERM'); } catch { /* ignore */ }
-  try { shellhostChild.kill('SIGTERM'); } catch { /* ignore */ }
+  try { shellhostChild?.kill('SIGTERM'); } catch { /* ignore */ }
 });
 
 // Keep the parent process alive — Node would otherwise exit because all our

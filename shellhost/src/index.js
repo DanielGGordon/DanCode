@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
 import { createShellhost } from './server.js';
 import { PTYManager } from './pty-manager.js';
 import { ScrollbackStore } from './scrollback.js';
@@ -24,6 +25,16 @@ export function getDefaultTerminalsDir() {
     || join(homedir(), '.dancode', 'terminals');
 }
 
+/**
+ * Default pidfile path: alongside the socket so a co-located server (or
+ * test orchestrator) can SIGKILL the shellhost process to simulate a Pi
+ * reboot. Override with DANCODE_SHELLHOST_PIDFILE.
+ */
+export function getDefaultPidFilePath() {
+  return process.env.DANCODE_SHELLHOST_PIDFILE
+    || join(dirname(getDefaultSocketPath()), 'shellhost.pid');
+}
+
 export async function main() {
   const socketPath = getDefaultSocketPath();
   const baseDir = getDefaultTerminalsDir();
@@ -38,6 +49,16 @@ export async function main() {
   }
   const host = createShellhost({ manager });
   await host.listen(socketPath);
+
+  // Drop a pidfile so external orchestrators can SIGKILL us (Phase 5 reboot
+  // simulation) without juggling /proc lookups. The pidfile lives next to
+  // the socket so a deployment can keep them together.
+  const pidFile = getDefaultPidFilePath();
+  try {
+    mkdirSync(dirname(pidFile), { recursive: true });
+    writeFileSync(pidFile, String(process.pid));
+  } catch { /* best-effort */ }
+
   console.log(`[shellhost] listening on ${socketPath} (pid ${process.pid})`);
 
   const shutdown = async (signal) => {
@@ -46,6 +67,7 @@ export async function main() {
     try { manager._flushLastActive(); } catch { /* ignore */ }
     try { await host.close(); } catch { /* ignore */ }
     try { scrollback.closeAll(); } catch { /* ignore */ }
+    try { if (existsSync(pidFile)) unlinkSync(pidFile); } catch { /* ignore */ }
     process.exit(0);
   };
 

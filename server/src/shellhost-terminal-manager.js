@@ -56,7 +56,12 @@ export class ShellhostTerminalManager {
    * its restart. Re-attaches to each terminal so output/exit events flow
    * through this manager again.
    *
-   * Returns the number of terminals recovered.
+   * Also pulls in any terminals shellhost has loaded as `needsRespawn` (Phase
+   * 5: the shellhost itself restarted; the meta.json is on disk but no PTY
+   * is alive yet). Those entries stay in the manager but are NOT attached
+   * until they are respawned.
+   *
+   * Returns the number of terminals recovered (live + needs-respawn).
    */
   async recover() {
     await this._ensureConnected();
@@ -80,15 +85,58 @@ export class ShellhostTerminalManager {
         sockets: new Set(),
         exited: !!t.exited,
         exitCode: t.exitCode ?? null,
+        needsRespawn: !!t.needsRespawn,
       };
       this.terminals.set(t.id, entry);
-      // Subscribe to live events for the recovered terminal. The attach op is
-      // idempotent on the same client connection: repeated calls do not
-      // re-trigger scrollback replay (handled by the shellhost server).
-      try { await this.client.attach(t.id); } catch { /* ignore */ }
+      // Only attach if the terminal has a live PTY. needs-respawn entries
+      // shouldn't trigger an attach: shellhost's attach replays scrollback,
+      // and we don't want to fire any events until the user explicitly
+      // re-opens the project and the server respawns the terminal.
+      if (!entry.needsRespawn) {
+        try { await this.client.attach(t.id); } catch { /* ignore */ }
+      }
       recovered++;
     }
     return recovered;
+  }
+
+  /**
+   * Respawn a needs-respawn terminal: fires shellhost's `respawn` op (which
+   * emits the prior-session banner and starts a fresh PTY at the saved
+   * cwd/command), then attaches so live output events flow.
+   *
+   * Idempotent: if the terminal is already live, this is a no-op.
+   */
+  async respawnTerminal(id) {
+    const t = this.terminals.get(id);
+    if (!t) return false;
+    if (!t.needsRespawn) return true;
+    await this._ensureConnected();
+    try {
+      await this.client.respawn(id);
+    } catch {
+      return false;
+    }
+    t.needsRespawn = false;
+    try { await this.client.attach(id); } catch { /* idempotent */ }
+    return true;
+  }
+
+  /**
+   * Respawn every needs-respawn terminal for a project. Called server-side
+   * when a project is opened so the user's prior layout comes back to life.
+   *
+   * Returns the number of terminals respawned.
+   */
+  async respawnForProject(projectSlug) {
+    if (!projectSlug) return 0;
+    let count = 0;
+    for (const t of this.terminals.values()) {
+      if (t.projectSlug !== projectSlug || !t.needsRespawn) continue;
+      const ok = await this.respawnTerminal(t.id);
+      if (ok) count++;
+    }
+    return count;
   }
 
   /**
@@ -132,7 +180,30 @@ export class ShellhostTerminalManager {
       command: entry.command || null,
       createdAt: entry.createdAt,
       lastActivity: entry.lastActivity,
+      needsRespawn: !!entry.needsRespawn,
     };
+  }
+
+  /**
+   * Tear down the existing UNIX-socket client and build a fresh one. Used
+   * after the shellhost process itself has been restarted (Phase 5 Pi
+   * reboot simulation) so the server can re-establish a working session.
+   *
+   * After reconnect, `recover()` is called to repopulate the terminal map
+   * with whatever the new shellhost reports.
+   */
+  async reconnect(socketPath) {
+    if (socketPath) this.socketPath = socketPath;
+    try { this.client.close(); } catch { /* ignore */ }
+    this.client = createShellhostClient({ socketPath: this.socketPath });
+    this._wiredEvents = false;
+    this._wireEvents();
+    // Clear in-memory entries that we previously attached to: after the
+    // shellhost restart they are all needs-respawn anyway, and recover() is
+    // about to re-add them from shellhost's list.
+    this.terminals.clear();
+    await this.client.connect();
+    await this.recover();
   }
 
   get(id) {
@@ -261,9 +332,19 @@ export function setupShellhostNamespace(io, managerOrGetter) {
     next();
   });
 
-  ns.on('connection', (socket) => {
+  ns.on('connection', async (socket) => {
     const terminalId = socket.nsp.name.split('/').pop();
     const manager = resolve();
+
+    // Phase 5: if the terminal is recovered-but-not-respawned (the shellhost
+    // restarted between sessions), respawn it before attaching so live
+    // output flows immediately.
+    try {
+      const entry = manager.terminals?.get(terminalId);
+      if (entry?.needsRespawn) {
+        await manager.respawnTerminal(terminalId);
+      }
+    } catch { /* fall through to attach which will surface the error */ }
 
     const ok = manager.attach(terminalId, socket);
     if (!ok) {
