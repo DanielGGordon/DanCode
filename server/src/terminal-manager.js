@@ -313,6 +313,8 @@ export class TerminalManager {
       id: meta.id,
       projectSlug: meta.projectSlug,
       label: meta.label,
+      cwd: meta.cwd || null,
+      command: meta.command || null,
       createdAt: meta.createdAt,
       lastActivity: meta.lastActivity,
     };

@@ -306,4 +306,53 @@ describe('TerminalLayout', () => {
     expect(terminalInstances[0]).toHaveProperty('onConnectionStateChange')
     expect(typeof terminalInstances[0].onConnectionStateChange).toBe('function')
   })
+
+  describe('missing-file warnings (Phase 4)', () => {
+    function mockFetchWithLayout(layoutBody) {
+      return vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+        if (url.endsWith('/layout')) {
+          return { ok: true, status: 200, json: () => Promise.resolve(layoutBody) }
+        }
+        if (url.startsWith('/api/projects/')) {
+          return { ok: true, status: 200, json: () => Promise.resolve(MOCK_PROJECT) }
+        }
+        if (url.startsWith('/api/terminals')) {
+          return { ok: true, status: 200, json: () => Promise.resolve(MOCK_TERMINALS) }
+        }
+        return { ok: true, status: 200, json: () => Promise.resolve({}) }
+      })
+    }
+
+    it('renders a missing-file-warning banner for openFiles flagged missing', async () => {
+      mockFetchWithLayout({
+        terminals: [],
+        openFiles: [
+          { path: 'gone.md', pane: 'p1', scrollTop: 0 },
+        ],
+        splits: { type: 'leaf', id: 'root' },
+        focusedPane: 'root',
+        missingFiles: [{ path: 'gone.md' }],
+      })
+      const { findByTestId } = render(<TerminalLayout token="tok" slug="myproj" />)
+      const warning = await findByTestId('missing-file-warning')
+      expect(warning.textContent).toContain('gone.md')
+      expect(warning.getAttribute('data-file-path')).toBe('gone.md')
+    })
+
+    it('clicking the Close button dismisses the missing-file warning', async () => {
+      mockFetchWithLayout({
+        terminals: [],
+        openFiles: [{ path: 'gone.md', pane: 'p1', scrollTop: 0 }],
+        splits: { type: 'leaf', id: 'root' },
+        focusedPane: 'root',
+        missingFiles: [{ path: 'gone.md' }],
+      })
+      const { findByTestId, queryByTestId } = render(<TerminalLayout token="tok" slug="myproj" />)
+      const closeBtn = await findByTestId('missing-file-warning-close')
+      await act(async () => {
+        fireEvent.click(closeBtn)
+      })
+      expect(queryByTestId('missing-file-warning')).toBeNull()
+    })
+  })
 })

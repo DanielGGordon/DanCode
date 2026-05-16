@@ -32,7 +32,8 @@ function getFileName(filePath) {
 
 const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) {
   const [terminals, setTerminals] = useState([])
-  const [openFiles, setOpenFiles] = useState([]) // [{ id, filePath, label }]
+  const [openFiles, setOpenFiles] = useState([]) // [{ id, filePath, label, scrollTop }]
+  const [missingFiles, setMissingFiles] = useState([]) // [{ filePath, paneIndex }] from layout.json
   const [focusedIndex, setFocusedIndex] = useState(0)
   const [layoutMode, setLayoutMode] = useState('split')
   const [loading, setLoading] = useState(true)
@@ -57,11 +58,17 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
   const terminalRefs = useRef({})
   const [fetchAttempt, setFetchAttempt] = useState(0)
 
-  // Unified pane list: terminals first, then open files
+  // Unified pane list: terminals first, then open files, then missing-file warnings
   const allPanes = useMemo(() => [
     ...terminals.map((t) => ({ ...t, paneType: 'terminal' })),
     ...openFiles.map((f) => ({ ...f, paneType: 'file' })),
-  ], [terminals, openFiles])
+    ...missingFiles.map((m, i) => ({
+      id: `missing-${i}-${m.filePath}`,
+      paneType: 'missing',
+      filePath: m.filePath,
+      label: getFileName(m.filePath) + ' (missing)',
+    })),
+  ], [terminals, openFiles, missingFiles])
 
   // Responsive breakpoints
   useEffect(() => {
@@ -133,6 +140,7 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
         if (cancelled) return
 
         // Order terminals by project.terminals array if available
+        let orderedTerminals = termData
         if (Array.isArray(project.terminals) && project.terminals.length > 0) {
           const ordered = []
           for (const id of project.terminals) {
@@ -143,9 +151,50 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
           for (const t of termData) {
             if (!ordered.find((o) => o.id === t.id)) ordered.push(t)
           }
-          setTerminals(ordered)
-        } else {
-          setTerminals(termData)
+          orderedTerminals = ordered
+        }
+        setTerminals(orderedTerminals)
+
+        // Phase 4: load richer layout (openFiles + splits) from
+        // /api/projects/:slug/layout. This is additive — the older
+        // project.layout fields drive split direction / mode for now.
+        try {
+          const layoutRes = await fetch(`/api/projects/${slug}/layout`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          if (layoutRes.ok) {
+            const layout = await layoutRes.json()
+            if (Array.isArray(layout.openFiles)) {
+              const baseTerminalCount = orderedTerminals.length
+              const allFiles = layout.openFiles
+              // Anything past the terminals' pane-index belongs to file viewers
+              // in pane order. We re-open each existing file in the order they
+              // appear; missing files render as warning banners.
+              const present = []
+              const missing = []
+              for (let i = 0; i < allFiles.length; i++) {
+                const f = allFiles[i]
+                const isMissing = (layout.missingFiles || []).some((m) => m.path === f.path)
+                if (isMissing) {
+                  missing.push({ filePath: f.path, paneIndex: baseTerminalCount + i, scrollTop: f.scrollTop || 0 })
+                } else {
+                  present.push({
+                    id: self.crypto?.randomUUID?.() || (Math.random().toString(36).slice(2) + Date.now().toString(36)),
+                    filePath: f.path,
+                    label: getFileName(f.path),
+                    scrollTop: f.scrollTop || 0,
+                  })
+                }
+              }
+              setOpenFiles(present)
+              setMissingFiles(missing)
+            }
+            if (layout.splits && layout.splits.type === 'split') {
+              setSplitDirection(layout.splits.direction === 'horizontal' ? 'column' : 'row')
+            }
+          }
+        } catch {
+          // Layout endpoint optional; absence is not a load failure
         }
       } catch (err) {
         if (!cancelled) {
@@ -184,6 +233,70 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     }
   }, [layoutMode, focusedIndex, terminals, slug, token, splitDirection, paneSizes])
+
+  // Phase 4: persist the full schema (terminals + openFiles + splits +
+  // focusedPane) to /api/projects/:slug/layout. Debounced 500ms per spec.
+  const layoutPutTimerRef = useRef(null)
+  useEffect(() => {
+    if (!loadedRef.current || !slug || !token) return
+    if (layoutPutTimerRef.current) clearTimeout(layoutPutTimerRef.current)
+    layoutPutTimerRef.current = setTimeout(() => {
+      // Combine present files with any unresolved-missing entries so the next
+      // load still surfaces banners (until the user dismisses them).
+      const filesForLayout = [
+        ...openFiles.map((f, i) => ({
+          path: f.filePath,
+          pane: `file-${i}`,
+          scrollTop: typeof f.scrollTop === 'number' ? f.scrollTop : 0,
+        })),
+        ...missingFiles.map((m, i) => ({
+          path: m.filePath,
+          pane: `missing-${i}`,
+          scrollTop: m.scrollTop || 0,
+        })),
+      ]
+      const layoutPayload = {
+        terminals: terminals.map((t) => ({
+          id: t.id,
+          cwd: t.cwd || '',
+          command: t.command || null,
+          claudeSessionId: null,
+          background: false,
+          label: t.label || 'Terminal',
+        })),
+        openFiles: filesForLayout,
+        splits: splitDirection === 'row' || splitDirection === 'column'
+          ? (terminals.length + openFiles.length >= 2
+              ? {
+                  type: 'split',
+                  direction: splitDirection === 'column' ? 'horizontal' : 'vertical',
+                  ratio: 0.5,
+                  children: [
+                    { type: 'leaf', id: 'root-a' },
+                    { type: 'leaf', id: 'root-b' },
+                  ],
+                }
+              : { type: 'leaf', id: 'root' })
+          : { type: 'leaf', id: 'root' },
+        focusedPane: focusedIndex >= 0 && focusedIndex < terminals.length
+          ? terminals[focusedIndex]?.id || 'root'
+          : (focusedIndex >= terminals.length && openFiles[focusedIndex - terminals.length]
+              ? `file-${focusedIndex - terminals.length}`
+              : 'root'),
+      }
+      fetch(`/api/projects/${slug}/layout`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(layoutPayload),
+      }).catch(() => {})
+    }, 500)
+    return () => {
+      if (layoutPutTimerRef.current) clearTimeout(layoutPutTimerRef.current)
+    }
+  }, [terminals, openFiles, missingFiles, splitDirection, focusedIndex, slug, token])
 
   // Reset pane sizes when pane count changes
   useEffect(() => {
@@ -316,6 +429,8 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
   const handleClosePane = useCallback((pane) => {
     if (pane.paneType === 'terminal') {
       handleCloseTerminal(pane.id)
+    } else if (pane.paneType === 'missing') {
+      setMissingFiles((prev) => prev.filter((m) => m.filePath !== pane.filePath))
     } else {
       handleCloseFile(pane.id)
     }
@@ -433,12 +548,17 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
     }
   }, [allPanes, focusedIndex])
 
+  const handleDismissMissingFile = useCallback((filePath) => {
+    setMissingFiles((prev) => prev.filter((m) => m.filePath !== filePath))
+  }, [])
+
   // Expose methods to parent via ref
   useImperativeHandle(ref, () => ({
     addTerminalWithCwd: handleAddTerminalWithCwd,
     insertIntoFocusedTerminal,
     openFile: handleOpenFile,
-  }), [handleAddTerminalWithCwd, insertIntoFocusedTerminal, handleOpenFile])
+    dismissMissingFile: handleDismissMissingFile,
+  }), [handleAddTerminalWithCwd, insertIntoFocusedTerminal, handleOpenFile, handleDismissMissingFile])
 
   // Handle file drop from file explorer onto terminal panes
   const handleFileDrop = useCallback((e, paneIndex) => {
@@ -511,8 +631,10 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
   // Render a pane header
   function renderPaneHeader(pane, index, isFocused) {
     const isFile = pane.paneType === 'file'
-    const state = isFile ? null : (connectionStates[pane.id] || 'connecting')
-    const isConfirmingDelete = !isFile && confirmDeleteId === pane.id
+    const isMissing = pane.paneType === 'missing'
+    const isTerminal = pane.paneType === 'terminal'
+    const state = isTerminal ? (connectionStates[pane.id] || 'connecting') : null
+    const isConfirmingDelete = isTerminal && confirmDeleteId === pane.id
 
     return (
       <div
@@ -525,6 +647,8 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
         <div className="flex items-center gap-1.5 min-w-0">
           {isFile ? (
             <span className="text-[10px] shrink-0">{'\u{1F4C4}'}</span>
+          ) : isMissing ? (
+            <span className="text-[10px] shrink-0 text-yellow">{'⚠'}</span>
           ) : (
             <span
               data-testid={`connection-dot-${index}`}
@@ -572,6 +696,33 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
 
   // Render pane content
   function renderPaneContent(pane, index, isFocused) {
+    if (pane.paneType === 'missing') {
+      return (
+        <div className="flex-1 min-h-0 flex items-center justify-center p-4 bg-base03">
+          <div
+            data-testid="missing-file-warning"
+            data-file-path={pane.filePath}
+            className="flex items-start gap-3 p-4 rounded-md bg-yellow/10 border border-yellow/40 text-yellow max-w-md"
+          >
+            <span className="text-lg leading-none">{'⚠'}</span>
+            <div className="flex-1 text-sm">
+              <div className="font-semibold">File {pane.filePath} no longer exists.</div>
+              <p className="text-yellow/80 mt-1 text-xs">
+                The file referenced in this project's saved layout was not found
+                on disk. Close this warning to remove it from the layout.
+              </p>
+            </div>
+            <button
+              data-testid="missing-file-warning-close"
+              onClick={() => handleDismissMissingFile(pane.filePath)}
+              className="text-yellow hover:text-yellow/80 text-xs font-semibold px-2 py-1 rounded border border-yellow/40"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )
+    }
     if (pane.paneType === 'file') {
       return (
         <div className="flex-1 min-h-0">

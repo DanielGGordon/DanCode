@@ -128,6 +128,8 @@ export class ShellhostTerminalManager {
       id: entry.id,
       projectSlug: entry.projectSlug,
       label: entry.label,
+      cwd: entry.cwd || null,
+      command: entry.command || null,
       createdAt: entry.createdAt,
       lastActivity: entry.lastActivity,
     };
