@@ -535,8 +535,19 @@ const Terminal = forwardRef(function Terminal({
   const sendResumeCommand = useCallback(() => {
     if (!claudeSessionId) return
     const cmd = `claude --resume ${claudeSessionId}\r`
-    if (socketRef.current?.connected) {
-      socketRef.current.emit('input', cmd)
+    // Focus the xterm first so subsequent keystrokes also land in it.
+    if (termRef.current) {
+      try { termRef.current.focus() } catch { /* ignore */ }
+    }
+    // Send through the socket so bash receives it; bash will echo via the
+    // PTY. We use the explicit emit path here (not term.paste) because
+    // paste data is buffered before \r is interpreted in some xterm
+    // configurations; an explicit emit is one round-trip.
+    const sock = socketRef.current
+    if (sock?.connected) {
+      sock.emit('input', cmd)
+    } else if (sock) {
+      sock.once('connect', () => sock.emit('input', cmd))
     }
   }, [claudeSessionId])
 
