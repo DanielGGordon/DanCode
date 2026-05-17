@@ -39,7 +39,11 @@ DanCode/
 │   │   ├── CommandPalette.jsx  # Command palette overlay with fuzzy search for project switching (Ctrl+K)
 │   │   ├── FileExplorer.jsx   # Collapsible file explorer panel: lazy-loaded tree view, context menu, drag-to-terminal, click-to-view, .gitignore/.hidden toggles
 │   │   ├── FileExplorer.test.jsx # FileExplorer unit tests (tree view, context menu, toggles, drag, expand)
-│   │   ├── FileViewer.jsx     # File viewer pane: syntax highlighting (highlight.js dynamically imported, 18 languages), line numbers, edit/save mode, Solarized Dark theme
+│   │   ├── FileViewer.jsx     # Phase 6: CodeMirror 6 editor pane. Per-language packs lazy-loaded via editor/language.js, find/replace + undo/redo + multi-cursor via standard CM keymaps, always-on line numbers, saves on Ctrl+S and on blur through PUT /api/projects/:slug/files/*
+│   │   ├── FileViewer.test.jsx # Phase 6: FileViewer unit tests (language detection per ext, fetch via per-project file route, Ctrl+S save, blur save, undo/redo round-trip, find panel, line numbers always rendered)
+│   │   ├── editor/
+│   │   │   ├── language.js     # Phase 6: maps file extensions to CM language names and lazy-imports the matching language pack (bash via @codemirror/legacy-modes/mode/shell; jsx/tsx via lang-javascript flags)
+│   │   │   └── language.test.js # Phase 6: extension-to-language and language-to-extension mapping tests (19 cases)
 │   │   ├── CommandPalette.test.jsx # CommandPalette unit tests (fuzzy match, filtering, open/close, selection)
 │   │   ├── LoginScreen.jsx     # Username/password + TOTP login form
 │   │   ├── LoginScreen.test.jsx # LoginScreen component unit tests
@@ -65,7 +69,8 @@ DanCode/
 │   │   └── main.jsx            # Entry point
 │   ├── index.html              # HTML shell with PWA manifest link, theme-color meta, service worker registration
 │   ├── poc-terminal.html       # POC: HTML entry point for standalone terminal page
-│   ├── vite.config.js          # Vite config (proxy, Tailwind plugin)
+│   ├── vite.config.js          # Vite config (proxy, Tailwind plugin, vitest jsdom env + setupFiles)
+│   ├── vitest.setup.js         # Phase 6: jsdom polyfills for CodeMirror's layout/measure APIs (Range.getClientRects, Element.getClientRects)
 │   ├── package.json            # Includes vitest test scripts
 │   └── README.md
 ├── docs/
@@ -120,13 +125,16 @@ DanCode/
 │   │   │   ├── server-restart.spec.js     # Phase 3: kill server mid-session → PTY survives, gap output replays, new input lands in same PTY
 │   │   │   ├── layout-restore.spec.js     # Phase 4: 2 terminals (distinct cwds) + open file + vertical split survive logout/login
 │   │   │   ├── missing-file-warning.spec.js # Phase 4: deleted file in layout shows banner; Close button removes it and updates layout.json
-│   │   │   └── shellhost-restart.spec.js  # Phase 5: SIGKILL shellhost via /test-only/restart-shellhost → reload → both terminals re-appear with prior-session banner + prior sentinel in DOM
+│   │   │   ├── shellhost-restart.spec.js  # Phase 5: SIGKILL shellhost via /test-only/restart-shellhost → reload → both terminals re-appear with prior-session banner + prior sentinel in DOM
+│   │   │   ├── codemirror.spec.js  # Phase 6: 8 fixture extensions render highlighted token spans, Ctrl+S persists edits across reload, Ctrl+F opens search panel, ../ traversal on PUT → 403
+│   │   │   └── codemirror-perf.spec.js  # Phase 6: 100-keystroke p95<50ms / p99<100ms gate on a ~950KB JS fixture (skipped on aarch64; set DANCODE_FORCE_PERF=1 to enforce)
 │   │   ├── shellhost-integration.test.js # Phase 1+2: server <-> shellhost integration over UNIX socket (incl. disk replay on reconnect)
 │   │   ├── shellhost-restart.test.js     # Phase 3: ShellhostTerminalManager.recover() + startServer() list-based recovery; data-race stress (1MB output during restart cycle)
 │   │   ├── layout.test.js      # Phase 4: layout module — defaultLayout, validateLayout, atomic writeLayout under concurrency, removeMissingFiles
 │   │   ├── layout-api.test.js  # Phase 4: GET/PUT /api/projects/:slug/layout integration (20-parallel-PUT non-torn assertion, missingFiles annotation, schema rejection)
 │   │   ├── project-rename.test.js # Phase 4: PATCH renames slug + moves layout dir; 409 on conflict; idempotent same-name rename
 │   │   ├── files.test.js       # File API unit tests (CRUD, path traversal rejection, gitignore filtering, gitignore cache)
+│   │   ├── server.test.js (cont.) # Phase 6: also covers GET/PUT /api/projects/:slug/files/* round-trips + raw-HTTP `../../etc/passwd` PUT → 403 (URL parser would normalize `..` so the test bypasses fetch)
 │   │   ├── ring-buffer.test.js # Legacy tmux-backend RingBuffer unit tests (removed from shellhost path in Phase 2)
 │   │   ├── auth.test.js        # Auth account setup, login, session management tests
 │   │   ├── projects.test.js    # Project config CRUD, slug generation, validation tests
