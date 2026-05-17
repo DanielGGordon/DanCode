@@ -626,6 +626,74 @@ app.post('/api/files/rename', async (req, res) => {
   }
 });
 
+// ---------- RESTful per-project file routes (Phase 6) ----------
+// These mirror the legacy /api/files/read|write but with a cleaner shape:
+// the project slug lives in the URL, the file path is a wildcard suffix,
+// and request bodies don't repeat the project/path. Path safety is
+// enforced by safePath() inside files.js (TRAVERSAL → 403).
+
+/**
+ * Pull the wildcard segment(s) out of req.params (Express 5 returns either
+ * a string or an array depending on path-to-regexp version), normalize to a
+ * single relative path string.
+ */
+function extractWildcardPath(params) {
+  // path-to-regexp 8 (Express 5) puts the capture under the wildcard name.
+  // It's typically an array of decoded segments.
+  const raw = params.filepath ?? params['0'] ?? '';
+  if (Array.isArray(raw)) return raw.join('/');
+  return String(raw);
+}
+
+app.get('/api/projects/:slug/files/{*filepath}', async (req, res) => {
+  const { slug } = req.params;
+  if (!isValidSlug(slug)) return res.status(400).json({ error: 'Invalid project slug' });
+  const projectRoot = await resolveProjectRoot(slug);
+  if (!projectRoot) return res.status(404).json({ error: 'Project not found' });
+  const filePath = extractWildcardPath(req.params);
+  if (!filePath) return res.status(400).json({ error: 'path is required' });
+
+  try {
+    const stats = await getFileStats(projectRoot, filePath);
+    const etag = `"${Math.floor(stats.mtimeMs).toString(36)}-${stats.size.toString(36)}"`;
+    res.setHeader('ETag', etag);
+    const ifNoneMatch = req.headers['if-none-match'];
+    if (ifNoneMatch && ifNoneMatch === etag) {
+      return res.status(304).end();
+    }
+    const content = await readFileContent(projectRoot, filePath);
+    res.json({ content });
+  } catch (err) {
+    if (err.code === 'TRAVERSAL') return res.status(403).json({ error: err.message });
+    if (err.code === 'ENOENT') return res.status(404).json({ error: 'File not found' });
+    if (err.code === 'EISDIR') return res.status(400).json({ error: 'Cannot read a directory' });
+    if (err.code === 'TOOLARGE') return res.status(413).json({ error: 'File exceeds 1MB limit' });
+    res.status(500).json({ error: `Failed to read file: ${err.message}` });
+  }
+});
+
+app.put('/api/projects/:slug/files/{*filepath}', async (req, res) => {
+  const { slug } = req.params;
+  if (!isValidSlug(slug)) return res.status(400).json({ error: 'Invalid project slug' });
+  const projectRoot = await resolveProjectRoot(slug);
+  if (!projectRoot) return res.status(404).json({ error: 'Project not found' });
+  const filePath = extractWildcardPath(req.params);
+  if (!filePath) return res.status(400).json({ error: 'path is required' });
+
+  const { content } = req.body || {};
+  if (typeof content !== 'string') {
+    return res.status(400).json({ error: 'content must be a string' });
+  }
+
+  try {
+    await writeFileContent(projectRoot, filePath, content);
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code === 'TRAVERSAL') return res.status(403).json({ error: err.message });
+    res.status(500).json({ error: `Failed to write file: ${err.message}` });
+  }
+});
+
 app.delete('/api/files', async (req, res) => {
   const { path: filePath, project } = req.query;
   const projectRoot = await resolveProjectRoot(project);

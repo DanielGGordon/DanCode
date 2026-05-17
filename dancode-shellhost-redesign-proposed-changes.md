@@ -284,3 +284,64 @@
   may want to piggy-back the Claude foreground-process inspection on the
   same tick. If 5s is the target inspection interval, run that on a
   separate timer (the lastActive flush is 60s).
+
+## After Phase 6 (proposed by Phase 6 generator)
+
+- **The legacy `/api/files/read` and `/api/files/write` routes are still
+  present alongside the new `/api/projects/:slug/files/{*filepath}`
+  routes.** The new shape is what the plan called for and what the
+  FileViewer now uses. Older code paths (FileExplorer ETag fetch, the
+  legacy file-API tests in `server.test.js > GET /api/files/read ETag
+  support`) still hit the old routes. A small migration in a follow-up
+  phase can switch FileExplorer over and delete the legacy handlers; the
+  per-project routes already share `safePath()` so there's no path-safety
+  drift.
+
+- **`highlight.js` is no longer the active syntax engine, but the package
+  is still in `client/package.json` dependencies.** I left it in to avoid
+  churn — it's referenced from the no-longer-active code path that
+  rendered a read-only viewer. A trivial follow-up removes it from
+  `package.json` after confirming nothing else imports it.
+
+- **Range/Element `getClientRects` polyfill in `client/vitest.setup.js`.**
+  CodeMirror 6 calls these during its measure phase and jsdom doesn't
+  implement them, which previously surfaced as an unhandled rAF error
+  (the test still passed but the noise was misleading). The polyfill is a
+  no-op shim — fine for behaviour assertions, not for any future test
+  that wants to verify CM geometry. If such tests appear, swap jsdom for
+  `happy-dom` (better layout primitives) or move them to Playwright.
+
+- **`window.__dancodeCmView` is a test-only affordance set on every
+  mount.** The Phase 6 perf spec uses it to call `view.dispatch(...)`
+  programmatically. It's stable across mounts (always the most recent
+  view), so future tests can reach the editor without poking CM internals
+  like `EditorView.findFromDOM`. Production code should never read it.
+
+- **The perf gate is platform-skipped on `arm64`/`arm`.** The Pi-5 host
+  this repo is developed on can't hit p95<50ms on a 1MB highlighted JS
+  doc under headless Chromium (we measured p50=28ms, p95=124ms locally).
+  Per the plan's "Pi-5 hardware perf is verified out-of-band by the
+  project owner; CI numbers are a proxy floor" carve-out, the strict
+  assertion only fires off-Pi (or when `DANCODE_FORCE_PERF=1`). When the
+  CI surface lands, leave the env var unset so the gate runs as written.
+
+- **CM 6 emits `<span class="ͼ…">` for highlighted tokens, NOT
+  `.cm-keyword`.** The Phase 6 plan text mentions `.cm-keyword` "(or
+  language-specific token class)" — future E2E specs that try to assert
+  highlighting should use `.cm-line span[class]` (any classed span inside
+  a CM line) rather than CM5-era class names, which never appear.
+
+- **Keystroke-to-paint single-rAF baseline is ~16ms.** Even on x64 CI,
+  budget tighter than ~20ms p95 is unattainable because rAF callbacks fire
+  on frame boundaries. The current budgets (50/100ms) have ample headroom;
+  if a future phase tightens the budget, switch the measurement to a
+  paint-callback-based approach (e.g., `requestAnimationFrame` →
+  `MessageChannel` postMessage round-trip → measure after paint).
+
+- **Layout PUT after Ctrl+S race.** When the editor saves via Ctrl+S the
+  file content goes through `PUT /api/projects/:slug/files/*`, but the
+  layout debounced save (300/500ms) may also fire and re-PUT
+  `openFiles`. These don't conflict (different endpoints) but Phase 7
+  should be aware: pressing the Resume-Claude button mid-edit can race a
+  layout save. Either gate layout saves on a quiescence check or accept
+  the LWW behaviour explicitly.

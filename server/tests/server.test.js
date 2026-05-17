@@ -4,8 +4,28 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { generate } from 'otplib';
+import http from 'node:http';
 import { app, httpServer, startServer, terminalManager } from '../src/index.js';
 import { clearSessions } from '../src/auth.js';
+
+/**
+ * Issue an HTTP request with a raw, un-normalized path. We can't use fetch()
+ * because the WHATWG URL parser collapses `..` segments (and percent-decodes
+ * `%2E%2E` then collapses them too) before the request leaves the client —
+ * so a path-traversal test sent via fetch() would never reach the server.
+ */
+function rawRequest({ port, method, path, headers = {}, body }) {
+  return new Promise((resolve, reject) => {
+    const req = http.request({ host: 'localhost', port, method, path, headers }, (res) => {
+      let chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf-8') }));
+    });
+    req.on('error', reject);
+    if (body) req.write(body);
+    req.end();
+  });
+}
 
 const TEST_PORT = 3099;
 const TEST_USERNAME = 'testadmin';
@@ -528,6 +548,145 @@ describe('DanCode server', () => {
         body: JSON.stringify({ layout: { mode: 'tabs' } }),
       });
       expect(res.status).toBe(401);
+    });
+  });
+
+  describe('PUT /api/projects/:slug/files/*', () => {
+    const authHeaders = () => ({
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${storedToken}`,
+    });
+
+    let pfProjectDir;
+
+    beforeAll(async () => {
+      pfProjectDir = join(tempDir, 'pf-project-dir');
+      await mkdir(pfProjectDir, { recursive: true });
+      await writeFile(join(pfProjectDir, 'existing.txt'), 'old');
+
+      const res = await fetch(`http://localhost:${TEST_PORT}/api/projects`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ name: 'Project Files', path: pfProjectDir }),
+      });
+      expect(res.status).toBe(201);
+    });
+
+    it('writes a file at the given path', async () => {
+      const res = await fetch(
+        `http://localhost:${TEST_PORT}/api/projects/project-files/files/newfile.js`,
+        {
+          method: 'PUT',
+          headers: authHeaders(),
+          body: JSON.stringify({ content: 'console.log("hi")\n' }),
+        }
+      );
+      expect(res.status).toBe(200);
+      const { readFile } = await import('node:fs/promises');
+      const written = await readFile(join(pfProjectDir, 'newfile.js'), 'utf-8');
+      expect(written).toBe('console.log("hi")\n');
+    });
+
+    it('writes nested file paths and creates missing dirs', async () => {
+      const res = await fetch(
+        `http://localhost:${TEST_PORT}/api/projects/project-files/files/src/sub/deep.ts`,
+        {
+          method: 'PUT',
+          headers: authHeaders(),
+          body: JSON.stringify({ content: 'export const x = 1\n' }),
+        }
+      );
+      expect(res.status).toBe(200);
+      const { readFile } = await import('node:fs/promises');
+      const written = await readFile(join(pfProjectDir, 'src/sub/deep.ts'), 'utf-8');
+      expect(written).toBe('export const x = 1\n');
+    });
+
+    it('rejects ../ traversal with 403', async () => {
+      // Send a raw HTTP request so the literal `..` segments survive past the
+      // URL parser and actually reach the server.
+      const body = JSON.stringify({ content: 'evil' });
+      const res = await rawRequest({
+        port: TEST_PORT,
+        method: 'PUT',
+        path: '/api/projects/project-files/files/../../etc/passwd',
+        headers: {
+          ...authHeaders(),
+          'Content-Length': Buffer.byteLength(body),
+        },
+        body,
+      });
+      expect(res.status).toBe(403);
+    });
+
+    it('returns 400 when content is not a string', async () => {
+      const res = await fetch(
+        `http://localhost:${TEST_PORT}/api/projects/project-files/files/x.txt`,
+        {
+          method: 'PUT',
+          headers: authHeaders(),
+          body: JSON.stringify({ content: 123 }),
+        }
+      );
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 404 for unknown project', async () => {
+      const res = await fetch(
+        `http://localhost:${TEST_PORT}/api/projects/no-such-project/files/x.txt`,
+        {
+          method: 'PUT',
+          headers: authHeaders(),
+          body: JSON.stringify({ content: 'x' }),
+        }
+      );
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 401 without auth token', async () => {
+      const res = await fetch(
+        `http://localhost:${TEST_PORT}/api/projects/project-files/files/x.txt`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: 'x' }),
+        }
+      );
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe('GET /api/projects/:slug/files/*', () => {
+    const authHeaders = () => ({
+      Authorization: `Bearer ${storedToken}`,
+    });
+
+    it('returns file content for existing path', async () => {
+      const res = await fetch(
+        `http://localhost:${TEST_PORT}/api/projects/project-files/files/existing.txt`,
+        { headers: authHeaders() }
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.content).toBe('old');
+    });
+
+    it('returns 404 for unknown file', async () => {
+      const res = await fetch(
+        `http://localhost:${TEST_PORT}/api/projects/project-files/files/nope.txt`,
+        { headers: authHeaders() }
+      );
+      expect(res.status).toBe(404);
+    });
+
+    it('rejects ../ traversal with 403', async () => {
+      const res = await rawRequest({
+        port: TEST_PORT,
+        method: 'GET',
+        path: '/api/projects/project-files/files/../../etc/passwd',
+        headers: authHeaders(),
+      });
+      expect(res.status).toBe(403);
     });
   });
 

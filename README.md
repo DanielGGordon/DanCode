@@ -11,6 +11,7 @@ Built for Raspberry Pi 5, accessed via Tailscale.
 - **Backend:** Node.js + Express + Socket.io + standalone `dancode-shellhost` (UNIX-socket PTY owner)
 - **Frontend:** React + Vite + Tailwind CSS
 - **Terminal:** xterm.js + node-pty owned by `dancode-shellhost` (legacy tmux-backed `TerminalManager` is still available as a fallback for environments without shellhost; removed in Phase 9)
+- **Editor:** CodeMirror 6 with per-language packs (JS/TS + JSX/TSX, Python, JSON, Markdown, YAML, Bash via legacy-modes, HTML, CSS)
 - **Theme:** Solarized Dark (#002b36)
 - **Testing:** Vitest + Playwright + Midscene.js
 
@@ -54,7 +55,7 @@ npm run dev              # Start shellhost + server + client concurrently
 - **Pinch-to-zoom** — Touch gesture for terminal font size on mobile
 - **Tablet support** — Optional side-by-side terminals (768-1024px) with shortcut bar toggle
 - **File explorer** — Collapsible tree-view panel with lazy-loaded directories, file type icons, right-click context menu (rename, delete, copy path, new file, new folder, open terminal here, open in viewer), drag files onto terminals to insert paths, .gitignore filtering with toggle, hidden file toggle
-- **File viewer** — Click a file in the explorer to open it as a pane alongside terminals with syntax highlighting (18 languages via highlight.js), line numbers, edit/save mode (Ctrl+S), Solarized Dark theme; mixed terminal + file panes share the same split/tab/resize layout
+- **File editor (Phase 6)** — Click a file in the explorer to open it as a pane alongside terminals. CodeMirror 6 with per-extension language packs (JavaScript/TypeScript with JSX/TSX, Python, JSON, Markdown, YAML, Bash, HTML, CSS; unknown extensions fall back to plain text). Built-in find (Ctrl+F) / replace (Ctrl+H), undo/redo (Ctrl+Z / Ctrl+Y), multi-cursor (Alt+Click, Ctrl+D), always-visible line numbers. Saves explicitly on Ctrl+S and automatically when the editor loses focus, both through `PUT /api/projects/:slug/files/*`. Server-side path safety rejects any write that would escape the project root with 403
 - **TOTP authentication** — Username/password + TOTP-based login with QR code setup; sessions persist across server restarts with 30-day TTL, automatic expiry cleanup on startup and hourly, async debounced disk writes
 - **Response optimization** — Gzip compression on all HTTP responses; Vite-hashed static assets cached immutably for 1 year, `index.html` served with `no-cache` for instant updates; file read API returns ETag headers (computed from file mtime + size) with `304 Not Modified` support for conditional requests
 - **Server I/O optimization** — Gitignore rules cached per project root with 30-second TTL; terminal ring buffer uses array-of-chunks internally to reduce GC pressure
