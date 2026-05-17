@@ -184,6 +184,13 @@ export default function FileViewer({ token, slug, filePath, focused, onFocus }) 
       const state = EditorState.create({ doc: content, extensions })
       const view = new EditorView({ state, parent: hostRef.current })
       viewRef.current = view
+      // Test affordance: expose the current EditorView so the Playwright perf
+      // test (and any future test that needs to drive the editor
+      // programmatically) can call view.dispatch(...) without poking into CM
+      // private APIs. No-op outside of jsdom/Playwright contexts.
+      if (typeof window !== 'undefined') {
+        window.__dancodeCmView = view
+      }
       setStatus('ready')
     }
 
