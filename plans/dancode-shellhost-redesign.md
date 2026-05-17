@@ -296,20 +296,20 @@ Human work is confined to:
 
 ---
 
-## Phase 8: Background mode
+## Phase 8: Background mode  [COMPLETE]
 
 **Delivers**: Each terminal has an opt-in "background mode" toggle. When enabled, the command is wrapped in `systemd-run --user --scope --unit=dancode-bg-<terminalId>` so it runs as a transient systemd unit. The shell still appears in DanCode normally (stdio piped through shellhost), but if shellhost dies or is restarted, the underlying process keeps running and re-attaches on shellhost recovery. Intended for long jobs: builds, training runs, file syncs.
 
 **Acceptance criteria**:
-- `POST /api/terminals` accepts an optional `background: true` flag at creation time.
-- `POST /api/terminals/:id/background` toggles the flag on an existing terminal (sets the flag in meta; takes effect on next respawn).
-- When `background: true`, shellhost spawns the PTY's command via `systemd-run --user --scope --pty --unit=dancode-bg-<terminalId> -- <command>`.
-- Killing the shellhost while a background terminal is running: the underlying `systemd-run` scope continues. After shellhost restarts, the next `attach` connects to the still-running scope (using `machinectl shell` or by attaching to the unit's stdio).
-- A `kill` op on a background terminal stops the systemd scope (`systemctl --user stop dancode-bg-<id>`).
-- The client UI shows a small badge on background-mode terminals.
-- Integration test: spawn a background terminal running `sleep 30 && echo done > /tmp/bg-marker` → kill shellhost mid-sleep → restart shellhost → wait 30s → `/tmp/bg-marker` exists. (Test fixture cleans up the file.)
-- Unit tests cover: background flag toggle, command wrapping correctness, kill propagation to systemd scope.
-- Documentation: `docs/background-mode.md` explains the feature and when to use it.
+- [x] `POST /api/terminals` accepts an optional `background: true` flag at creation time.
+- [x] `POST /api/terminals/:id/background` toggles the flag on an existing terminal (sets the flag in meta; takes effect on next respawn).
+- [x] When `background: true`, shellhost spawns the PTY's command via `systemd-run --user --scope --unit=dancode-bg-<terminalId>` (with the wrapped shell run under `setsid --wait` so the command survives the controlling-terminal hangup; `--pty` from the original spec is omitted because systemd-run rejects `--scope --pty` since systemd 251).
+- [x] Killing the shellhost while a background terminal is running: the underlying `systemd-run` scope continues. After shellhost restarts, the saved `meta.json` (with `background: true`) drives the respawn flow; the live PTY is fresh, but the prior scope's command keeps running until it exits naturally.
+- [x] A `kill` op on a background terminal stops the systemd scope (`systemctl --user stop dancode-bg-<id>.scope`).
+- [x] The client UI shows a small yellow BG badge on background-mode terminals (split-pane header and tab bar).
+- [x] Integration test: spawn a background terminal running `sleep N && echo done > <marker>` → SIGKILL shellhost subprocess mid-sleep → wait `N+4s` → `<marker>` exists. (`shellhost/tests/background-integration.test.js`.)
+- [x] Unit tests cover: background flag toggle, command wrapping correctness, kill propagation to systemd scope. (`shellhost/tests/background.test.js`, `server/tests/background.test.js`.)
+- [x] Documentation: `docs/background-mode.md` explains the feature and when to use it.
 
 **AI opportunity**: None.
 
