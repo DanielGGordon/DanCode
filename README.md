@@ -10,7 +10,7 @@ Built for Raspberry Pi 5, accessed via Tailscale.
 
 - **Backend:** Node.js + Express + Socket.io + standalone `dancode-shellhost` (UNIX-socket PTY owner)
 - **Frontend:** React + Vite + Tailwind CSS
-- **Terminal:** xterm.js + node-pty owned by `dancode-shellhost` (legacy tmux-backed `TerminalManager` is still available as a fallback for environments without shellhost; removed in Phase 9)
+- **Terminal:** xterm.js + node-pty owned by `dancode-shellhost`
 - **Editor:** CodeMirror 6 with per-language packs (JS/TS + JSX/TSX, Python, JSON, Markdown, YAML, Bash via legacy-modes, HTML, CSS)
 - **Theme:** Solarized Dark (#002b36)
 - **Testing:** Vitest + Playwright + Midscene.js
@@ -36,8 +36,8 @@ npm run dev              # Start shellhost + server + client concurrently
 ## Features
 
 - **Multi-terminal layout** — Split (side-by-side) or tabbed view with dynamic terminal creation, close, and rename
-- **Tmux-backed terminals** — TerminalManager spawns shells inside invisible tmux sessions (`dancode-{slug}-{id}`), with per-terminal WebSocket namespace, ~50KB output ring buffer for reconnection replay, and metadata persistence. Processes survive server restarts; `tmux attach` from the host connects to the same terminal
-- **Server restart recovery** — On startup, reconciles tmux sessions with terminal metadata: reattaches orphaned sessions, repopulates ring buffers from tmux scrollback, and cleans up stale metadata
+- **Shellhost-backed terminals** — `dancode-shellhost` owns every PTY and writes per-terminal scrollback (`~/.dancode/terminals/<id>/scrollback.log`, 1MB rotating) and metadata (`meta.json`) to disk. The web server is stateless w.r.t. PTYs; restarting it does not disturb running shells
+- **Server restart recovery (Phase 3)** — When the web server is killed mid-session, PTYs keep running in shellhost. On restart the server calls shellhost's `list` op, rebuilds its in-memory map, and replays each terminal's on-disk scrollback to reconnecting browsers
 - **Shellhost restart recovery (Phase 5)** — When the standalone `dancode-shellhost` is killed (Pi reboot, `systemctl --user restart`, SIGKILL), every terminal's `meta.json` and on-disk scrollback survive. On the next project open the server calls shellhost's `respawn` op, which spawns a fresh PTY at the saved cwd/command and prepends a yellow ANSI banner (`--- prior session ended at <ISO> ---`) to the same `scrollback.log` (appended, not truncated) so history survives across respawns
 - **Claude-aware resume (Phase 7)** — Shellhost periodically (5s) inspects each PTY's foreground process via `ps -t <tty>`. When the foreground is `claude` (or `node …/claude.js`), it scans `~/.claude/projects/<slug>/*.jsonl` for the newest session id and persists it to `meta.claudeSessionId`. On respawn after a reboot, if the command is a Claude invocation the spawn rewrites to `claude --resume <id>`, so the conversation continues. A "Resume Claude" button appears on the terminal pane when the recorded session id is present and Claude isn't currently foreground; clicking it types `claude --resume <id>` and presses Enter (dismissible per-terminal). The detection loop runs under a < 1% sustained CPU budget — verified by a 60s integration test
 - **Reconnection UX** — Auto-reconnects on disconnect with "Reconnecting..." overlay, 30-second timeout to "Disconnected" with manual button; per-terminal connection state indicator dots (green/yellow/red)
@@ -59,7 +59,23 @@ npm run dev              # Start shellhost + server + client concurrently
 - **File editor (Phase 6)** — Click a file in the explorer to open it as a pane alongside terminals. CodeMirror 6 with per-extension language packs (JavaScript/TypeScript with JSX/TSX, Python, JSON, Markdown, YAML, Bash, HTML, CSS; unknown extensions fall back to plain text). Built-in find (Ctrl+F) / replace (Ctrl+H), undo/redo (Ctrl+Z / Ctrl+Y), multi-cursor (Alt+Click, Ctrl+D), always-visible line numbers. Saves explicitly on Ctrl+S and automatically when the editor loses focus, both through `PUT /api/projects/:slug/files/*`. Server-side path safety rejects any write that would escape the project root with 403
 - **TOTP authentication** — Username/password + TOTP-based login with QR code setup; sessions persist across server restarts with 30-day TTL, automatic expiry cleanup on startup and hourly, async debounced disk writes
 - **Response optimization** — Gzip compression on all HTTP responses; Vite-hashed static assets cached immutably for 1 year, `index.html` served with `no-cache` for instant updates; file read API returns ETag headers (computed from file mtime + size) with `304 Not Modified` support for conditional requests
-- **Server I/O optimization** — Gitignore rules cached per project root with 30-second TTL; terminal ring buffer uses array-of-chunks internally to reduce GC pressure
+- **Server I/O optimization** — Gitignore rules cached per project root with 30-second TTL
+
+## Migrating from a pre-shellhost install
+
+If you previously ran DanCode against the legacy tmux backend (sessions named
+`dancode-*`), run the one-shot migration script before starting the new
+shellhost-based stack:
+
+```bash
+node bin/dancode-migrate-from-tmux
+```
+
+It captures each tmux session's scrollback and cwd, writes them into
+`~/.dancode/terminals/<id>/`, appends the new terminal id to the matching
+project's `layout.json`, and kills the source tmux sessions. The script is
+idempotent — re-running it after a successful migration prints a trivial
+"Migrated 0 terminals" summary and changes nothing.
 
 ## Development
 

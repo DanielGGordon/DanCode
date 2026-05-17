@@ -18,9 +18,8 @@ import { join } from 'node:path';
  * test account via /api/auth/setup on first request, since the temp HOME
  * has no credentials yet.
  *
- * The server is started with DANCODE_REQUIRE_SHELLHOST=1, which disables the
- * legacy tmux fallback so the spec cannot silently regress to the tmux
- * backend if the socket isn't ready in time.
+ * The server always waits for `DANCODE_SHELLHOST_SOCKET` to come up at boot,
+ * and boot-stack.mjs races a real shellhost into existence on that path.
  *
  * Run with: `npm run test:e2e:shellhost`.
  */

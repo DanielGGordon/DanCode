@@ -474,3 +474,44 @@
   STOPS the scope — simulating a SIGKILL needs an actual subprocess
   death. Future phases adding "shellhost survival" tests should follow
   the same subprocess pattern.
+
+## After Phase 9 (proposed by Phase 9 generator)
+
+- **Server-test boots a real shellhost in `beforeAll` now.** Phase 9
+  removed the tmux fallback that previously kept `server.test.js`,
+  `layout-api.test.js`, and `project-rename.test.js` running without an
+  explicit shellhost. Each of those test files now spawns a
+  `createShellhost` on a temp UNIX socket alongside the test server.
+  Future server tests that need terminal CRUD must do the same; copy the
+  six-line pattern from `server.test.js` `beforeAll`.
+- **`startServer` no longer accepts `terminalsDir` or
+  `reconcileRetryDelay`.** The first is owned by shellhost
+  (`~/.dancode/terminals/<id>/`) and the second was tmux-resurrect
+  retry. Any future option named `*Dir` should target shellhost, not
+  the server.
+- **Migration parser handles UUID-shaped ids by peeling the last five
+  hyphen-separated chunks; everything else assumes a single trailing
+  chunk.** The legacy session-name format was
+  `dancode-<slug>-<uuid>` and `randomUUID()` itself contains four
+  hyphens. Phase 10's deploy notes should NOT promise the migration
+  works for hand-crafted session names like `dancode-foo-bar-baz` where
+  `id="baz"` is unintentional. If a Pi has unusual session names, run
+  the script and verify the layout entries look right before deleting
+  the old build.
+- **`bin/dancode-migrate-from-tmux` is the only post-Phase-9 reason
+  `tmux` is mentioned in production sources.** The grep for `tmux`
+  excluding the migration script, its test, and plan/history files
+  returns zero in `.js/.jsx/.mjs/.cjs/.ts/.tsx/.json`. Future cleanup
+  passes should not touch the script — it's the documented migration
+  path for users still on the old build.
+- **`adopt-session.spec.js` and `tmux-persistence.spec.js` were dropped
+  whole.** Their behaviour is fully covered by Phase 3 / 5 shellhost
+  E2Es (`server-restart.spec.js`, `shellhost-restart.spec.js`). Phase
+  10 docs that previously linked to those specs should point to the
+  shellhost variants instead.
+- **`bin/check-setup.mjs` does NOT check that `tmux` is installed.**
+  This is intentional — post-Phase-9 you only need tmux to RUN the
+  migration script, not the daily DanCode stack. Leaving it out of the
+  preflight keeps the production checklist short. Phase 10's install
+  doc can add a one-liner: "if migrating from the legacy build,
+  `sudo apt install tmux` before running `bin/dancode-migrate-from-tmux`".

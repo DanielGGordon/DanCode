@@ -286,7 +286,7 @@ async function runTerminalCrudBenchmarks() {
     rps: Math.round(1000 / (sumD / iter)),
   });
 
-  printTable(`Terminal CRUD (${iter} iterations — spawns tmux + PTY)`, results);
+  printTable(`Terminal CRUD (${iter} iterations — shellhost spawn + kill)`, results);
   return results;
 }
 

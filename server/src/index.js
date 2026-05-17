@@ -463,7 +463,7 @@ app.post('/api/projects', async (req, res) => {
   }
 });
 
-// Terminal CRUD endpoints (new direct-PTY path, no tmux)
+// Terminal CRUD endpoints — all PTYs are owned by dancode-shellhost.
 app.post('/api/terminals', async (req, res) => {
   const { projectSlug, label, command, cwd: requestedCwd, background } = req.body || {};
   if (!projectSlug || typeof projectSlug !== 'string') {

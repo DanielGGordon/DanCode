@@ -49,8 +49,8 @@ describe('DanCode server', () => {
     credentialsPath = join(tempDir, 'credentials.json');
     projectsDir = join(tempDir, 'projects');
 
-    // Boot a real shellhost on a temp UNIX socket. After Phase 9, the server
-    // has no tmux fallback — shellhost is the only PTY backend.
+    // Boot a real shellhost on a temp UNIX socket so the server has the only
+    // PTY backend it knows about.
     socketPath = join(tempDir, 'shellhost.sock');
     const scrollback = new ScrollbackStore({ baseDir: join(tempDir, 'sb-terminals') });
     const manager = new PTYManager({ scrollback });

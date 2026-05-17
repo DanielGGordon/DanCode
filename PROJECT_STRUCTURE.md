@@ -3,7 +3,8 @@
 ```
 DanCode/
 ├── bin/
-│   └── check-setup.mjs         # `npm run check:setup` preflight (Node version, build deps, socket-dir writability)
+│   ├── check-setup.mjs         # `npm run check:setup` preflight (Node version, build deps, socket-dir writability)
+│   └── dancode-migrate-from-tmux # Phase 9: one-shot script that converts legacy `dancode-*` tmux sessions into ~/.dancode/terminals/<id>/{meta.json,scrollback.log} + appends ids to layout.json; idempotent
 ├── shellhost/                  # Phase 1+: standalone PTY-owning Node process (dancode-shellhost)
 │   ├── bin/dancode-shellhost.js # CLI entry alias
 │   ├── src/
@@ -97,10 +98,7 @@ DanCode/
 │   │   ├── index.js            # Server entry point (Express, Socket.io, REST API routes, terminal CRUD, file API)
 │   │   ├── projects.js         # Project config CRUD (create, list, get, update, rename, delete) in ~/.dancode/projects/. Phase 4 renameProject moves slug + layout dir
 │   │   ├── layout.js           # Phase 4: per-project layout persistence (defaultLayout, validateLayout, readLayout, writeLayout w/ atomic .tmp+fsync+rename, removeMissingFiles)
-│   │   ├── terminal-manager.js # Legacy tmux-backed TerminalManager (fallback when DANCODE_SHELLHOST_SOCKET unset; removed in Phase 9)
-│   │   ├── shellhost-terminal-manager.js # Phase 1+2: server-side adapter that fronts dancode-shellhost; replays disk scrollback to new sockets (no in-memory ring buffer)
-│   │   ├── terminal.js         # (Legacy, emptied) Socket.io /terminal namespace
-│   │   └── tmux.js             # Tmux utility: create/kill/query sessions, capture pane, resize, send keys
+│   │   └── shellhost-terminal-manager.js # Phase 1+2: server-side adapter that fronts dancode-shellhost; replays disk scrollback to new sockets (no in-memory ring buffer)
 │   ├── tests/
 │   │   ├── e2e/
 │   │   │   ├── fixture.js      # Playwright + Midscene.js AI fixture (provides aiAssert, etc.)
@@ -114,7 +112,6 @@ DanCode/
 │   │   │   ├── terminal-poc.spec.js     # Playwright E2E test (create terminal via API, type in xterm, see output)
 │   │   │   ├── new-project.spec.js    # Playwright E2E test (new project creation → terminal layout)
 │   │   │   ├── new-project-visual.spec.js  # Visual assertion: new project form on dark background
-│   │   │   ├── adopt-session.spec.js  # Placeholder (adopt flow removed in Phase 2)
 │   │   │   ├── layout.spec.js        # Playwright E2E test (multi-terminal layout: split/tabs, close with confirm)
 │   │   │   ├── layout-visual.spec.js # Visual assertion: two panes side by side with labels
 │   │   │   ├── command-palette.spec.js  # Playwright E2E test (Ctrl+K palette, search, switch project)
@@ -123,7 +120,6 @@ DanCode/
 │   │   │   ├── sidebar-visual.spec.js   # Visual assertion: sidebar with project list and active highlight
 │   │   │   ├── header-dropdown.spec.js  # Playwright E2E test (header dropdown project switching)
 │   │   │   ├── reconnection.spec.js   # Playwright E2E test (disconnect/reconnect overlay, buffer replay, state indicators)
-│   │   │   ├── tmux-persistence.spec.js # Playwright E2E test (tmux persistence: server restart, reconnect, scrollback replay)
 │   │   │   ├── mobile-terminal.spec.js # Playwright mobile emulation E2E (iPhone 12 viewport, read-first, shortcut bar, Ctrl+C)
 │   │   │   ├── file-explorer.spec.js # Playwright E2E test (expand dirs, create/rename/delete files, drag to terminal)
 │   │   │   ├── mobile-pwa.spec.js    # Playwright mobile emulation E2E (Pixel 5 viewport, PWA, dashboard nav, dots, swipe)
@@ -149,13 +145,10 @@ DanCode/
 │   │   ├── project-rename.test.js # Phase 4: PATCH renames slug + moves layout dir; 409 on conflict; idempotent same-name rename
 │   │   ├── files.test.js       # File API unit tests (CRUD, path traversal rejection, gitignore filtering, gitignore cache)
 │   │   ├── server.test.js (cont.) # Phase 6: also covers GET/PUT /api/projects/:slug/files/* round-trips + raw-HTTP `../../etc/passwd` PUT → 403 (URL parser would normalize `..` so the test bypasses fetch)
-│   │   ├── ring-buffer.test.js # Legacy tmux-backend RingBuffer unit tests (removed from shellhost path in Phase 2)
 │   │   ├── auth.test.js        # Auth account setup, login, session management tests
 │   │   ├── projects.test.js    # Project config CRUD, slug generation, validation tests
-│   │   ├── server.test.js      # Server unit tests (routes, auth middleware, project API)
-│   │   ├── terminal.test.js    # Socket.io /terminal namespace lifecycle tests (legacy, preserved)
-│   │   ├── terminal-manager.test.js  # TerminalManager integration tests (CRUD, metadata, WebSocket, reconnection, auth, tmux persistence, reconcile)
-│   │   └── tmux.test.js        # Tmux utility module tests (session lifecycle, capture, resize, list)
+│   │   ├── server.test.js      # Server unit tests (routes, auth middleware, project API; boots a real shellhost on a temp socket since Phase 9 removed the tmux fallback)
+│   │   └── migrate-from-tmux.test.js # Phase 9: integration test for bin/dancode-migrate-from-tmux (3 fixture sessions → meta/scrollback/layout, idempotent re-run)
 │   ├── .env                    # Midscene.js config (git-ignored): Ollama endpoint, model settings
 │   ├── package.json
 │   ├── playwright.config.js    # Playwright config (Midscene reporter, system Chromium, webServer on :3001)
