@@ -5,6 +5,9 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { generate } from 'otplib';
 import http from 'node:http';
+import { createShellhost } from 'dancode-shellhost/src/server.js';
+import { PTYManager } from 'dancode-shellhost/src/pty-manager.js';
+import { ScrollbackStore } from 'dancode-shellhost/src/scrollback.js';
 import { app, httpServer, startServer, terminalManager } from '../src/index.js';
 import { clearSessions } from '../src/auth.js';
 
@@ -33,10 +36,11 @@ const TEST_PASSWORD = 'testpassword123';
 
 describe('DanCode server', () => {
   let server;
+  let shellhost;
+  let socketPath;
   let tempDir;
   let credentialsPath;
   let projectsDir;
-  let terminalsDir;
   let storedToken;
   let totpSecret;
 
@@ -44,15 +48,26 @@ describe('DanCode server', () => {
     tempDir = await mkdtemp(join(tmpdir(), 'dancode-server-test-'));
     credentialsPath = join(tempDir, 'credentials.json');
     projectsDir = join(tempDir, 'projects');
-    terminalsDir = join(tempDir, 'terminals');
+
+    // Boot a real shellhost on a temp UNIX socket. After Phase 9, the server
+    // has no tmux fallback — shellhost is the only PTY backend.
+    socketPath = join(tempDir, 'shellhost.sock');
+    const scrollback = new ScrollbackStore({ baseDir: join(tempDir, 'sb-terminals') });
+    const manager = new PTYManager({ scrollback });
+    shellhost = createShellhost({ manager });
+    await shellhost.listen(socketPath);
   });
 
   afterAll(async () => {
     if (terminalManager) {
       await terminalManager.destroyAll();
     }
+    if (terminalManager?.close) terminalManager.close();
     if (server) {
       await new Promise((resolve) => server.close(resolve));
+    }
+    if (shellhost) {
+      await shellhost.close();
     }
     clearSessions();
     if (tempDir) {
@@ -61,7 +76,7 @@ describe('DanCode server', () => {
   });
 
   it('starts and listens on the specified port', async () => {
-    server = await startServer(TEST_PORT, { credentialsPath, projectsDir, terminalsDir });
+    server = await startServer(TEST_PORT, { credentialsPath, projectsDir, shellhostSocket: socketPath });
     const addr = server.address();
     expect(addr.port).toBe(TEST_PORT);
   });
