@@ -230,6 +230,14 @@ async function dispatchOp(op, payload, ctx) {
       return { ok: true, terminal: meta };
     }
 
+    case 'setBackground': {
+      const { terminalId, background } = payload;
+      if (!terminalId) throw new Error('setBackground: terminalId required');
+      const meta = ptyManager.setBackground(terminalId, !!background);
+      if (!meta) throw new Error(`setBackground: terminal ${terminalId} not found`);
+      return { ok: true, terminal: meta };
+    }
+
     default:
       throw new Error(`unknown op: ${op}`);
   }
