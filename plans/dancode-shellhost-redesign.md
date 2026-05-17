@@ -299,6 +299,7 @@ Human work is confined to:
 ---
 
 ## Phase 8: Background mode  [COMPLETE]
+<!-- PHASE 8 COMPLETE -->
 
 **Delivers**: Each terminal has an opt-in "background mode" toggle. When enabled, the command is wrapped in `systemd-run --user --scope --unit=dancode-bg-<terminalId>` so it runs as a transient systemd unit. The shell still appears in DanCode normally (stdio piped through shellhost), but if shellhost dies or is restarted, the underlying process keeps running and re-attaches on shellhost recovery. Intended for long jobs: builds, training runs, file syncs.
 
@@ -320,6 +321,7 @@ Human work is confined to:
 <!-- PARALLEL 9,10 -->
 
 ## Phase 9: tmux migration script + tmux code removal ✅
+<!-- PHASE 9 COMPLETE -->
 
 **Delivers**: A `bin/dancode-migrate-from-tmux` script captures the current state of any `dancode-*` tmux sessions and converts them into the new on-disk format. After the script runs, the legacy tmux backend code is removed from the codebase — `server/src/tmux.js`, the reconcile race logic in `terminal-manager.js`, `recover-terminals.mjs`, tmux mentions in `package.json` system-deps docs, and tmux-resurrect/-continuum references — leaving only the new shellhost path.
 
