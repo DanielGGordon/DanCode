@@ -16,7 +16,7 @@ Every frame is `{ type, requestId?, terminalId?, op, payload }` encoded as JSON,
 prefixed by a 4-byte big-endian length. Three frame types:
 
 - `req` — request from server to shellhost (`spawn`, `attach`, `detach`, `write`,
-  `resize`, `kill`, `list`, `inspect`, `getScrollback`, `respawn`).
+  `resize`, `kill`, `list`, `inspect`, `getScrollback`, `respawn`, `noteClaudeSession`).
 - `res` — response from shellhost (success: `{ ok: true, result }`, failure:
   `{ ok: false, error }`).
 - `event` — push from shellhost to server (`output`, `exit`).
@@ -48,6 +48,20 @@ See `src/wire.js` for the codec and `src/server.js` for the op handlers.
   this directory and registers each terminal as `needsRespawn` so a fresh
   `dancode-shellhost` can resume after `systemctl --user restart` or any
   hard kill.
+- `src/claude-detector.js` — Phase 7 `ClaudeDetector`: periodic (5s by
+  default; override via `DANCODE_CLAUDE_INTERVAL_MS`) inspector that runs
+  `ps -o stat=,command= -t <tty>` on each PTY's controlling tty. When the
+  foreground process is `claude` (or `node …/claude.js`), it scans
+  `<DANCODE_CLAUDE_HOME>/projects/<slug>/*.jsonl` (defaults to
+  `~/.claude/projects/<slug>/`) for the most-recently-modified session
+  file and persists its basename into `meta.claudeSessionId` via
+  `MetaStore.update`. Also tracks the live `claudeActive` flag (not
+  persisted) so the UI can decide whether to show the "Resume Claude"
+  button. Helpers: `parsePsForegroundOutput`, `isClaudeProcess`,
+  `findNewestClaudeSession`, `isClaudeCommand`, `buildClaudeResumeCommand`.
+  `PTYManager.respawn` consults `meta.claudeSessionId` and rewrites the
+  spawn command to `claude --resume <id>` when applicable (the original
+  `meta.command` is preserved for future detection).
 - `src/server.js` — UNIX-socket server + op dispatch.
 - `src/index.js` — entry point: starts a server on `DANCODE_SHELLHOST_SOCKET`
   (defaults to `~/.dancode/shellhost.sock`) with scrollback + meta under

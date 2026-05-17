@@ -8,10 +8,11 @@ DanCode/
 │   ├── bin/dancode-shellhost.js # CLI entry alias
 │   ├── src/
 │   │   ├── index.js            # Entry: starts a server on ~/.dancode/shellhost.sock with disk-backed scrollback under ~/.dancode/terminals/; drops a pidfile so an orchestrator can SIGKILL it (Phase 5)
-│   │   ├── server.js           # UNIX-socket server + op dispatch (spawn/attach/detach/write/resize/kill/list/inspect/getScrollback/respawn)
-│   │   ├── pty-manager.js      # Owns the in-memory map of live + needs-respawn PTYs; appends PTY output to scrollback write-through; respawn() persists yellow banner + spawns at saved cwd/command
+│   │   ├── server.js           # UNIX-socket server + op dispatch (spawn/attach/detach/write/resize/kill/list/inspect/getScrollback/respawn/noteClaudeSession)
+│   │   ├── pty-manager.js      # Owns the in-memory map of live + needs-respawn PTYs; appends PTY output to scrollback write-through; respawn() persists yellow banner + spawns at saved cwd/command. Phase 7: rewrites `claude` → `claude --resume <id>` when meta.claudeSessionId is set; exposes getTty/setClaudeActive/setClaudeSessionId
 │   │   ├── scrollback.js       # Phase 2: ScrollbackStore — append-only `<baseDir>/<id>/scrollback.log` with 1MB rotation + tail read
 │   │   ├── meta-store.js       # Phase 5: MetaStore — atomic per-terminal `<baseDir>/<id>/meta.json` (write/update/read/list/remove) used to reconstruct terminals on shellhost restart
+│   │   ├── claude-detector.js  # Phase 7: ClaudeDetector — periodic (5s) inspector that runs `ps` on each PTY's tty, flips claudeActive, persists ~/.claude/projects/<slug>/<newest>.jsonl id to meta.claudeSessionId. Helpers: parsePsForegroundOutput / isClaudeProcess / findNewestClaudeSession / isClaudeCommand / buildClaudeResumeCommand
 │   │   ├── client.js           # Client library used by dancode-server to call shellhost
 │   │   └── wire.js             # Length-prefixed JSON frame codec (encode/decode/streaming framer)
 │   ├── tests/
@@ -23,6 +24,13 @@ DanCode/
 │   │   ├── meta-store.test.js  # Phase 5: MetaStore unit tests (atomic write, read, list, remove, malformed-file skip)
 │   │   ├── respawn.test.js     # Phase 5: PTYManager loadOrphans/respawn unit tests; periodic lastActiveAt flush
 │   │   ├── respawn-integration.test.js # Phase 5: spawn → write sentinel → SIGKILL shellhost → fresh shellhost on same socket → respawn → assert new PID, banner emitted, scrollback + cwd preserved
+│   │   ├── claude-detector.test.js # Phase 7: detector unit tests (ps-output parse, isClaudeProcess, findNewestClaudeSession, tick logic with mocked ps, start/stop)
+│   │   ├── claude-respawn.test.js  # Phase 7: PTYManager getTty/setClaudeSessionId + respawn rewrites `claude` → `claude --resume <id>`; isClaudeCommand/buildClaudeResumeCommand unit tests
+│   │   ├── note-claude-session-op.test.js # Phase 7: wire-op noteClaudeSession writes claudeSessionId atomically to meta.json (live + needs-respawn terminals)
+│   │   ├── claude-integration.test.js # Phase 7: full flow — fake-claude PTY → meta.claudeSessionId within 10s → SIGKILL shellhost → restart → /proc/<pid>/cmdline of respawn includes `claude --resume <id>`
+│   │   ├── claude-cpu-budget.test.js # Phase 7: 5 active Claude-detection terminals × 60s, /proc/<shellhost-pid>/stat utime+stime delta < 600ms (< 1% sustained)
+│   │   ├── claude-no-false-positive.test.js # Phase 7: 5 idle bash PTYs × ~10 min equivalent (50ms interval × 120 ticks), assert no terminal flagged Claude-active
+│   │   ├── fixtures/fake-claude.mjs # Phase 7: tiny stand-in for the real `claude` binary; sets process.title=claude, touches a session jsonl, sleeps until killed
 │   │   └── integration.test.js # Boots a real shellhost on a temp socket; in-process 2.5MB disk-usage test
 │   ├── package.json
 │   ├── vitest.config.js
@@ -120,8 +128,10 @@ DanCode/
 │   │   │   ├── server-restart.spec.js     # Phase 3: kill server mid-session → PTY survives, gap output replays, new input lands in same PTY
 │   │   │   ├── layout-restore.spec.js     # Phase 4: 2 terminals (distinct cwds) + open file + vertical split survive logout/login
 │   │   │   ├── missing-file-warning.spec.js # Phase 4: deleted file in layout shows banner; Close button removes it and updates layout.json
-│   │   │   └── shellhost-restart.spec.js  # Phase 5: SIGKILL shellhost via /test-only/restart-shellhost → reload → both terminals re-appear with prior-session banner + prior sentinel in DOM
+│   │   │   ├── shellhost-restart.spec.js  # Phase 5: SIGKILL shellhost via /test-only/restart-shellhost → reload → both terminals re-appear with prior-session banner + prior sentinel in DOM
+│   │   │   └── resume-claude.spec.js  # Phase 7: sets a fake claudeSessionId via /api/test-only/note-claude-session → Resume Claude button visible → click → `claude --resume <id>` appears in xterm DOM; dismiss hides the button
 │   │   ├── shellhost-integration.test.js # Phase 1+2: server <-> shellhost integration over UNIX socket (incl. disk replay on reconnect)
+│   │   ├── claude-session-meta.test.js  # Phase 7: /api/terminals + /api/terminals/:id expose claudeSessionId (default null + after setClaudeSessionId)
 │   │   ├── shellhost-restart.test.js     # Phase 3: ShellhostTerminalManager.recover() + startServer() list-based recovery; data-race stress (1MB output during restart cycle)
 │   │   ├── layout.test.js      # Phase 4: layout module — defaultLayout, validateLayout, atomic writeLayout under concurrency, removeMissingFiles
 │   │   ├── layout-api.test.js  # Phase 4: GET/PUT /api/projects/:slug/layout integration (20-parallel-PUT non-torn assertion, missingFiles annotation, schema rejection)
