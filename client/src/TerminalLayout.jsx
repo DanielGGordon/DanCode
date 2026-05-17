@@ -678,6 +678,15 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
               {pane.label}
             </span>
           )}
+          {isTerminal && pane.background ? (
+            <span
+              data-testid={`bg-badge-${index}`}
+              className="ml-1 px-1.5 py-0 text-[9px] font-semibold uppercase tracking-wide rounded bg-yellow/20 text-yellow border border-yellow/40"
+              title="Background mode: command runs in a systemd scope and survives shellhost restarts"
+            >
+              BG
+            </span>
+          ) : null}
         </div>
         <button
           data-testid={`close-${isFile ? 'file' : 'terminal'}-${index}`}
@@ -804,6 +813,15 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
                   ) : (
                     pane.label
                   )}
+                  {!isFile && pane.background ? (
+                    <span
+                      data-testid={`bg-badge-tab-${index}`}
+                      className="ml-1 px-1.5 py-0 text-[9px] font-semibold uppercase tracking-wide rounded bg-yellow/20 text-yellow border border-yellow/40"
+                      title="Background mode"
+                    >
+                      BG
+                    </span>
+                  ) : null}
                 </button>
               )
             })}

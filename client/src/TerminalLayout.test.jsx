@@ -153,6 +153,34 @@ describe('TerminalLayout', () => {
     })
   })
 
+  it('renders BG badge on terminals with background=true in split mode', async () => {
+    mockFetchSuccess(MOCK_PROJECT, [
+      { id: 'term-1', label: 'CLI', projectSlug: 'myproj', background: false },
+      { id: 'term-2', label: 'Build', projectSlug: 'myproj', background: true },
+    ])
+    const { queryByTestId } = render(<TerminalLayout token="tok" slug="myproj" />)
+    await waitFor(() => {
+      expect(queryByTestId('bg-badge-1')).not.toBeNull()
+    })
+    // The non-background terminal must not have a badge.
+    expect(queryByTestId('bg-badge-0')).toBeNull()
+    // Badge text is "BG".
+    expect(queryByTestId('bg-badge-1').textContent).toBe('BG')
+  })
+
+  it('renders BG badge in tab bar when in tabs layout', async () => {
+    const tabsProject = { ...MOCK_PROJECT, layout: { mode: 'tabs', activeTab: 0 } }
+    mockFetchSuccess(tabsProject, [
+      { id: 'term-1', label: 'CLI', projectSlug: 'myproj', background: false },
+      { id: 'term-2', label: 'Build', projectSlug: 'myproj', background: true },
+    ])
+    const { queryByTestId } = render(<TerminalLayout token="tok" slug="myproj" />)
+    await waitFor(() => {
+      expect(queryByTestId('bg-badge-tab-1')).not.toBeNull()
+    })
+    expect(queryByTestId('bg-badge-tab-0')).toBeNull()
+  })
+
   it('defaults to split layout when project config says split', async () => {
     mockFetchSuccess()
     const { getByTestId, queryByTestId } = render(<TerminalLayout token="tok" slug="myproj" />)
