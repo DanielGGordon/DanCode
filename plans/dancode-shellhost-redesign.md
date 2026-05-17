@@ -346,7 +346,8 @@ Human work is confined to:
 
 ---
 
-## Phase 10: systemd --user unit + production wiring
+## Phase 10: systemd --user unit + production wiring  [COMPLETE]
+<!-- PHASE 10 COMPLETE -->
 
 **Delivers**: `dancode-shellhost.service` is shipped as a `systemd --user` unit file in the repo. The README documents `systemctl --user enable --now dancode-shellhost` as the production install step (alongside enabling `loginctl enable-linger` so the unit survives logout). The `npm run dev` script still works for local development (launches its own shellhost on a different socket so it doesn't fight the systemd-managed one).
 

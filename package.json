@@ -13,7 +13,8 @@
     "test:e2e:shellhost": "npm run test:e2e:shellhost -w server",
     "test:perf": "node perf/run.mjs",
     "test:perf:quick": "node perf/run.mjs --quick",
-    "check:setup": "node bin/check-setup.mjs"
+    "check:setup": "node bin/check-setup.mjs",
+    "healthcheck": "node bin/dancode-healthcheck.mjs"
   },
   "workspaces": [
     "shellhost",

@@ -85,3 +85,77 @@ npm run build        # Production build (client)
 npm test             # Run unit tests (Vitest)
 npm run test:e2e     # Run E2E tests (Playwright)
 ```
+
+## Production install on the Pi
+
+Long-running deployments run `dancode-shellhost` (and optionally
+`dancode-server`) as `systemd --user` units. Shellhost owns every PTY, so
+having `systemd` supervise it means a Pi reboot brings every terminal back
+via Phase 5 respawn semantics — no manual restart, no lost meta.
+
+1. **Install Node 20+ and build tools** (one-time per machine):
+
+   ```bash
+   sudo apt install build-essential python3
+   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash -
+   sudo apt install -y nodejs
+   ```
+
+2. **Clone the repo + install JS deps**:
+
+   ```bash
+   git clone https://github.com/DanielGGordon/DanCode.git /opt/dancode
+   cd /opt/dancode
+   npm install
+   npm run check:setup     # verifies Node, build deps, ~/.dancode is writable
+   npm run build           # builds the client into client/dist/
+   ```
+
+3. **Install the systemd --user units**:
+
+   ```bash
+   bash systemd/install.sh
+   ```
+
+   The installer copies `systemd/dancode-shellhost.service` (and, by default,
+   `systemd/dancode-server.service`) into `~/.config/systemd/user/`,
+   rewrites the `ExecStart=` to your actual repo path, runs
+   `systemctl --user daemon-reload`, then `systemctl --user enable --now`.
+   Override the repo path with `DANCODE_REPO=/srv/dancode bash
+   systemd/install.sh`, or skip the server unit with
+   `DANCODE_INSTALL_SERVER=0 bash systemd/install.sh` if you'd rather run
+   the web server via `npm run start` under another supervisor.
+
+4. **Enable linger so the units survive logout and a Pi reboot**:
+
+   ```bash
+   sudo loginctl enable-linger "$USER"
+   ```
+
+5. **Verify with the health-check**:
+
+   ```bash
+   node bin/dancode-healthcheck.mjs
+   ```
+
+   The script checks: the shellhost socket is reachable, the `list` op
+   responds, a throwaway PTY round-trips `echo healthcheck-<uuid>`, and the
+   web server's `/api/auth/setup/status` endpoint answers. Non-zero exit
+   fails the install.
+
+`systemctl --user status dancode-shellhost` shows live unit state.
+`journalctl --user -u dancode-shellhost -f` follows its logs.
+
+### What the unit gives you
+
+- `Type=simple`, `Restart=on-failure` — a SIGSEGV or panicked exit auto-restarts shellhost in ~1s.
+- `Environment=DANCODE_SHELLHOST_SOCKET=%h/.dancode/shellhost.sock` — production socket. The dev workflow uses `/tmp/dancode-shellhost-dev.sock` instead so `npm run dev` doesn't fight the systemd-managed prod socket.
+- Phase 5 respawn means meta.json + scrollback.log under `~/.dancode/terminals/` survive every restart, so the next project open re-spawns each terminal at its saved cwd/command (plus a yellow "prior session ended at …" banner). Phase 7 rewrites Claude terminals to `claude --resume <session>` on respawn.
+
+### Validating the install pipeline (CI)
+
+`systemd/integration-test/run.sh` builds a privileged `debian:12-slim`
+container with systemd as PID 1, performs the README install steps,
+SIGKILLs shellhost (asserting auto-restart in < 5s), then drives
+stop/start with a pre-spawned terminal to confirm respawn semantics
+work end-to-end. CI runs this in lieu of touching a real Pi.

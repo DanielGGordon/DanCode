@@ -1,0 +1,17 @@
+[Unit]
+Description=DanCode web server (Express + Socket.IO)
+Documentation=https://github.com/DanielGGordon/DanCode
+After=dancode-shellhost.service
+Wants=dancode-shellhost.service
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=2
+ExecStart=/usr/bin/env node /opt/dancode/server/src/index.js
+Environment=DANCODE_SHELLHOST_SOCKET=%h/.dancode/shellhost.sock
+Environment=NODE_ENV=production
+Environment=PORT=3000
+
+[Install]
+WantedBy=default.target

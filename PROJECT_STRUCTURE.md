@@ -4,12 +4,21 @@
 DanCode/
 ├── bin/
 │   ├── check-setup.mjs         # `npm run check:setup` preflight (Node version, build deps, socket-dir writability)
-│   └── dancode-migrate-from-tmux # Phase 9: one-shot script that converts legacy `dancode-*` tmux sessions into ~/.dancode/terminals/<id>/{meta.json,scrollback.log} + appends ids to layout.json; idempotent
+│   ├── dancode-migrate-from-tmux # Phase 9: one-shot script that converts legacy `dancode-*` tmux sessions into ~/.dancode/terminals/<id>/{meta.json,scrollback.log} + appends ids to layout.json; idempotent
+│   └── dancode-healthcheck.mjs # Phase 10: post-deploy verification — shellhost socket reachable, list op responds, throwaway PTY round-trips, server /api/auth/setup/status responds (`npm run healthcheck`)
+├── systemd/                    # Phase 10: `systemd --user` units shipped with the repo
+│   ├── dancode-shellhost.service # Production unit: Type=simple, Restart=on-failure, ExecStart=/usr/bin/env node /opt/dancode/shellhost/src/index.js, Environment=DANCODE_SHELLHOST_SOCKET=%h/.dancode/shellhost.sock
+│   ├── dancode-server.service  # Optional sibling unit for the web server (After=dancode-shellhost.service, Wants=dancode-shellhost.service)
+│   ├── install.sh              # Bash installer: rewrites /opt/dancode placeholder ExecStart to actual repo path via sed, copies units to ~/.config/systemd/user, daemon-reload + enable --now
+│   └── integration-test/       # systemd-in-Docker CI test
+│       ├── Dockerfile          # debian:12-slim + systemd + Node 20 + dancode user with linger pre-enabled
+│       ├── run.sh              # Host-side: builds image, runs container privileged, exec's run-in-container.sh as dancode user
+│       └── run-in-container.sh # In-container: README install → assert active → SIGKILL shellhost → assert auto-restart < 5s → stop/start with pre-spawned terminal → assert respawn semantics
 ├── shellhost/                  # Phase 1+: standalone PTY-owning Node process (dancode-shellhost)
 │   ├── bin/dancode-shellhost.js # CLI entry alias
 │   ├── src/
 │   │   ├── index.js            # Entry: starts a server on ~/.dancode/shellhost.sock with disk-backed scrollback under ~/.dancode/terminals/; drops a pidfile so an orchestrator can SIGKILL it (Phase 5)
-│   │   ├── server.js           # UNIX-socket server + op dispatch (spawn/attach/detach/write/resize/kill/list/inspect/getScrollback/respawn/noteClaudeSession/setBackground)
+│   │   ├── server.js           # UNIX-socket server + op dispatch (spawn/attach/detach/write/resize/kill/list/inspect/getScrollback/respawn/noteClaudeSession/setBackground). Phase 10: close({killPtys:false}) is the default so graceful SIGTERM preserves on-disk meta + scrollback for Phase 5 respawn
 │   │   ├── pty-manager.js      # Owns the in-memory map of live + needs-respawn PTYs; appends PTY output to scrollback write-through; respawn() persists yellow banner + spawns at saved cwd/command. Phase 7: rewrites `claude` → `claude --resume <id>` when meta.claudeSessionId is set; exposes getTty/setClaudeActive/setClaudeSessionId. Phase 8: spawn(background:true) wraps via systemd-run --user --scope --unit=dancode-bg-<id>, setBackground op, kill stops the scope
 │   │   ├── scrollback.js       # Phase 2: ScrollbackStore — append-only `<baseDir>/<id>/scrollback.log` with 1MB rotation + tail read
 │   │   ├── meta-store.js       # Phase 5: MetaStore — atomic per-terminal `<baseDir>/<id>/meta.json` (write/update/read/list/remove) used to reconstruct terminals on shellhost restart
@@ -34,6 +43,7 @@ DanCode/
 │   │   ├── fixtures/fake-claude.mjs # Phase 7: tiny stand-in for the real `claude` binary; sets process.title=claude, touches a session jsonl, sleeps until killed
 │   │   ├── background.test.js  # Phase 8: PTYManager.spawn({background:true}) wraps via systemd-run; setBackground op; kill propagates to systemctl --user stop
 │   │   ├── background-integration.test.js # Phase 8: real-systemd test — SIGKILL shellhost subprocess mid-sleep, assert background command finishes (marker file appears)
+│   │   ├── graceful-shutdown.test.js # Phase 10: SIGTERM (the signal `systemctl --user stop` sends) preserves <baseDir>/<id>/meta.json so the next shellhost boot can load it as an orphan
 │   │   └── integration.test.js # Boots a real shellhost on a temp socket; in-process 2.5MB disk-usage test
 │   ├── package.json
 │   ├── vitest.config.js
@@ -148,7 +158,10 @@ DanCode/
 │   │   ├── auth.test.js        # Auth account setup, login, session management tests
 │   │   ├── projects.test.js    # Project config CRUD, slug generation, validation tests
 │   │   ├── server.test.js      # Server unit tests (routes, auth middleware, project API; boots a real shellhost on a temp socket since Phase 9 removed the tmux fallback)
-│   │   └── migrate-from-tmux.test.js # Phase 9: integration test for bin/dancode-migrate-from-tmux (3 fixture sessions → meta/scrollback/layout, idempotent re-run)
+│   │   ├── migrate-from-tmux.test.js # Phase 9: integration test for bin/dancode-migrate-from-tmux (3 fixture sessions → meta/scrollback/layout, idempotent re-run)
+│   │   ├── healthcheck.test.js # Phase 10: bin/dancode-healthcheck.mjs as a subprocess — green path (shellhost + stub HTTP server), missing socket, 500 from /api/auth/setup/status
+│   │   ├── systemd-unit.test.js # Phase 10: validates systemd/dancode-shellhost.service has Type=simple, Restart=on-failure, ExecStart=/usr/bin/env node …/shellhost/src/index.js, Environment=DANCODE_SHELLHOST_SOCKET=%h/.dancode/shellhost.sock; install.sh dry-run substitutes the repo path; sibling dancode-server.service declares After=
+│   │   └── dev-script.test.js  # Phase 10: locks in `npm run dev` shellhost+server scripts using /tmp/dancode-shellhost-dev.sock so dev doesn't clobber the production socket
 │   ├── .env                    # Midscene.js config (git-ignored): Ollama endpoint, model settings
 │   ├── package.json
 │   ├── playwright.config.js    # Playwright config (Midscene reporter, system Chromium, webServer on :3001)

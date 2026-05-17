@@ -96,13 +96,22 @@ export function createShellhost({ manager } = {}) {
     return socketPath;
   }
 
-  function close() {
+  /**
+   * Tear down the socket server.
+   *
+   * By default this preserves PTYs (and their on-disk meta/scrollback) so a
+   * graceful shutdown via SIGTERM (the signal `systemctl --user stop` sends)
+   * can be recovered from on next boot through Phase 5 respawn. Pass
+   * `{ killPtys: true }` if the caller actively wants to terminate every
+   * PTY — e.g. a test that has finished with its fixture state.
+   */
+  function close({ killPtys = false } = {}) {
     return new Promise((resolve) => {
       for (const sock of connections) {
         try { sock.destroy(); } catch { /* ignore */ }
       }
       connections.clear();
-      ptyManager.killAll();
+      if (killPtys) ptyManager.killAll();
       server.close(() => resolve());
     });
   }
