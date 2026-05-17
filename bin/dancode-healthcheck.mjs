@@ -68,10 +68,28 @@ async function checkShellhostSocketExists() {
 }
 
 /** @returns {Promise<{client: any} | null>} */
+async function tryConnect(client, attempts = 5, delayMs = 200) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      await client.connect();
+      return;
+    } catch (err) {
+      lastErr = err;
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  throw lastErr;
+}
+
 async function checkShellhostListResponds() {
   const client = createShellhostClient({ socketPath });
+  // Swallow socket errors so a transient ECONNREFUSED (socket file present
+  // but bind() not finished yet) doesn't crash the script before our connect
+  // promise gets a chance to retry or reject cleanly.
+  client.on('error', () => { /* recorded elsewhere */ });
   try {
-    await client.connect();
+    await tryConnect(client);
   } catch (err) {
     record('list op responds', false, `connect failed: ${err.message}`);
     try { client.close(); } catch { /* ignore */ }
