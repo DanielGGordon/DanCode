@@ -178,8 +178,8 @@ Human work is confined to:
 
 ---
 
-<!-- PHASE 2 COMPLETE -->
 ## Phase 2: Disk-persisted scrollback
+<!-- PHASE 2 COMPLETE -->
 
 **Delivers**: Every PTY's output is appended to `~/.dancode/terminals/<id>/scrollback.log` as it streams. The log rotates at 1MB (one rotation kept). When a browser reconnects to a still-alive PTY, the last ~50KB of scrollback is replayed before live output resumes — and the replay comes from disk, not from a server-memory ring buffer. After this phase, a browser refresh on a noisy terminal shows the full recent history, not just what's in RAM.
 
@@ -196,8 +196,8 @@ Human work is confined to:
 
 ---
 
-<!-- PHASE 3 COMPLETE -->
 ## Phase 3: Survive web-server restart
+<!-- PHASE 3 COMPLETE -->
 
 **Delivers**: The DanCode server can be killed and restarted without affecting running PTYs. Shellhost keeps owning the PTYs; on startup the server calls `list` against shellhost and re-establishes its in-memory map of terminals. A browser that was connected during the restart auto-reconnects (existing Socket.IO behavior) and resumes the same PTY with no data loss beyond a brief stream gap (covered by Phase 2's replay).
 
@@ -211,10 +211,10 @@ Human work is confined to:
 
 **AI opportunity**: None.
 
-<!-- PHASE 4 COMPLETE -->
 ---
 
 ## Phase 4: Layout persistence + project restore ✅
+<!-- PHASE 4 COMPLETE -->
 
 **Delivers**: Each project gets a `layout.json` describing its terminals (id, cwd, command, claudeSessionId, background), open files (path, pane index, scroll position), and split/tab structure. The server writes this file atomically (write to temp, fsync, rename) every time the layout changes. When a project is opened, the server reads `layout.json` and reconstructs the workspace UI — including which files were open, which terminal was focused, and the split layout. Missing files surface as a yellow warning banner ("File X no longer exists"), not a crash.
 
@@ -233,8 +233,8 @@ Human work is confined to:
 
 ---
 
-<!-- PHASE 5 COMPLETE -->
 ## Phase 5: Pi-reboot recovery (respawn with scrollback banner) ✅
+<!-- PHASE 5 COMPLETE -->
 
 **Delivers**: After the shellhost itself restarts (simulating a Pi reboot via `systemctl --user restart dancode-shellhost`), all known terminals are recoverable. On project open, the server asks shellhost for each terminal in the layout; if the PTY is no longer alive, shellhost re-spawns it at the saved cwd with the saved startup command, prepends a visible banner (`--- prior session ended at <timestamp> ---`) to the new PTY's output buffer using the persisted scrollback, and live output begins. This is the functional equivalent of tmux-resurrect, without tmux.
 
