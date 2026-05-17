@@ -148,7 +148,7 @@ describe('Sidebar', () => {
     })
   })
 
-  it('does not render tmux status dots', () => {
+  it('does not render per-project status dots', () => {
     const { queryByTestId } = render(<Sidebar projects={PROJECTS} currentSlug={null} />)
     for (const p of PROJECTS) {
       expect(queryByTestId(`sidebar-status-${p.slug}`)).toBeNull()

@@ -4,16 +4,11 @@ Express + Socket.io backend for DanCode.
 
 ## What it does
 
-Serves the DanCode web application and manages WebSocket connections for real-time terminal communication. On startup, initializes the TerminalManager and reconciles tmux sessions from any previous run. Serves the compiled React client from `client/dist/` when available, falling back to a Solarized Dark placeholder page.
+Serves the DanCode web application and manages WebSocket connections for real-time terminal communication. On startup, connects to `dancode-shellhost` over a UNIX socket and rebuilds its in-memory terminal map from shellhost's authoritative state (see Phase 3 / 5 recovery flows). Serves the compiled React client from `client/dist/` when available, falling back to a Solarized Dark placeholder page.
 
 All HTTP responses are gzip-compressed via the `compression` middleware. Static assets use a tiered caching strategy: Vite-hashed files in `assets/` get `Cache-Control: public, max-age=31536000, immutable`; `index.html` gets `no-cache` so app updates propagate immediately; `sw.js` gets `no-cache, no-store, must-revalidate`.
 
-Terminals are managed via one of two backends, picked at startup:
-
-1. **shellhost (default for production / `npm run dev`)** — when `DANCODE_SHELLHOST_SOCKET` points to a reachable UNIX socket, the server uses `ShellhostTerminalManager` (see `src/shellhost-terminal-manager.js`). It speaks the length-prefixed JSON wire protocol from `shellhost/src/wire.js`, asks shellhost to spawn/attach/write/kill PTYs, and forwards bytes between Socket.io clients and the shellhost socket. Shellhost owns the PTYs, so a server restart does not affect running shells.
-2. **legacy tmux (fallback for unit tests / environments without a shellhost)** — `TerminalManager` spawns PTYs inside invisible tmux sessions (`dancode-{slug}-{id}`). Processes survive server restarts via tmux. Ring buffer (~50KB) replays on reconnection, repopulated from tmux scrollback on restart. Removed in Phase 9.
-
-Both backends expose the same REST and Socket.io surface (`/api/terminals` + `/terminal/{uuid}` namespace).
+Terminals are managed exclusively via `ShellhostTerminalManager` (see `src/shellhost-terminal-manager.js`). It speaks the length-prefixed JSON wire protocol from `shellhost/src/wire.js`, asks shellhost to spawn/attach/write/kill PTYs, and forwards bytes between Socket.io clients and the shellhost socket. Shellhost owns the PTYs, so a server restart does not affect running shells. The socket path is picked from `DANCODE_SHELLHOST_SOCKET` and defaults to `~/.dancode/shellhost.sock`; `startServer` waits up to 60s for the socket to appear and throws if it never does.
 
 ## Public interface
 
@@ -34,7 +29,7 @@ Both backends expose the same REST and Socket.io surface (`/api/terminals` + `/t
 - **`GET /api/terminals/:id`** — Get a single terminal by UUID. Returns 404 if not found.
 - **`PATCH /api/terminals/:id`** — Update a terminal's label. Accepts `{ label }`. Returns the updated terminal object.
 - **`POST /api/terminals/:id/background`** — Toggle background mode on an existing terminal. Accepts `{ background: boolean }`. The flag is persisted to meta immediately; takes effect on next respawn (does not restart a live PTY). 404 for unknown terminal, 400 for non-boolean body.
-- **`DELETE /api/terminals/:id`** — Kill the PTY, destroy tmux session (or `systemctl --user stop dancode-bg-<id>.scope` for background terminals), and remove metadata. Returns 204.
+- **`DELETE /api/terminals/:id`** — Kill the PTY (or `systemctl --user stop dancode-bg-<id>.scope` for background terminals) and remove its meta + scrollback. Returns 204.
 - **Socket.io** — Listens for WebSocket connections on the default namespace
 - **Socket.io `/terminal/{uuid}`** — Per-terminal WebSocket namespace. On connect, replays ~50KB ring buffer of past output. Accepts `input` and `resize` events. PTY stays alive when all sockets disconnect; output is buffered for replay on reconnect.
 
@@ -43,8 +38,8 @@ Both backends expose the same REST and Socket.io surface (`/api/terminals` + `/t
 - `app` — Express application instance
 - `httpServer` — Node.js HTTP server
 - `io` — Socket.io server instance
-- `terminalManager` — TerminalManager instance (null until `startServer` is called)
-- `startServer(port?, { credentialsPath?, projectsDir?, terminalsDir? })` — Starts the server on the given port (default: 3000). Initializes TerminalManager, reconciles surviving tmux sessions, and sets up WebSocket namespaces. Returns a promise that resolves with the HTTP server.
+- `terminalManager` — ShellhostTerminalManager instance (null until `startServer` is called)
+- `startServer(port?, { credentialsPath?, projectsDir?, layoutsBaseDir?, shellhostSocket? })` — Starts the server on the given port (default: 3000). Connects to dancode-shellhost (defaulting to `~/.dancode/shellhost.sock`; override via the `shellhostSocket` option or `DANCODE_SHELLHOST_SOCKET` env var), recovers existing terminals from shellhost's `list` op, and sets up WebSocket namespaces. Returns a promise that resolves with the HTTP server. Throws if the shellhost socket is not reachable within 60s.
 
 ## Exports (src/auth.js)
 
@@ -86,46 +81,28 @@ Both backends expose the same REST and Socket.io surface (`/api/terminals` + `/t
 - `clearGitignoreCache()` — Clear the gitignore cache (for testing).
 - `getGitignoreCache()` — Get the gitignore cache Map (for testing/inspection).
 
-## Exports (src/tmux.js)
+## Exports (src/shellhost-terminal-manager.js)
 
-Utility functions for managing tmux sessions. DanCode tmux sessions use the `dancode-` prefix and have status bar + pane borders disabled for invisible operation.
+- `ShellhostTerminalManager` — Server-side adapter that fronts a dancode-shellhost over a UNIX socket with the shape `index.js` expects:
+  - `constructor({ socketPath, client? })` — Builds a `createShellhostClient` (or accepts a pre-built one for tests) and wires `output`, `exit`, `error`, and `close` listeners. Output bytes are fanned out to attached Socket.io sockets.
+  - `recover()` — Calls shellhost `list`, rebuilds the in-memory terminal map, and attaches each terminal so live output flows. Used on server boot. Returns the count of recovered terminals (live + needs-respawn).
+  - `create({ projectSlug, label, command, cols, rows, cwd, background })` — Calls shellhost `spawn` and registers the new terminal in the in-memory map. Returns `{ id, projectSlug, label, createdAt, lastActivity, background }`.
+  - `setBackground(id, background)` — Calls shellhost `setBackground` to flip the persisted background flag.
+  - `respawnForProject(slug)` — Asks shellhost to respawn any `needsRespawn` terminals for the given project (Phase 5 Pi-reboot recovery).
+  - `get(id) / list(projectSlug?) / getFresh(id) / listFresh(projectSlug?)` — Synchronous + async getters (the *Fresh variants round-trip through shellhost's `inspect` op for latest `claudeSessionId` + `lastActivity`).
+  - `update(id, { label })` — Updates the in-memory label only (label is server-side state, not persisted via shellhost).
+  - `destroy(id) / destroyAll()` — Calls shellhost `kill` and clears the local entry.
+  - `attach(id, socket) / detach(id, socket) / write(id, data) / resize(id, cols, rows)` — Per-socket plumbing; `attach` replays disk scrollback via shellhost `getScrollback` rather than keeping a server-memory ring.
+  - `reconnect(socketPath)` — Re-points the manager at a new shellhost (used by the test-only restart endpoint).
+- `setupShellhostNamespace(io, getManager)` — Sets up the Socket.io dynamic `/terminal/{uuid}` namespace. Takes a getter so the namespace handler always resolves the live `terminalManager` (important when an in-process test simulates a server restart).
 
-- `sessionName(projectSlug, terminalId)` — Build tmux session name: `dancode-{slug}-{id}`.
-- `createSession(name, { cols, rows, cwd })` — Create a detached tmux session with status/borders disabled.
-- `hasSession(name)` — Check if a tmux session exists. Returns boolean.
-- `killSession(name)` — Kill a tmux session (silent if already dead).
-- `capturePane(name)` — Capture scrollback buffer text from a tmux pane.
-- `sendKeys(name, keys)` — Send keys to a tmux session.
-- `resizePane(name, cols, rows)` — Resize a tmux pane (also ensures pane-border-status is off).
-- `listDancodeSessions()` — List all tmux sessions with `dancode-` prefix.
+## Migration from the legacy tmux backend
 
-## Exports (src/terminal.js) — Legacy, emptied
-
-Module emptied in Phase 2. All exports removed.
-
-## Exports (src/terminal-manager.js)
-
-- `getTerminalsDir()` — Returns the path to `~/.dancode/terminals/`.
-- `RingBuffer` — Ring buffer class using array-of-chunks internally; concatenates only on `getContents()`.
-- `TerminalManager` — Class managing tmux-backed PTY terminal processes:
-  - `constructor(terminalsDir?)` — Create a manager with optional custom metadata directory.
-  - `create({ projectSlug, label, command, cols, rows, cwd })` — Create tmux session, attach node-pty, persist metadata, return `{ id, projectSlug, label, createdAt, lastActivity }`. `lastActivity` is updated on every PTY output event.
-  - `reconcile()` — Reconcile tmux sessions with metadata on startup: reattach orphaned sessions (repopulate ring buffer from scrollback), clean up stale metadata. Returns `{ reattached, cleaned }`.
-  - `get(id)` — Get terminal metadata (no tmux internals). Returns null if not found.
-  - `list(projectSlug?)` — List terminals, optionally filtered by project.
-  - `update(id, { label })` — Update terminal metadata.
-  - `destroy(id)` — Kill PTY, kill tmux session, disconnect sockets, remove metadata file.
-  - `attach(id, socket)` — Attach a WebSocket, replay ring buffer.
-  - `detach(id, socket)` — Detach a WebSocket.
-  - `write(id, data)` — Write to PTY stdin.
-  - `resize(id, cols, rows)` — Resize PTY and tmux pane.
-  - `getTmuxSessionName(id)` — Get the tmux session name for a terminal (for testing/debugging).
-  - `destroyAll()` — Destroy all managed terminals (cleanup).
-- `setupTerminalManagerNamespace(io, manager)` — Sets up Socket.io dynamic namespace matching `/terminal/{uuid}`. Auth middleware validates session tokens. On connection, attaches socket to the terminal, replays buffered output, and routes input/resize events.
+`bin/dancode-migrate-from-tmux` (Phase 9) converts any pre-existing `dancode-*` tmux sessions into the new on-disk format and kills the source sessions. Run it once before starting the new stack against a host that previously ran the tmux-backed build. The script is idempotent — re-runs are no-ops.
 
 ## How it relates to the project
 
-This is the backend entry point. It exposes REST API routes for project CRUD, auth, and terminal management, and manages per-terminal WebSocket connections via TerminalManager.
+This is the backend entry point. It exposes REST API routes for project CRUD, auth, layout persistence, and terminal management, and proxies per-terminal WebSocket connections to `dancode-shellhost`.
 
 ## Testing
 

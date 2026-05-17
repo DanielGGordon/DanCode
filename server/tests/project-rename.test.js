@@ -4,6 +4,9 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { generate } from 'otplib';
+import { createShellhost } from 'dancode-shellhost/src/server.js';
+import { PTYManager } from 'dancode-shellhost/src/pty-manager.js';
+import { ScrollbackStore } from 'dancode-shellhost/src/scrollback.js';
 import { startServer, terminalManager } from '../src/index.js';
 import { clearSessions } from '../src/auth.js';
 import { defaultLayout } from '../src/layout.js';
@@ -14,10 +17,11 @@ const TEST_PASSWORD = 'testpassword123';
 
 describe('PATCH /api/projects/:slug renaming', () => {
   let server;
+  let shellhost;
+  let socketPath;
   let tempDir;
   let credentialsPath;
   let projectsDir;
-  let terminalsDir;
   let layoutsDir;
   let token;
   let projectDir;
@@ -26,16 +30,21 @@ describe('PATCH /api/projects/:slug renaming', () => {
     tempDir = await mkdtemp(join(tmpdir(), 'dancode-rename-test-'));
     credentialsPath = join(tempDir, 'credentials.json');
     projectsDir = join(tempDir, 'projects');
-    terminalsDir = join(tempDir, 'terminals');
     layoutsDir = join(tempDir, 'layouts');
     projectDir = join(tempDir, 'pdir');
     await mkdir(projectDir, { recursive: true });
 
+    socketPath = join(tempDir, 'shellhost.sock');
+    const scrollback = new ScrollbackStore({ baseDir: join(tempDir, 'sb-terminals') });
+    const manager = new PTYManager({ scrollback });
+    shellhost = createShellhost({ manager });
+    await shellhost.listen(socketPath);
+
     server = await startServer(TEST_PORT, {
       credentialsPath,
       projectsDir,
-      terminalsDir,
       layoutsBaseDir: layoutsDir,
+      shellhostSocket: socketPath,
     });
 
     const setupRes = await fetch(`http://localhost:${TEST_PORT}/api/auth/setup`, {
@@ -57,7 +66,9 @@ describe('PATCH /api/projects/:slug renaming', () => {
     if (terminalManager?.destroyAll) {
       try { await terminalManager.destroyAll(); } catch {}
     }
+    if (terminalManager?.close) terminalManager.close();
     if (server) await new Promise((r) => server.close(r));
+    if (shellhost) await shellhost.close();
     clearSessions();
     if (tempDir) await rm(tempDir, { recursive: true, force: true });
   });

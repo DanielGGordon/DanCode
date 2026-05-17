@@ -8,8 +8,17 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { isAccountSetUp, createAccount, verifyLogin, createSession, validateSession, destroySession, getCredentialsPath, startSessionCleanupInterval } from './auth.js';
 import { validateProjectInput, createProject, listProjects, getProject, updateProject, deleteProject, renameProject, getProjectsDir, slugify, isValidSlug } from './projects.js';
-import { TerminalManager, setupTerminalManagerNamespace, getTerminalsDir } from './terminal-manager.js';
 import { ShellhostTerminalManager, setupShellhostNamespace } from './shellhost-terminal-manager.js';
+import { homedir as osHomedir } from 'node:os';
+
+/**
+ * Default shellhost socket path: `${HOME}/.dancode/shellhost.sock`. The dev
+ * script overrides this with /tmp/dancode-shellhost-dev.sock and tests with
+ * a per-suite temp path; both come in via DANCODE_SHELLHOST_SOCKET.
+ */
+function defaultShellhostSocket() {
+  return join(osHomedir(), '.dancode', 'shellhost.sock');
+}
 import { listDirectory, readFileContent, writeFileContent, createDirectory, renameFile, deleteFile, safePath, getFileStats } from './files.js';
 import { defaultLayout, validateLayout, readLayout, writeLayout, removeMissingFiles, getLayoutsBaseDir } from './layout.js';
 
@@ -454,7 +463,7 @@ app.post('/api/projects', async (req, res) => {
   }
 });
 
-// Terminal CRUD endpoints (new direct-PTY path, no tmux)
+// Terminal CRUD endpoints — all PTYs are owned by dancode-shellhost.
 app.post('/api/terminals', async (req, res) => {
   const { projectSlug, label, command, cwd: requestedCwd, background } = req.body || {};
   if (!projectSlug || typeof projectSlug !== 'string') {
@@ -896,69 +905,43 @@ let terminalManagerNamespaceRegistered = false;
 export async function startServer(port = PORT, {
   credentialsPath: credPath,
   projectsDir: projDir,
-  terminalsDir: termDir,
   layoutsBaseDir: layoutBase,
-  reconcileRetryDelay,
   shellhostSocket,
 } = {}) {
   credentialsPath = credPath || getCredentialsPath();
   projectsDir = projDir || getProjectsDir();
   layoutsBaseDir = layoutBase || getLayoutsBaseDir();
 
-  // Phase 1: if a shellhost socket is configured (env var or explicit option),
-  // route new terminals through dancode-shellhost. Otherwise fall back to the
-  // legacy tmux-backed TerminalManager so existing tests keep passing.
-  const sockPath = shellhostSocket || process.env.DANCODE_SHELLHOST_SOCKET || null;
-  // DANCODE_REQUIRE_SHELLHOST=1 disables the legacy tmux fallback entirely. When
-  // set, we poll for the socket much longer and throw if it never appears, so
-  // tests that intentionally exercise shellhost cannot silently regress to tmux.
-  const requireShellhost = process.env.DANCODE_REQUIRE_SHELLHOST === '1';
-  const waitMs = requireShellhost ? 60_000 : 10_000;
-  const shellhostReachable = sockPath ? await waitForShellhost(sockPath, waitMs) : false;
-
-  if (sockPath && shellhostReachable) {
-    terminalManager = new ShellhostTerminalManager({ socketPath: sockPath });
-    // Eagerly establish the client connection so output/exit events flow.
-    await terminalManager.client.connect();
-    // Phase 3: rebuild the in-memory terminal map from shellhost's `list`.
-    // This is the server-restart recovery primitive — PTYs spawned before
-    // the previous server died are still alive in shellhost, and we pick
-    // them back up here without disturbing them.
-    const recovered = await terminalManager.recover();
-    if (recovered > 0) {
-      console.log(`[startup] Recovered ${recovered} terminal${recovered === 1 ? '' : 's'} from shellhost`);
-    }
-    if (!terminalManagerNamespaceRegistered) {
-      // Pass a getter so the namespace handler always resolves the current
-      // module-level `terminalManager` — important when a single Node process
-      // simulates a server restart in tests.
-      setupShellhostNamespace(io, () => terminalManager);
-      terminalManagerNamespaceRegistered = true;
-    }
-    console.log(`[startup] Terminals backed by shellhost at ${sockPath}`);
-  } else {
-    if (sockPath && !shellhostReachable) {
-      if (requireShellhost) {
-        throw new Error(`[startup] DANCODE_REQUIRE_SHELLHOST=1 but shellhost socket ${sockPath} was not reachable after ${waitMs}ms`);
-      }
-      console.warn(`[startup] Shellhost socket ${sockPath} not reachable; falling back to legacy tmux backend`);
-    }
-    // Set up TerminalManager (PTY backed by invisible tmux sessions)
-    const terminalsDir = termDir || getTerminalsDir();
-    const tmOpts = reconcileRetryDelay !== undefined ? { reconcileRetryDelay } : {};
-    terminalManager = new TerminalManager(terminalsDir, tmOpts);
-
-    // Reconcile: reattach to surviving tmux sessions from a previous run
-    const { reattached, cleaned } = await terminalManager.reconcile();
-    if (reattached > 0 || cleaned > 0) {
-      console.log(`[startup] Reconciled terminals: ${reattached} reattached, ${cleaned} stale cleaned`);
-    }
-
-    if (!terminalManagerNamespaceRegistered) {
-      setupTerminalManagerNamespace(io, terminalManager);
-      terminalManagerNamespaceRegistered = true;
-    }
+  // dancode-shellhost is the only terminal backend; wait up to 60s for the
+  // socket to appear (production runs supervised by systemd; tests boot a
+  // shellhost in beforeAll). If it never appears, fail fast.
+  const sockPath = shellhostSocket || process.env.DANCODE_SHELLHOST_SOCKET
+    || defaultShellhostSocket();
+  const waitMs = 60_000;
+  const shellhostReachable = await waitForShellhost(sockPath, waitMs);
+  if (!shellhostReachable) {
+    throw new Error(`[startup] dancode-shellhost socket ${sockPath} was not reachable after ${waitMs}ms`);
   }
+
+  terminalManager = new ShellhostTerminalManager({ socketPath: sockPath });
+  // Eagerly establish the client connection so output/exit events flow.
+  await terminalManager.client.connect();
+  // Phase 3: rebuild the in-memory terminal map from shellhost's `list`.
+  // This is the server-restart recovery primitive — PTYs spawned before
+  // the previous server died are still alive in shellhost, and we pick
+  // them back up here without disturbing them.
+  const recovered = await terminalManager.recover();
+  if (recovered > 0) {
+    console.log(`[startup] Recovered ${recovered} terminal${recovered === 1 ? '' : 's'} from shellhost`);
+  }
+  if (!terminalManagerNamespaceRegistered) {
+    // Pass a getter so the namespace handler always resolves the current
+    // module-level `terminalManager` — important when a single Node process
+    // simulates a server restart in tests.
+    setupShellhostNamespace(io, () => terminalManager);
+    terminalManagerNamespaceRegistered = true;
+  }
+  console.log(`[startup] Terminals backed by shellhost at ${sockPath}`);
 
   // Start hourly cleanup of expired sessions (30-day TTL)
   startSessionCleanupInterval();
