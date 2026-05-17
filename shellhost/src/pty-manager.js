@@ -142,22 +142,29 @@ export class PTYManager {
     let file;
     let args;
     if (background) {
-      // Wrap in a transient systemd user scope so the underlying process
-      // survives shellhost restarts (the scope keeps running; on next attach
-      // we can re-spawn against the same unit name and re-acquire stdio).
+      // Wrap the shell command in a transient systemd user scope, then in
+      // `setsid --wait` so the user command runs in its own session (no
+      // controlling terminal). When shellhost is killed the PTY closes; the
+      // kernel sends SIGHUP to the foreground process group of the now-dead
+      // controlling terminal, but the user command — being in a different
+      // session — is not in that group, so it survives until it exits or is
+      // explicitly stopped via `systemctl --user stop dancode-bg-<id>`.
       file = 'systemd-run';
       const wrapperArgs = [
         '--user',
         '--scope',
-        '--pty',
         '--quiet',
         `--unit=${backgroundUnitName(id)}`,
+        'setsid',
+        '--wait',
         shellPath,
       ];
       if (command && typeof command === 'string' && command.length > 0) {
-        wrapperArgs.push('-lc', command);
+        wrapperArgs.push('-lc', `trap '' HUP; ${command}`);
       } else {
-        wrapperArgs.push('-l');
+        // Background mode without an explicit command is unusual but
+        // supported: launch an interactive login shell in the new session.
+        wrapperArgs.push('-il');
       }
       args = wrapperArgs;
     } else if (command && typeof command === 'string' && command.length > 0) {
@@ -428,7 +435,9 @@ export class PTYManager {
     // running until we explicitly stop it.
     if (wasBackground) {
       try {
-        this._runSystemctl(['--user', 'stop', backgroundUnitName(id)]);
+        // `.scope` suffix is required: `systemctl stop foo` defaults to
+        // `foo.service`, which would silently no-op for our scope unit.
+        this._runSystemctl(['--user', 'stop', `${backgroundUnitName(id)}.scope`]);
       } catch { /* best effort */ }
     }
     this.terminals.delete(id);

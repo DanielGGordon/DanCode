@@ -8,8 +8,8 @@ DanCode/
 │   ├── bin/dancode-shellhost.js # CLI entry alias
 │   ├── src/
 │   │   ├── index.js            # Entry: starts a server on ~/.dancode/shellhost.sock with disk-backed scrollback under ~/.dancode/terminals/; drops a pidfile so an orchestrator can SIGKILL it (Phase 5)
-│   │   ├── server.js           # UNIX-socket server + op dispatch (spawn/attach/detach/write/resize/kill/list/inspect/getScrollback/respawn)
-│   │   ├── pty-manager.js      # Owns the in-memory map of live + needs-respawn PTYs; appends PTY output to scrollback write-through; respawn() persists yellow banner + spawns at saved cwd/command
+│   │   ├── server.js           # UNIX-socket server + op dispatch (spawn/attach/detach/write/resize/kill/list/inspect/getScrollback/respawn/setBackground)
+│   │   ├── pty-manager.js      # Owns the in-memory map of live + needs-respawn PTYs; appends PTY output to scrollback write-through; respawn() persists yellow banner + spawns at saved cwd/command; Phase 8: spawn(background:true) wraps via systemd-run --user --scope --unit=dancode-bg-<id>, kill stops the scope
 │   │   ├── scrollback.js       # Phase 2: ScrollbackStore — append-only `<baseDir>/<id>/scrollback.log` with 1MB rotation + tail read
 │   │   ├── meta-store.js       # Phase 5: MetaStore — atomic per-terminal `<baseDir>/<id>/meta.json` (write/update/read/list/remove) used to reconstruct terminals on shellhost restart
 │   │   ├── client.js           # Client library used by dancode-server to call shellhost
@@ -23,6 +23,8 @@ DanCode/
 │   │   ├── meta-store.test.js  # Phase 5: MetaStore unit tests (atomic write, read, list, remove, malformed-file skip)
 │   │   ├── respawn.test.js     # Phase 5: PTYManager loadOrphans/respawn unit tests; periodic lastActiveAt flush
 │   │   ├── respawn-integration.test.js # Phase 5: spawn → write sentinel → SIGKILL shellhost → fresh shellhost on same socket → respawn → assert new PID, banner emitted, scrollback + cwd preserved
+│   │   ├── background.test.js  # Phase 8: PTYManager.spawn({background:true}) wraps via systemd-run; setBackground op; kill propagates to systemctl --user stop
+│   │   ├── background-integration.test.js # Phase 8: real-systemd test — SIGKILL shellhost subprocess mid-sleep, assert background command finishes (marker file appears)
 │   │   └── integration.test.js # Boots a real shellhost on a temp socket; in-process 2.5MB disk-usage test
 │   ├── package.json
 │   ├── vitest.config.js
@@ -70,7 +72,8 @@ DanCode/
 │   └── README.md
 ├── docs/
 │   ├── PRD.md                  # Product requirements document
-│   └── layout-schema.md        # Phase 4: per-project layout.json schema (terminals, openFiles, splits, focusedPane)
+│   ├── layout-schema.md        # Phase 4: per-project layout.json schema (terminals, openFiles, splits, focusedPane)
+│   └── background-mode.md      # Phase 8: when to use background mode, how the systemd-scope wrapping works, caveats
 ├── plans/
 │   ├── dancode-mvp.md          # MVP implementation plan
 │   └── dancode-future-phases.md
@@ -123,6 +126,7 @@ DanCode/
 │   │   │   └── shellhost-restart.spec.js  # Phase 5: SIGKILL shellhost via /test-only/restart-shellhost → reload → both terminals re-appear with prior-session banner + prior sentinel in DOM
 │   │   ├── shellhost-integration.test.js # Phase 1+2: server <-> shellhost integration over UNIX socket (incl. disk replay on reconnect)
 │   │   ├── shellhost-restart.test.js     # Phase 3: ShellhostTerminalManager.recover() + startServer() list-based recovery; data-race stress (1MB output during restart cycle)
+│   │   ├── background.test.js  # Phase 8: HTTP API — POST /api/terminals with background:true; POST /api/terminals/:id/background toggle; DELETE invokes systemctl --user stop on the scope
 │   │   ├── layout.test.js      # Phase 4: layout module — defaultLayout, validateLayout, atomic writeLayout under concurrency, removeMissingFiles
 │   │   ├── layout-api.test.js  # Phase 4: GET/PUT /api/projects/:slug/layout integration (20-parallel-PUT non-torn assertion, missingFiles annotation, schema rejection)
 │   │   ├── project-rename.test.js # Phase 4: PATCH renames slug + moves layout dir; 409 on conflict; idempotent same-name rename

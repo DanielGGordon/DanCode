@@ -121,7 +121,7 @@ describe('Background mode: systemd-run command wrapping', () => {
     if (baseDir) await rm(baseDir, { recursive: true, force: true });
   });
 
-  it('background spawn wraps the command via systemd-run --user --scope --pty --unit=dancode-bg-<id>', async () => {
+  it('background spawn wraps the command via systemd-run --user --scope --unit=dancode-bg-<id>', async () => {
     env = await setup(baseDir);
     const meta = env.manager.spawn({
       projectSlug: 'p',
@@ -132,17 +132,20 @@ describe('Background mode: systemd-run command wrapping', () => {
     expect(env.spawn.created).toHaveLength(1);
     const { file, args } = env.spawn.created[0];
     expect(file).toBe('systemd-run');
-    expect(args.slice(0, 5)).toEqual([
+    expect(args.slice(0, 4)).toEqual([
       '--user',
       '--scope',
-      '--pty',
       '--quiet',
       `--unit=dancode-bg-${meta.id}`,
     ]);
-    // After the unit flag the wrapper should invoke a shell to run the command,
-    // mirroring the non-background spawn that uses `$SHELL -lc <command>`.
+    // The wrapper must place the user command in its own session (via
+    // `setsid --wait`) so the kernel does not deliver SIGHUP from a closed
+    // controlling terminal when shellhost dies.
+    expect(args).toContain('setsid');
+    expect(args).toContain('--wait');
     expect(args).toContain('-lc');
-    expect(args[args.length - 1]).toBe('sleep 30');
+    // The shell command also adds an explicit `trap '' HUP` belt-and-braces.
+    expect(args[args.length - 1]).toMatch(/trap '' HUP;.*sleep 30/);
   });
 
   it('non-background spawn does NOT use systemd-run', async () => {
@@ -158,8 +161,9 @@ describe('Background mode: systemd-run command wrapping', () => {
     const { file, args } = env.spawn.created[0];
     expect(file).toBe('systemd-run');
     expect(args).toContain(`--unit=dancode-bg-${meta.id}`);
-    // Login shell: arguments should include `-l` for the wrapped shell.
-    expect(args).toContain('-l');
+    // Interactive login shell uses `-il` so the prompt still shows when
+    // foregrounded. (Plain `-l` would exit if stdin is non-interactive.)
+    expect(args.some((a) => a === '-il' || a === '-i')).toBe(true);
   });
 });
 
@@ -225,7 +229,7 @@ describe('Background mode: kill propagates to systemd scope', () => {
     if (baseDir) await rm(baseDir, { recursive: true, force: true });
   });
 
-  it('kill on a background terminal invokes systemctl --user stop dancode-bg-<id>', async () => {
+  it('kill on a background terminal invokes systemctl --user stop dancode-bg-<id>.scope', async () => {
     env = await setup(baseDir);
     const meta = env.manager.spawn({
       projectSlug: 'p',
@@ -236,7 +240,7 @@ describe('Background mode: kill propagates to systemd scope', () => {
     const ok = env.manager.kill(meta.id);
     expect(ok).toBe(true);
     expect(env.systemctlCalls).toHaveLength(1);
-    expect(env.systemctlCalls[0]).toEqual(['--user', 'stop', `dancode-bg-${meta.id}`]);
+    expect(env.systemctlCalls[0]).toEqual(['--user', 'stop', `dancode-bg-${meta.id}.scope`]);
   });
 
   it('kill on a non-background terminal does NOT invoke systemctl', async () => {
@@ -258,6 +262,6 @@ describe('Background mode: kill propagates to systemd scope', () => {
     env.manager.loadOrphans();
     env.manager.kill('orphan-bg-kill');
     expect(env.systemctlCalls).toHaveLength(1);
-    expect(env.systemctlCalls[0]).toEqual(['--user', 'stop', 'dancode-bg-orphan-bg-kill']);
+    expect(env.systemctlCalls[0]).toEqual(['--user', 'stop', 'dancode-bg-orphan-bg-kill.scope']);
   });
 });

@@ -29,11 +29,12 @@ Both backends expose the same REST and Socket.io surface (`/api/terminals` + `/t
 - **`POST /api/files/mkdir`** — Create directory. Accepts `{ path, project }`.
 - **`POST /api/files/rename`** — Rename/move. Accepts `{ oldPath, newPath, project }`.
 - **`DELETE /api/files?path=<path>&project=<slug>`** — Delete file or directory.
-- **`POST /api/terminals`** — Create a tmux-backed terminal. Accepts `{ projectSlug, label, command, cwd }`. Creates a tmux session, spawns `$SHELL` inside it, attaches node-pty for I/O relay. Returns 201 with `{ id, projectSlug, label, createdAt, lastActivity }`. Metadata (including tmuxSessionName) persisted to `~/.dancode/terminals/{id}.json`. Tmux details are not exposed in API responses.
-- **`GET /api/terminals?project=<slug>`** — List terminals, optionally filtered by project slug. Returns a JSON array with `lastActivity` timestamp.
+- **`POST /api/terminals`** — Create a terminal. Accepts `{ projectSlug, label, command, cwd, background? }`. When `background: true`, shellhost wraps the command in a transient `systemd --user --scope --unit=dancode-bg-<id>` so it survives shellhost restarts (see `docs/background-mode.md`). Returns 201 with `{ id, projectSlug, label, createdAt, lastActivity, background }`.
+- **`GET /api/terminals?project=<slug>`** — List terminals, optionally filtered by project slug. Returns a JSON array with `lastActivity` and `background` flag.
 - **`GET /api/terminals/:id`** — Get a single terminal by UUID. Returns 404 if not found.
 - **`PATCH /api/terminals/:id`** — Update a terminal's label. Accepts `{ label }`. Returns the updated terminal object.
-- **`DELETE /api/terminals/:id`** — Kill the PTY, destroy tmux session, and remove metadata. Returns 204.
+- **`POST /api/terminals/:id/background`** — Toggle background mode on an existing terminal. Accepts `{ background: boolean }`. The flag is persisted to meta immediately; takes effect on next respawn (does not restart a live PTY). 404 for unknown terminal, 400 for non-boolean body.
+- **`DELETE /api/terminals/:id`** — Kill the PTY, destroy tmux session (or `systemctl --user stop dancode-bg-<id>.scope` for background terminals), and remove metadata. Returns 204.
 - **Socket.io** — Listens for WebSocket connections on the default namespace
 - **Socket.io `/terminal/{uuid}`** — Per-terminal WebSocket namespace. On connect, replays ~50KB ring buffer of past output. Accepts `input` and `resize` events. PTY stays alive when all sockets disconnect; output is buffered for replay on reconnect.
 

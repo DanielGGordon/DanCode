@@ -233,6 +233,6 @@ describe('background-mode HTTP API', () => {
     });
     expect(del.status).toBe(204);
     // The systemctl runner was invoked for this terminal's scope.
-    expect(systemctlCalls).toContainEqual(['--user', 'stop', `dancode-bg-${t.id}`]);
+    expect(systemctlCalls).toContainEqual(['--user', 'stop', `dancode-bg-${t.id}.scope`]);
   });
 });
