@@ -319,7 +319,7 @@ Human work is confined to:
 
 <!-- PARALLEL 9,10 -->
 
-## Phase 9: tmux migration script + tmux code removal
+## Phase 9: tmux migration script + tmux code removal ✅
 
 **Delivers**: A `bin/dancode-migrate-from-tmux` script captures the current state of any `dancode-*` tmux sessions and converts them into the new on-disk format. After the script runs, the legacy tmux backend code is removed from the codebase — `server/src/tmux.js`, the reconcile race logic in `terminal-manager.js`, `recover-terminals.mjs`, tmux mentions in `package.json` system-deps docs, and tmux-resurrect/-continuum references — leaving only the new shellhost path.
 
