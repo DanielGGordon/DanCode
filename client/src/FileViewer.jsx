@@ -1,325 +1,267 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-
-// highlight.js core + languages are dynamically imported on first use for code splitting
-let hljsCache = null
-function loadHighlightJs() {
-  if (hljsCache) return Promise.resolve(hljsCache)
-  return Promise.all([
-    import('highlight.js/lib/core'),
-    import('highlight.js/styles/base16/solarized-dark.css'),
-    import('highlight.js/lib/languages/javascript'),
-    import('highlight.js/lib/languages/typescript'),
-    import('highlight.js/lib/languages/python'),
-    import('highlight.js/lib/languages/json'),
-    import('highlight.js/lib/languages/css'),
-    import('highlight.js/lib/languages/xml'),
-    import('highlight.js/lib/languages/markdown'),
-    import('highlight.js/lib/languages/bash'),
-    import('highlight.js/lib/languages/yaml'),
-    import('highlight.js/lib/languages/go'),
-    import('highlight.js/lib/languages/rust'),
-    import('highlight.js/lib/languages/java'),
-    import('highlight.js/lib/languages/c'),
-    import('highlight.js/lib/languages/cpp'),
-    import('highlight.js/lib/languages/sql'),
-    import('highlight.js/lib/languages/diff'),
-    import('highlight.js/lib/languages/ini'),
-    import('highlight.js/lib/languages/plaintext'),
-  ]).then(([coreMod, , javascript, typescript, python, json, css, xml, markdown, bash, yaml, go, rust, java, c, cpp, sql, diff, ini, plaintext]) => {
-    const hljs = coreMod.default
-    hljs.registerLanguage('javascript', javascript.default)
-    hljs.registerLanguage('typescript', typescript.default)
-    hljs.registerLanguage('python', python.default)
-    hljs.registerLanguage('json', json.default)
-    hljs.registerLanguage('css', css.default)
-    hljs.registerLanguage('xml', xml.default)
-    hljs.registerLanguage('markdown', markdown.default)
-    hljs.registerLanguage('bash', bash.default)
-    hljs.registerLanguage('yaml', yaml.default)
-    hljs.registerLanguage('go', go.default)
-    hljs.registerLanguage('rust', rust.default)
-    hljs.registerLanguage('java', java.default)
-    hljs.registerLanguage('c', c.default)
-    hljs.registerLanguage('cpp', cpp.default)
-    hljs.registerLanguage('sql', sql.default)
-    hljs.registerLanguage('diff', diff.default)
-    hljs.registerLanguage('ini', ini.default)
-    hljs.registerLanguage('plaintext', plaintext.default)
-    hljsCache = hljs
-    return hljs
-  })
-}
-
-// Map file extensions to highlight.js language names
-const EXT_TO_LANG = {
-  js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
-  ts: 'typescript', tsx: 'typescript',
-  py: 'python',
-  json: 'json',
-  css: 'css',
-  html: 'xml', htm: 'xml', svg: 'xml', xml: 'xml',
-  md: 'markdown',
-  sh: 'bash', bash: 'bash', zsh: 'bash',
-  yml: 'yaml', yaml: 'yaml',
-  go: 'go',
-  rs: 'rust',
-  java: 'java',
-  c: 'c', h: 'c',
-  cpp: 'cpp', cc: 'cpp', cxx: 'cpp', hpp: 'cpp',
-  sql: 'sql',
-  diff: 'diff', patch: 'diff',
-  ini: 'ini', toml: 'ini', cfg: 'ini', conf: 'ini', env: 'ini',
-}
-
-function detectLanguage(filePath) {
-  const ext = filePath.split('.').pop()?.toLowerCase()
-  return EXT_TO_LANG[ext] || null
-}
+import { EditorState, Compartment } from '@codemirror/state'
+import { EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection, rectangularSelection, crosshairCursor, highlightActiveLineGutter } from '@codemirror/view'
+import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
+import { searchKeymap, search, openSearchPanel } from '@codemirror/search'
+import { syntaxHighlighting, defaultHighlightStyle, bracketMatching, indentOnInput, foldKeymap, foldGutter } from '@codemirror/language'
+import { closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete'
+import { detectLanguageName, getLanguageExtension } from './editor/language.js'
 
 function getFileName(filePath) {
   return filePath.split('/').pop() || filePath
 }
 
+/**
+ * Build a URL for the per-project file API. Each path segment is encoded
+ * but the '/' separators are preserved so the wildcard route matches.
+ */
+export function buildFileUrl(slug, filePath) {
+  const segs = String(filePath).split('/').map(encodeURIComponent).join('/')
+  return `/api/projects/${encodeURIComponent(slug)}/files/${segs}`
+}
+
+// Shared base extensions that every editor instance gets, regardless of
+// language. Defined once at module scope so EditorState.create is cheap.
+function baseExtensions() {
+  return [
+    lineNumbers(),
+    highlightActiveLineGutter(),
+    foldGutter(),
+    drawSelection(),
+    rectangularSelection(),
+    crosshairCursor(),
+    highlightActiveLine(),
+    history(),
+    indentOnInput(),
+    bracketMatching(),
+    closeBrackets(),
+    syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+    search({ top: true }),
+    EditorView.lineWrapping,
+    keymap.of([
+      ...closeBracketsKeymap,
+      ...defaultKeymap,
+      ...searchKeymap,
+      ...historyKeymap,
+      ...foldKeymap,
+      ...completionKeymap,
+      indentWithTab,
+    ]),
+  ]
+}
+
 export default function FileViewer({ token, slug, filePath, focused, onFocus }) {
-  const [content, setContent] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [status, setStatus] = useState('loading') // 'loading' | 'ready' | 'error'
   const [error, setError] = useState(null)
-  const [editing, setEditing] = useState(false)
-  const [editContent, setEditContent] = useState('')
   const [saving, setSaving] = useState(false)
-  const textareaRef = useRef(null)
-  const [hljs, setHljs] = useState(null)
+  const [dirty, setDirty] = useState(false)
+  const hostRef = useRef(null)
+  const viewRef = useRef(null)
+  const languageCompartment = useRef(new Compartment())
+  // Stash the latest doc + handlers in refs so we can call them from CM
+  // callbacks without recreating the editor.
+  const latestRef = useRef({ token, slug, filePath, dirty: false })
 
-  const language = useMemo(() => detectLanguage(filePath), [filePath])
+  const language = useMemo(() => detectLanguageName(filePath), [filePath])
 
-  // Load highlight.js on mount
   useEffect(() => {
-    let cancelled = false
-    loadHighlightJs().then((instance) => {
-      if (!cancelled) setHljs(instance)
-    })
-    return () => { cancelled = true }
-  }, [])
+    latestRef.current.token = token
+    latestRef.current.slug = slug
+    latestRef.current.filePath = filePath
+  }, [token, slug, filePath])
 
-  // Fetch file content
-  const fetchContent = useCallback(async () => {
-    if (!token || !slug || !filePath) return
-    setLoading(true)
-    setError(null)
+  // saveNow is stable; it reads the latest doc straight from the live view
+  // and POSTs through the per-project file route. It is safe to call from
+  // keybindings or blur handlers any time after mount.
+  const saveNow = useCallback(async () => {
+    const view = viewRef.current
+    const { token: tk, slug: sl, filePath: fp } = latestRef.current
+    if (!view || !tk || !sl || !fp) return false
+    const content = view.state.doc.toString()
+    setSaving(true)
     try {
-      const params = new URLSearchParams({ path: filePath, project: slug })
-      const res = await fetch(`/api/files/read?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await fetch(buildFileUrl(sl, fp), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${tk}`,
+        },
+        body: JSON.stringify({ content }),
       })
       if (!res.ok) {
         const text = await res.text()
         throw new Error(text || `HTTP ${res.status}`)
       }
-      const data = await res.json()
-      setContent(data.content)
+      latestRef.current.dirty = false
+      setDirty(false)
+      return true
     } catch (err) {
-      setError(err.message || 'Failed to load file')
-    } finally {
-      setLoading(false)
-    }
-  }, [token, slug, filePath])
-
-  useEffect(() => {
-    fetchContent()
-  }, [fetchContent])
-
-  // Highlighted HTML
-  const highlightedHtml = useMemo(() => {
-    if (content == null) return null
-    if (!hljs) {
-      // hljs not loaded yet — return escaped plain text
-      return content
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-    }
-    try {
-      if (language) {
-        return hljs.highlight(content, { language }).value
-      }
-      return hljs.highlightAuto(content).value
-    } catch {
-      // Fallback to escaped plain text
-      return content
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-    }
-  }, [content, language, hljs])
-
-  const lineCount = useMemo(() => {
-    if (content == null) return 0
-    return content.split('\n').length
-  }, [content])
-
-  const handleEdit = useCallback(() => {
-    setEditContent(content || '')
-    setEditing(true)
-    setTimeout(() => textareaRef.current?.focus(), 0)
-  }, [content])
-
-  const handleCancel = useCallback(() => {
-    setEditing(false)
-    setEditContent('')
-  }, [])
-
-  const handleSave = useCallback(async () => {
-    if (!token || !slug || !filePath) return
-    setSaving(true)
-    try {
-      const res = await fetch('/api/files/write', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ path: filePath, content: editContent, project: slug }),
-      })
-      if (!res.ok) throw new Error('Save failed')
-      setContent(editContent)
-      setEditing(false)
-      setEditContent('')
-    } catch (err) {
-      setError(err.message)
+      setError(err.message || 'Save failed')
+      return false
     } finally {
       setSaving(false)
     }
-  }, [token, slug, filePath, editContent])
+  }, [])
 
-  // Keyboard shortcut: Ctrl+S to save in edit mode
+  // Fetch file content + create the EditorView once both are ready.
   useEffect(() => {
-    if (!editing) return
-    const handler = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault()
-        handleSave()
+    let cancelled = false
+    if (!token || !slug || !filePath) return
+
+    setStatus('loading')
+    setError(null)
+    setDirty(false)
+
+    async function bootstrap() {
+      let content = ''
+      try {
+        const res = await fetch(buildFileUrl(slug, filePath), {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok) {
+          const text = await res.text()
+          throw new Error(text || `HTTP ${res.status}`)
+        }
+        const data = await res.json()
+        content = data.content ?? ''
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message || 'Failed to load file')
+          setStatus('error')
+        }
+        return
       }
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        handleCancel()
+      if (cancelled) return
+
+      const langExt = await getLanguageExtension(language)
+      if (cancelled) return
+
+      // Tear down a previous view (file switch) before mounting a new one.
+      if (viewRef.current) {
+        viewRef.current.destroy()
+        viewRef.current = null
       }
+
+      const ctrlS = {
+        // Ctrl/Cmd-S → save. Returning true tells CM to swallow the event.
+        key: 'Mod-s',
+        preventDefault: true,
+        run: () => {
+          saveNow()
+          return true
+        },
+      }
+
+      const updateListener = EditorView.updateListener.of((update) => {
+        if (update.docChanged) {
+          latestRef.current.dirty = true
+          setDirty(true)
+        }
+      })
+
+      const blurHandler = EditorView.domEventHandlers({
+        blur: () => {
+          if (latestRef.current.dirty) {
+            saveNow()
+          }
+          return false
+        },
+        focus: () => {
+          if (typeof onFocus === 'function') onFocus()
+          return false
+        },
+      })
+
+      const extensions = [
+        ...baseExtensions(),
+        keymap.of([ctrlS]),
+        updateListener,
+        blurHandler,
+        languageCompartment.current.of(langExt ? [langExt] : []),
+      ]
+
+      if (!hostRef.current) return
+      const state = EditorState.create({ doc: content, extensions })
+      const view = new EditorView({ state, parent: hostRef.current })
+      viewRef.current = view
+      setStatus('ready')
     }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [editing, handleSave, handleCancel])
 
-  if (loading) {
-    return (
-      <div
-        data-testid="file-viewer"
-        className="flex flex-col w-full h-full bg-base03"
-        onClick={onFocus}
-      >
-        <div className="flex items-center justify-center flex-1">
-          <div className="w-5 h-5 border-2 border-base01/30 border-t-blue rounded-full animate-spin" />
-        </div>
-      </div>
-    )
-  }
+    bootstrap()
 
-  if (error && content == null) {
-    return (
-      <div
-        data-testid="file-viewer"
-        className="flex flex-col w-full h-full bg-base03"
-        onClick={onFocus}
-      >
-        <div className="flex items-center justify-center flex-1 p-4">
-          <div className="text-center">
-            <div className="text-red text-sm font-medium mb-1">Failed to load file</div>
-            <div className="text-base01 text-xs">{error}</div>
-            <button
-              onClick={fetchContent}
-              className="mt-2 px-3 py-1 text-xs text-blue border border-blue/50 rounded hover:bg-blue/10 transition-colors"
-            >
-              Retry
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
+    return () => {
+      cancelled = true
+    }
+    // We intentionally rebuild the editor when filePath/slug/token change to
+    // load fresh content. language is derived from filePath so it's covered.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, slug, filePath])
+
+  // Destroy on unmount
+  useEffect(() => () => {
+    if (viewRef.current) {
+      viewRef.current.destroy()
+      viewRef.current = null
+    }
+  }, [])
+
+  const handleOpenFind = useCallback(() => {
+    if (viewRef.current) {
+      openSearchPanel(viewRef.current)
+      viewRef.current.focus()
+    }
+  }, [])
 
   return (
     <div
       data-testid="file-viewer"
+      data-language={language || 'plain'}
+      data-dirty={dirty ? 'true' : 'false'}
       className="flex flex-col w-full h-full bg-base03"
       onClick={onFocus}
     >
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 px-3 py-1">
-        {language && (
-          <span className="text-[10px] text-base01 bg-base02 px-1.5 py-0.5 rounded">
-            {language}
-          </span>
+      <div className="flex items-center gap-2 px-3 py-1 shrink-0">
+        <span className="text-xs text-base0 truncate" data-testid="file-viewer-name">
+          {getFileName(filePath)}
+        </span>
+        <span className="text-[10px] text-base01 bg-base02 px-1.5 py-0.5 rounded" data-testid="file-viewer-language">
+          {language || 'plain'}
+        </span>
+        {dirty && (
+          <span className="text-[10px] text-yellow" data-testid="file-viewer-dirty">●</span>
+        )}
+        {saving && (
+          <span className="text-[10px] text-base01" data-testid="file-viewer-saving">saving…</span>
         )}
         {error && (
-          <span className="text-[10px] text-red">{error}</span>
+          <span className="text-[10px] text-red" data-testid="file-viewer-error" title={error}>{error}</span>
         )}
         <div className="ml-auto flex gap-1">
-          {editing ? (
-            <>
-              <button
-                data-testid="file-viewer-save"
-                onClick={handleSave}
-                disabled={saving}
-                className="px-2 py-0.5 text-xs text-base03 bg-blue rounded hover:bg-blue/80 transition-colors disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : 'Save'}
-              </button>
-              <button
-                data-testid="file-viewer-cancel"
-                onClick={handleCancel}
-                className="px-2 py-0.5 text-xs text-base0 border border-base01/30 rounded hover:bg-base02 transition-colors"
-              >
-                Cancel
-              </button>
-            </>
-          ) : (
-            <button
-              data-testid="file-viewer-edit"
-              onClick={handleEdit}
-              className="px-2 py-0.5 text-xs text-base0 border border-base01/30 rounded hover:bg-base02 transition-colors"
-            >
-              Edit
-            </button>
-          )}
+          <button
+            data-testid="file-viewer-find"
+            onClick={handleOpenFind}
+            className="px-2 py-0.5 text-xs text-base0 border border-base01/30 rounded hover:bg-base02 transition-colors"
+          >
+            Find
+          </button>
+          <button
+            data-testid="file-viewer-save"
+            onClick={saveNow}
+            disabled={saving}
+            className="px-2 py-0.5 text-xs text-base03 bg-blue rounded hover:bg-blue/80 transition-colors disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
         </div>
       </div>
-
-      {/* Content */}
-      {editing ? (
-        <textarea
-          ref={textareaRef}
-          data-testid="file-viewer-editor"
-          value={editContent}
-          onChange={(e) => setEditContent(e.target.value)}
-          className="flex-1 min-h-0 w-full bg-base03 text-base0 text-xs font-mono p-3 resize-none outline-none border-none"
-          spellCheck={false}
-        />
-      ) : (
-        <div className="flex-1 min-h-0 overflow-auto">
-          <div className="flex text-xs font-mono leading-5">
-            {/* Line numbers */}
-            <div className="shrink-0 text-right pr-3 pl-2 text-base01/60 select-none border-r border-base01/20 sticky left-0 bg-base03">
-              {Array.from({ length: lineCount }, (_, i) => (
-                <div key={i + 1}>{i + 1}</div>
-              ))}
-            </div>
-            {/* Code content */}
-            <pre className="flex-1 min-w-0 pl-3 pr-3 overflow-x-auto">
-              <code
-                data-testid="file-viewer-code"
-                className="hljs"
-                dangerouslySetInnerHTML={{ __html: highlightedHtml }}
-              />
-            </pre>
-          </div>
+      <div
+        ref={hostRef}
+        data-testid="file-viewer-editor"
+        className="flex-1 min-h-0 overflow-hidden"
+      />
+      {status === 'loading' && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="w-5 h-5 border-2 border-base01/30 border-t-blue rounded-full animate-spin" />
         </div>
       )}
     </div>
