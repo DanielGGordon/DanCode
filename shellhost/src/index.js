@@ -53,10 +53,15 @@ export async function main() {
 
   // Phase 7: periodic Claude-aware inspection.
   const detectorIntervalMs = Number(process.env.DANCODE_CLAUDE_INTERVAL_MS || 5000);
+  const claudeProjectsDir = process.env.DANCODE_CLAUDE_PROJECTS_DIR
+    || (process.env.DANCODE_CLAUDE_HOME
+        ? join(process.env.DANCODE_CLAUDE_HOME, 'projects')
+        : join(homedir(), '.claude', 'projects'));
   const detector = new ClaudeDetector({
     manager,
     metaStore,
     intervalMs: detectorIntervalMs,
+    claudeProjectsDir,
   });
   detector.start();
 
