@@ -485,13 +485,19 @@ app.post('/api/terminals', async (req, res) => {
   }
 });
 
-app.get('/api/terminals', (req, res) => {
-  const terminals = terminalManager.list(req.query.project);
+app.get('/api/terminals', async (req, res) => {
+  // Phase 7: pull a fresh snapshot from shellhost so callers see the
+  // latest claudeSessionId (the detector writes it periodically).
+  const terminals = typeof terminalManager.listFresh === 'function'
+    ? await terminalManager.listFresh(req.query.project)
+    : terminalManager.list(req.query.project);
   res.json(terminals);
 });
 
-app.get('/api/terminals/:id', (req, res) => {
-  const terminal = terminalManager.get(req.params.id);
+app.get('/api/terminals/:id', async (req, res) => {
+  const terminal = typeof terminalManager.getFresh === 'function'
+    ? await terminalManager.getFresh(req.params.id)
+    : terminalManager.get(req.params.id);
   if (!terminal) return res.status(404).json({ error: 'Terminal not found' });
   res.json(terminal);
 });

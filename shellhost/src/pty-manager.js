@@ -326,6 +326,18 @@ export class PTYManager {
   }
 
   /**
+   * Record whether Claude is currently the foreground process on this
+   * terminal. Not persisted — it's a live signal. The client uses this to
+   * decide whether to show the "Resume Claude" button.
+   */
+  setClaudeActive(id, active) {
+    const t = this.terminals.get(id);
+    if (!t) return false;
+    t.claudeActive = !!active;
+    return true;
+  }
+
+  /**
    * Register a listener for output / exit events on a terminal.
    * Returns a detach function (idempotent).
    */
@@ -440,6 +452,7 @@ export class PTYManager {
       pid: terminal.pty?.pid ?? null,
       tty: terminal.tty || terminal.pty?.ptsName || null,
       claudeSessionId: terminal.claudeSessionId || null,
+      claudeActive: !!terminal.claudeActive,
       exited: terminal.exited,
       exitCode: terminal.exitCode,
       needsRespawn: !!terminal.needsRespawn,

@@ -636,4 +636,75 @@ describe('Terminal', () => {
 
     globalThis.FileReader = origFileReader
   })
+
+  // Phase 7: Resume Claude button
+  describe('Resume Claude button', () => {
+    it('renders when claudeSessionId is set and claudeActive is false', async () => {
+      const { getByTestId } = await renderTerminal({
+        token: 'test-token',
+        terminalId: 'term-1',
+        claudeSessionId: 'sid-1',
+        claudeActive: false,
+      })
+      expect(getByTestId('resume-claude')).toBeDefined()
+    })
+
+    it('does NOT render when claudeSessionId is missing', async () => {
+      const { queryByTestId } = await renderTerminal({
+        token: 'test-token',
+        terminalId: 'term-1',
+        claudeSessionId: null,
+        claudeActive: false,
+      })
+      expect(queryByTestId('resume-claude')).toBeNull()
+    })
+
+    it('does NOT render when claudeActive is true (user is already in Claude)', async () => {
+      const { queryByTestId } = await renderTerminal({
+        token: 'test-token',
+        terminalId: 'term-1',
+        claudeSessionId: 'sid-1',
+        claudeActive: true,
+      })
+      expect(queryByTestId('resume-claude')).toBeNull()
+    })
+
+    it('button label includes the resume command shape so users know what it will do', async () => {
+      const { getByTestId } = await renderTerminal({
+        token: 'test-token',
+        terminalId: 'term-1',
+        claudeSessionId: 'abcd-1234',
+        claudeActive: false,
+      })
+      const btn = getByTestId('resume-claude')
+      expect(btn.textContent).toMatch(/Resume Claude/i)
+    })
+
+    it('clicking the button emits the resume command + Enter via socket input', async () => {
+      const { getByTestId } = await renderTerminal({
+        token: 'test-token',
+        terminalId: 'term-1',
+        claudeSessionId: 'abcd-1234',
+        claudeActive: false,
+      })
+      vi.runAllTimers()
+      mockConnected = true
+      mockSocketEmit.mockClear()
+      const btn = getByTestId('resume-claude')
+      await act(async () => { fireEvent.click(btn) })
+      expect(mockSocketEmit).toHaveBeenCalledWith('input', 'claude --resume abcd-1234\r')
+    })
+
+    it('button is dismissible per-terminal and stays dismissed', async () => {
+      const { getByTestId, queryByTestId } = await renderTerminal({
+        token: 'test-token',
+        terminalId: 'term-1',
+        claudeSessionId: 'sid-1',
+        claudeActive: false,
+      })
+      const dismiss = getByTestId('resume-claude-dismiss')
+      await act(async () => { fireEvent.click(dismiss) })
+      expect(queryByTestId('resume-claude')).toBeNull()
+    })
+  })
 })

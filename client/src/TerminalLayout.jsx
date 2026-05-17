@@ -212,6 +212,44 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
     return () => { cancelled = true }
   }, [slug, token, fetchAttempt])
 
+  // Phase 7: poll the terminals endpoint periodically so claudeSessionId
+  // and claudeActive (updated by the shellhost detector every 5s) flow
+  // into the Resume Claude button without requiring a page reload.
+  useEffect(() => {
+    if (!slug || !token) return
+    let cancelled = false
+    const refresh = async () => {
+      try {
+        const r = await fetch(`/api/terminals?project=${slug}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!r.ok) return
+        const fresh = await r.json()
+        if (cancelled || !Array.isArray(fresh)) return
+        setTerminals((prev) => {
+          // Merge claudeSessionId/claudeActive without disturbing labels or
+          // pane ordering chosen elsewhere.
+          let changed = false
+          const next = prev.map((t) => {
+            const f = fresh.find((x) => x.id === t.id)
+            if (!f) return t
+            const claudeSessionId = f.claudeSessionId ?? null
+            const claudeActive = !!f.claudeActive
+            if (t.claudeSessionId === claudeSessionId && t.claudeActive === claudeActive) {
+              return t
+            }
+            changed = true
+            return { ...t, claudeSessionId, claudeActive }
+          })
+          return changed ? next : prev
+        })
+      } catch { /* silently ignore */ }
+    }
+    const id = setInterval(refresh, 7000) // a bit slower than the 5s detector tick
+    refresh()
+    return () => { cancelled = true; clearInterval(id) }
+  }, [slug, token])
+
   // Save layout preferences when they change (debounced)
   useEffect(() => {
     if (!loadedRef.current || !slug || !token) return
@@ -752,6 +790,8 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
           focused={isFocused}
           onFocus={() => setFocusedIndex(index)}
           onConnectionStateChange={handleConnectionStateChange}
+          claudeSessionId={pane.claudeSessionId || null}
+          claudeActive={!!pane.claudeActive}
         />
       </div>
     )

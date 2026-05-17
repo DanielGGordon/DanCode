@@ -217,12 +217,23 @@ export class ClaudeDetector {
     for (const t of terminals) {
       if (!t?.id) continue;
       const tty = this.manager.getTty?.(t.id) ?? t.tty ?? null;
-      if (!tty) continue;
+      if (!tty) {
+        // Needs-respawn terminals: their last-known claudeActive value
+        // shouldn't change.
+        continue;
+      }
       let psOut;
       try { psOut = await this.runPs(tty); }
       catch { continue; }
       const parsed = parsePsForegroundOutput(psOut);
-      if (!parsed || !isClaudeProcess(parsed.command)) continue;
+      const claudeFg = parsed ? isClaudeProcess(parsed.command) : false;
+
+      // Track active/idle state on the in-memory record (not persisted).
+      if (typeof this.manager.setClaudeActive === 'function') {
+        try { this.manager.setClaudeActive(t.id, claudeFg); } catch { /* ignore */ }
+      }
+
+      if (!claudeFg) continue;
       const sessionId = findNewestClaudeSession({
         claudeProjectsDir: this.claudeProjectsDir,
         projectSlug: t.projectSlug,
