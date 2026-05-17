@@ -93,6 +93,7 @@ export class ShellhostTerminalManager {
         cwd: t.cwd || null,
         createdAt,
         lastActivity: t.lastActiveAt || createdAt,
+        claudeSessionId: t.claudeSessionId || null,
         sockets: new Set(),
         exited: !!t.exited,
         exitCode: t.exitCode ?? null,
@@ -191,6 +192,8 @@ export class ShellhostTerminalManager {
       command: entry.command || null,
       createdAt: entry.createdAt,
       lastActivity: entry.lastActivity,
+      claudeSessionId: entry.claudeSessionId || null,
+      claudeActive: !!entry.claudeActive,
       needsRespawn: !!entry.needsRespawn,
     };
   }
@@ -223,12 +226,68 @@ export class ShellhostTerminalManager {
     return this._publicMeta(t);
   }
 
+  /**
+   * Async variant of get() that refreshes the cached entry against
+   * shellhost first. Used by API handlers so the client always sees a
+   * fresh claudeSessionId (which the detector updates over time).
+   */
+  async getFresh(id) {
+    const t = this.terminals.get(id);
+    if (!t) return null;
+    try {
+      await this._ensureConnected();
+      const { terminal } = await this.client.inspect(id);
+      if (terminal) {
+        if (terminal.claudeSessionId !== undefined) {
+          t.claudeSessionId = terminal.claudeSessionId || null;
+        }
+        if (terminal.claudeActive !== undefined) {
+          t.claudeActive = !!terminal.claudeActive;
+        }
+        if (terminal.command !== undefined && terminal.command) {
+          t.command = terminal.command;
+        }
+        if (terminal.cwd !== undefined && terminal.cwd) {
+          t.cwd = terminal.cwd;
+        }
+        if (terminal.lastActiveAt) t.lastActivity = terminal.lastActiveAt;
+      }
+    } catch { /* fall back to cached */ }
+    return this._publicMeta(t);
+  }
+
   list(projectSlug) {
     const out = [];
     for (const t of this.terminals.values()) {
       if (!projectSlug || t.projectSlug === projectSlug) out.push(this._publicMeta(t));
     }
     return out;
+  }
+
+  /**
+   * Async variant of list() that refreshes from shellhost first. Useful
+   * for the /api/terminals endpoint so the client sees the latest
+   * claudeSessionId for every terminal.
+   */
+  async listFresh(projectSlug) {
+    try {
+      await this._ensureConnected();
+      const { terminals } = await this.client.list(projectSlug ? { projectSlug } : {});
+      if (Array.isArray(terminals)) {
+        for (const fresh of terminals) {
+          const cached = this.terminals.get(fresh.id);
+          if (!cached) continue;
+          if (fresh.claudeSessionId !== undefined) {
+            cached.claudeSessionId = fresh.claudeSessionId || null;
+          }
+          if (fresh.claudeActive !== undefined) {
+            cached.claudeActive = !!fresh.claudeActive;
+          }
+          if (fresh.lastActiveAt) cached.lastActivity = fresh.lastActiveAt;
+        }
+      }
+    } catch { /* fall back to cached */ }
+    return this.list(projectSlug);
   }
 
   async update(id, updates) {

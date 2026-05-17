@@ -345,3 +345,86 @@
   should be aware: pressing the Resume-Claude button mid-edit can race a
   layout save. Either gate layout saves on a quiescence check or accept
   the LWW behaviour explicitly.
+## After Phase 7 (proposed by Phase 7 generator)
+
+- **`PTYManager._spawnInternal` now accepts a `spawnCommand` override
+  separate from `command`.** `meta.command` stays the original (e.g.
+  `claude`) so future detection re-fires after a respawn; `spawnCommand`
+  is what actually runs this time around (e.g. `claude --resume <id>`).
+  Phase 8 (background mode) follows the same pattern when wrapping a
+  command in `systemd-run … --` — keep the user-facing `meta.command`
+  bare and stash the systemd wrapping under `spawnCommand`.
+
+- **`ClaudeDetector` uses `ps -t <dev>` per terminal once per tick.** On
+  the Pi 5 with 5 active Claude terminals at 5s interval the cumulative
+  CPU draw is ~390ms over 60s (well under the 600ms / 1% budget). If
+  scaling to >10 simultaneous Claude terminals, batch ps invocations
+  (`ps -t pts/1,pts/2,…`) or switch to procfs (read `/proc/<pid>/stat`
+  for foreground process group). The detector module is designed so
+  swapping `runPs` is a one-line change.
+
+- **`claudeActive` is in-memory only.** Phase 7 deliberately does NOT
+  persist `claudeActive` — it's a live signal computed on each tick. A
+  fresh shellhost defaults all entries to false until the next tick.
+  Phase 8 / future phases needing fast post-respawn state should re-tick
+  the detector immediately after `loadOrphans()` (currently the first
+  tick waits the full `intervalMs`).
+
+- **`isClaudeCommand` only matches when the head token is `claude`.**
+  This rejects `node /…/claude.js` as a meta.command for respawn-rewrite
+  purposes — the rewrite needs the user-typed shape to remain `claude`
+  so PATH lookup at re-run time works the same way. The PROCESS-side
+  `isClaudeProcess` is broader (also matches `node /…/claude.js`)
+  because that's what `ps` reports. Two different functions, different
+  audiences. Phase 9 cleanup should preserve this split.
+
+- **Server-side `getFresh()`/`listFresh()` re-inspect shellhost on every
+  request.** This is OK at the Pi 5 single-user scale but doubles the
+  latency of `GET /api/terminals`. Phase 10's production install should
+  consider an event-driven push from shellhost (new wire event:
+  `claude-session-changed`) so the server cache stays accurate without
+  per-request round trips.
+
+- **`/api/test-only/note-claude-session` writes through the shellhost
+  client and also patches the local server cache.** This is a test-only
+  shortcut; production updates flow through the periodic detector. If
+  Phase 8 / 10 needs a similar primitive (e.g. a "force claude resume
+  now" admin endpoint), follow the same pattern — never write directly
+  to shellhost's meta files; always go through the wire op so the
+  in-memory PTYManager record stays in sync.
+
+- **Phase 7 detector uses `DANCODE_CLAUDE_HOME` (test env) vs
+  `~/.claude` (production).** Production users with a custom
+  `CLAUDE_CONFIG_DIR` (Anthropic's new env var) will NOT have their
+  sessions discovered. If/when Anthropic publishes the canonical env
+  var for the projects dir, swap the default. The detector accepts an
+  explicit `claudeProjectsDir` so a CLI flag is trivial to add.
+
+- **Client polls `/api/terminals?project=…` every 7s for Resume Claude
+  state.** Cheap on a Pi (one in-memory list + one wire `list` call)
+  but Phase 10 may want to switch to a Socket.IO push if the polling
+  shows up in CPU profiles.
+
+- **Resume Claude button is rendered inside the Terminal component's
+  container with `position: absolute; top-2 right-2`.** It sits above
+  the xterm canvas. Cliking does NOT propagate focus to xterm — the
+  click handler manually calls `term.focus()` before emitting input so
+  follow-up keystrokes land on the same pane. Phase 8 (background mode
+  badge) and other top-right overlays should coexist by stacking in a
+  shared `position: absolute` flex container, not by adding more
+  separate absolute children that overlap.
+
+- **fake-claude.mjs needs `chmod +x` to be executable as a script when
+  used via a symlink in integration tests.** Initial commits forgot
+  this; the fixture is now `0755`. Future test fixtures intended to be
+  invoked as binaries (Phase 8 background-mode trampolines, Phase 9
+  tmux migration probes) must do the same — `node:fs/promises.chmod`
+  on the file BEFORE git add, or accept `Permission denied` flakes.
+
+- **`/proc/<pid>/cmdline` is the cleanest way to assert PTY argv in
+  integration tests on Linux.** Phase 7's integration test (full flow)
+  used this to verify the respawn command became `claude --resume <id>`
+  without needing the actual `claude` binary installed. Phase 8's
+  background-mode test can do the same to verify `systemd-run …`
+  wrapping; the `(comm)` field can contain spaces so split on the LAST
+  `)` then read fields offset-relative to that.

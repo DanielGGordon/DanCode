@@ -51,6 +51,10 @@ function requireAuth(req, res, next) {
   if (req.path === '/test-only/restart-shellhost' && process.env.NODE_ENV === 'test') {
     return next();
   }
+  // Phase 7: test-only note-claude-session endpoint, same gate.
+  if (req.path === '/test-only/note-claude-session' && process.env.NODE_ENV === 'test') {
+    return next();
+  }
 
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -485,13 +489,19 @@ app.post('/api/terminals', async (req, res) => {
   }
 });
 
-app.get('/api/terminals', (req, res) => {
-  const terminals = terminalManager.list(req.query.project);
+app.get('/api/terminals', async (req, res) => {
+  // Phase 7: pull a fresh snapshot from shellhost so callers see the
+  // latest claudeSessionId (the detector writes it periodically).
+  const terminals = typeof terminalManager.listFresh === 'function'
+    ? await terminalManager.listFresh(req.query.project)
+    : terminalManager.list(req.query.project);
   res.json(terminals);
 });
 
-app.get('/api/terminals/:id', (req, res) => {
-  const terminal = terminalManager.get(req.params.id);
+app.get('/api/terminals/:id', async (req, res) => {
+  const terminal = typeof terminalManager.getFresh === 'function'
+    ? await terminalManager.getFresh(req.params.id)
+    : terminalManager.get(req.params.id);
   if (!terminal) return res.status(404).json({ error: 'Terminal not found' });
   res.json(terminal);
 });
@@ -806,6 +816,32 @@ async function waitForNewShellhostPid(pidFile, killedPid, totalTimeoutMs) {
   }
   return false;
 }
+
+// Test-only endpoint: write a fake claudeSessionId for a terminal so the
+// Phase 7 Resume-Claude E2E can verify the UI without actually running
+// the real `claude` binary. Guarded by NODE_ENV=test inside the handler.
+app.post('/api/test-only/note-claude-session', async (req, res) => {
+  if (process.env.NODE_ENV !== 'test') {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  const { terminalId, sessionId } = req.body || {};
+  if (!terminalId || typeof terminalId !== 'string') {
+    return res.status(400).json({ error: 'terminalId is required' });
+  }
+  if (!terminalManager?.client?.noteClaudeSession) {
+    return res.status(500).json({ error: 'shellhost client not available' });
+  }
+  try {
+    await terminalManager.client.noteClaudeSession(terminalId, sessionId ?? null);
+    // Also update the local cache so the very next GET /api/terminals
+    // returns the new session id without needing the periodic refresh.
+    const entry = terminalManager.terminals?.get?.(terminalId);
+    if (entry) entry.claudeSessionId = sessionId ?? null;
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: `noteClaudeSession failed: ${err.message}` });
+  }
+});
 
 // SPA fallback: serve index.html for client-side routes only
 // Skip /api paths (should 404 as JSON) and file-like asset paths (should 404 normally)

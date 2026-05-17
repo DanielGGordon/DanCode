@@ -39,7 +39,17 @@ function fallbackCopy(text) {
   document.body.removeChild(textarea)
 }
 
-const Terminal = forwardRef(function Terminal({ token, terminalId, projectSlug, focused, readFirst, onFocus, onConnectionStateChange }, ref) {
+const Terminal = forwardRef(function Terminal({
+  token,
+  terminalId,
+  projectSlug,
+  focused,
+  readFirst,
+  onFocus,
+  onConnectionStateChange,
+  claudeSessionId,
+  claudeActive,
+}, ref) {
   const containerRef = useRef(null)
   const termRef = useRef(null)
   const fitAddonRef = useRef(null)
@@ -47,6 +57,8 @@ const Terminal = forwardRef(function Terminal({ token, terminalId, projectSlug, 
   const fontSizeRef = useRef(DEFAULT_FONT_SIZE)
   const [connectionState, setConnectionState] = useState('connecting')
   const [exitCode, setExitCode] = useState(null)
+  // Phase 7: per-terminal dismissal of the Resume Claude button.
+  const [resumeDismissed, setResumeDismissed] = useState(false)
   const reconnectTimerRef = useRef(null)
   const hasConnectedRef = useRef(false)
   const stateRef = useRef('connecting')
@@ -519,15 +531,58 @@ const Terminal = forwardRef(function Terminal({ token, terminalId, projectSlug, 
     }, 0)
   }, [onFocus])
 
+  const showResumeButton = Boolean(claudeSessionId) && !claudeActive && !resumeDismissed
+  const sendResumeCommand = useCallback(() => {
+    if (!claudeSessionId) return
+    const cmd = `claude --resume ${claudeSessionId}\r`
+    // Focus the xterm first so subsequent keystrokes also land in it.
+    if (termRef.current) {
+      try { termRef.current.focus() } catch { /* ignore */ }
+    }
+    // Send through the socket so bash receives it; bash will echo via the
+    // PTY. We use the explicit emit path here (not term.paste) because
+    // paste data is buffered before \r is interpreted in some xterm
+    // configurations; an explicit emit is one round-trip.
+    const sock = socketRef.current
+    if (sock?.connected) {
+      sock.emit('input', cmd)
+    } else if (sock) {
+      sock.once('connect', () => sock.emit('input', cmd))
+    }
+  }, [claudeSessionId])
+
   return (
     <div
       ref={containerRef}
       data-testid="terminal"
       data-terminal-id={terminalId || ''}
       data-connection-state={connectionState}
+      data-claude-session-id={claudeSessionId || ''}
+      data-claude-active={claudeActive ? 'true' : 'false'}
       className="w-full h-full relative"
       onMouseDownCapture={handleMouseDown}
     >
+      {showResumeButton && (
+        <div className="absolute top-2 right-2 z-20 flex items-center gap-1 bg-base02/90 border border-blue/50 rounded shadow-lg text-xs">
+          <button
+            data-testid="resume-claude"
+            data-claude-session-id={claudeSessionId}
+            onClick={sendResumeCommand}
+            className="px-3 py-1 text-blue hover:bg-blue/20 transition-colors rounded-l"
+            title={`Resume Claude session ${claudeSessionId}`}
+          >
+            Resume Claude
+          </button>
+          <button
+            data-testid="resume-claude-dismiss"
+            onClick={() => setResumeDismissed(true)}
+            className="px-2 py-1 text-base01 hover:text-base1 transition-colors rounded-r"
+            title="Dismiss"
+          >
+            {'×'}
+          </button>
+        </div>
+      )}
       {showOverlay && (
         <div
           data-testid="terminal-overlay"

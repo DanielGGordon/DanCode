@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import pty from 'node-pty';
+import { isClaudeCommand, buildClaudeResumeCommand } from './claude-detector.js';
 
 /**
  * Owns the in-memory map of live (or recoverable) PTYs. Pure logic — no
@@ -110,13 +111,18 @@ export class PTYManager {
    * Internal helper: spawn a PTY for a given terminal record (whether it's
    * a brand-new id or a respawned one).
    */
-  _spawnInternal({ id, projectSlug, cwd, command, cols, rows, createdAt }) {
+  _spawnInternal({ id, projectSlug, cwd, command, cols, rows, createdAt, spawnCommand }) {
     const shellPath = process.env.SHELL || '/bin/bash';
+    // `command` is the canonical (preserved) value persisted to meta;
+    // `spawnCommand` (when set) is what actually runs this time around —
+    // used by respawn() to substitute `claude` → `claude --resume <id>`
+    // without losing the original meta.command for future detection.
+    const runCommand = spawnCommand || command;
     let file;
     let args;
-    if (command && typeof command === 'string' && command.length > 0) {
+    if (runCommand && typeof runCommand === 'string' && runCommand.length > 0) {
       file = shellPath;
-      args = ['-lc', command];
+      args = ['-lc', runCommand];
     } else {
       file = shellPath;
       args = ['-l'];
@@ -153,10 +159,14 @@ export class PTYManager {
     };
     terminal.projectSlug = projectSlug;
     terminal.cwd = cwd;
+    // Preserve the original (Claude) command on respawn so future detections
+    // still see it as a Claude terminal. Caller passes the resume-rewritten
+    // command via opts.spawnCommand if it differs.
     terminal.command = command;
     terminal.cols = cols;
     terminal.rows = rows;
     terminal.pty = ptyProcess;
+    terminal.tty = ptyProcess?.ptsName || null;
     terminal.needsRespawn = false;
     terminal.exited = false;
     terminal.exitCode = null;
@@ -193,6 +203,7 @@ export class PTYManager {
           command: terminal.command,
           createdAt: terminal.createdAt,
           lastActiveAt: terminal.lastActiveAt,
+          claudeSessionId: terminal.claudeSessionId || null,
         });
       } catch { /* best effort */ }
     }
@@ -266,6 +277,17 @@ export class PTYManager {
       try { fn(banner); } catch { /* ignore */ }
     }
 
+    // Phase 7: if this is a Claude terminal with a recorded session id,
+    // substitute the command for `claude --resume <id>` so the conversation
+    // continues. meta.command stays as the original `claude` invocation so
+    // future detection still recognises the terminal post-respawn.
+    let spawnCommand = terminal.command;
+    if (terminal.claudeSessionId && isClaudeCommand(terminal.command)) {
+      try {
+        spawnCommand = buildClaudeResumeCommand(terminal.command, terminal.claudeSessionId);
+      } catch { /* fall back to the original command */ }
+    }
+
     // Now spawn the fresh PTY. The PTY's onData callback wires through
     // scrollback + listeners exactly the same as a brand-new spawn, so
     // history continues to grow in the same scrollback.log.
@@ -274,10 +296,45 @@ export class PTYManager {
       projectSlug: terminal.projectSlug,
       cwd: terminal.cwd,
       command: terminal.command,
+      spawnCommand,
       cols: terminal.cols,
       rows: terminal.rows,
       createdAt: terminal.createdAt || new Date().toISOString(),
     });
+  }
+
+  /**
+   * Returns the controlling tty path of a live terminal, or null when the
+   * terminal is not live (needs-respawn, unknown id, etc.). Used by the
+   * Claude detector to inspect foreground processes via `ps`.
+   */
+  getTty(id) {
+    const t = this.terminals.get(id);
+    if (!t) return null;
+    return t.tty || t.pty?.ptsName || null;
+  }
+
+  /**
+   * Record a detected Claude session id on the in-memory terminal record.
+   * Persistence is the detector's job (it writes the meta.json).
+   */
+  setClaudeSessionId(id, sessionId) {
+    const t = this.terminals.get(id);
+    if (!t) return false;
+    t.claudeSessionId = sessionId || null;
+    return true;
+  }
+
+  /**
+   * Record whether Claude is currently the foreground process on this
+   * terminal. Not persisted — it's a live signal. The client uses this to
+   * decide whether to show the "Resume Claude" button.
+   */
+  setClaudeActive(id, active) {
+    const t = this.terminals.get(id);
+    if (!t) return false;
+    t.claudeActive = !!active;
+    return true;
   }
 
   /**
@@ -393,6 +450,9 @@ export class PTYManager {
       cols: terminal.cols,
       rows: terminal.rows,
       pid: terminal.pty?.pid ?? null,
+      tty: terminal.tty || terminal.pty?.ptsName || null,
+      claudeSessionId: terminal.claudeSessionId || null,
+      claudeActive: !!terminal.claudeActive,
       exited: terminal.exited,
       exitCode: terminal.exitCode,
       needsRespawn: !!terminal.needsRespawn,

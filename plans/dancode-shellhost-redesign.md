@@ -276,7 +276,7 @@ Human work is confined to:
 
 ---
 
-## Phase 7: Claude-aware resume
+## Phase 7: Claude-aware resume ✅
 <!-- PHASE 7 COMPLETE -->
 
 **Delivers**: When a terminal is running `claude`, DanCode detects it and persists the active session id to the terminal's `meta.json`. After a Pi reboot / shellhost restart, the respawn (Phase 5) uses `claude --resume <session-id>` instead of a bare shell, so the conversation continues. A "Resume Claude" button on the terminal pane offers manual resume of the most recent session for that project.
