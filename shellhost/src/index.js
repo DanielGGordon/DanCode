@@ -6,6 +6,7 @@ import { createShellhost } from './server.js';
 import { PTYManager } from './pty-manager.js';
 import { ScrollbackStore } from './scrollback.js';
 import { MetaStore } from './meta-store.js';
+import { ClaudeDetector } from './claude-detector.js';
 
 /**
  * Default UNIX-socket path. Production: ~/.dancode/shellhost.sock.
@@ -50,6 +51,15 @@ export async function main() {
   const host = createShellhost({ manager });
   await host.listen(socketPath);
 
+  // Phase 7: periodic Claude-aware inspection.
+  const detectorIntervalMs = Number(process.env.DANCODE_CLAUDE_INTERVAL_MS || 5000);
+  const detector = new ClaudeDetector({
+    manager,
+    metaStore,
+    intervalMs: detectorIntervalMs,
+  });
+  detector.start();
+
   // Drop a pidfile so external orchestrators can SIGKILL us (Phase 5 reboot
   // simulation) without juggling /proc lookups. The pidfile lives next to
   // the socket so a deployment can keep them together.
@@ -63,6 +73,7 @@ export async function main() {
 
   const shutdown = async (signal) => {
     console.log(`[shellhost] caught ${signal}, shutting down`);
+    try { detector.stop(); } catch { /* ignore */ }
     try { manager.stopLastActiveFlusher(); } catch { /* ignore */ }
     try { manager._flushLastActive(); } catch { /* ignore */ }
     try { await host.close(); } catch { /* ignore */ }
@@ -89,5 +100,6 @@ export { createShellhost };
 export { PTYManager } from './pty-manager.js';
 export { ScrollbackStore } from './scrollback.js';
 export { MetaStore } from './meta-store.js';
+export { ClaudeDetector } from './claude-detector.js';
 export { encodeFrame, FrameDecoder, makeRequest, makeResponse, makeEvent } from './wire.js';
 export { createShellhostClient } from './client.js';

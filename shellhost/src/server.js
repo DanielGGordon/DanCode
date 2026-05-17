@@ -230,6 +230,23 @@ async function dispatchOp(op, payload, ctx) {
       return { ok: true, terminal: meta };
     }
 
+    case 'noteClaudeSession': {
+      const { terminalId, sessionId } = payload;
+      if (!terminalId) throw new Error('noteClaudeSession: terminalId required');
+      // Update the in-memory record (live + needs-respawn entries both have
+      // one), then persist via the meta store. Both layers tolerate `null`
+      // to mean "clear the recorded session id".
+      if (typeof ptyManager.setClaudeSessionId === 'function') {
+        ptyManager.setClaudeSessionId(terminalId, sessionId ?? null);
+      }
+      if (ptyManager.metaStore) {
+        await ptyManager.metaStore.update(terminalId, {
+          claudeSessionId: sessionId ?? null,
+        });
+      }
+      return { ok: true };
+    }
+
     default:
       throw new Error(`unknown op: ${op}`);
   }
