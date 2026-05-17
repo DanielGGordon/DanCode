@@ -130,8 +130,8 @@ async function dispatchOp(op, payload, ctx) {
 
   switch (op) {
     case 'spawn': {
-      const { projectSlug, cwd, command, cols, rows } = payload;
-      const meta = ptyManager.spawn({ projectSlug, cwd, command, cols, rows });
+      const { projectSlug, cwd, command, cols, rows, background } = payload;
+      const meta = ptyManager.spawn({ projectSlug, cwd, command, cols, rows, background });
       return { terminalId: meta.id, terminal: meta };
     }
 
