@@ -474,3 +474,49 @@
   STOPS the scope — simulating a SIGKILL needs an actual subprocess
   death. Future phases adding "shellhost survival" tests should follow
   the same subprocess pattern.
+
+## After Phase 10 (proposed by Phase 10 generator)
+
+- **`host.close()` no longer kills PTYs by default.** Phase 8's
+  proposed-changes already flagged that `host.close()` calling
+  `killAll()` made graceful shutdown destroy state. Phase 10 hit it
+  head-on: `systemctl --user stop` sends SIGTERM, shellhost's shutdown
+  handler awaits `host.close()`, killAll wiped every
+  `<baseDir>/<id>/meta.json`+`scrollback.log`, and the next `start`
+  found zero orphans. The fix flips the default to
+  `close({ killPtys: false })`; tests that want eager teardown can
+  opt-in. If/when Phase 9's tmux paths are retired, audit the legacy
+  TerminalManager teardown for the same pattern.
+- **`systemd-in-Docker` on aarch64 (Pi 5)** needs a hand-rolled image —
+  `jrei/systemd-debian` is amd64-only. The Dockerfile in
+  `systemd/integration-test/` derives from `debian:12-slim`, installs
+  `systemd systemd-sysv dbus`, pre-enables linger for a `dancode` user,
+  and runs `/sbin/init` as PID 1. Multi-arch image: works on Pi and CI
+  runners.
+- **`systemd --user` doesn't auto-start in a container** even with
+  linger enabled — there's no PAM login session to trigger it. The
+  host-side `run.sh` explicitly runs `systemctl start
+  user@<uid>.service` after the container is up, then exec's the test
+  script with `XDG_RUNTIME_DIR` + `DBUS_SESSION_BUS_ADDRESS` pointing at
+  `/run/user/<uid>` so `systemctl --user` resolves. Real Pi users hit
+  PAM and get this for free.
+- **Healthcheck must retry connect.** After a restart the socket file
+  is briefly present-but-not-bound; a single `connect()` raced and got
+  ECONNREFUSED. Healthcheck now retries ~5×200ms. Future phases
+  building post-deploy checks should reuse the `tryConnect` helper.
+- **The shellhost client's EventEmitter emits `'error'` on socket
+  errors** — without a listener, Node throws. Phase 5's learnings
+  flagged this for the server; Phase 10 hit it again in the healthcheck
+  CLI. Anyone writing a new `createShellhostClient` consumer should
+  `client.on('error', () => {})` (or a real handler) before
+  `connect()`.
+- **The README install path uses `/opt/dancode` as the unit's ExecStart
+  placeholder.** `systemd/install.sh` rewrites it to the actual repo
+  path via `sed`. If Phase 11+ adds more unit files, they should use
+  the same placeholder so install.sh's one-line substitution still
+  covers them.
+- **Optional sibling `dancode-server.service`** ships but is gated
+  behind `DANCODE_INSTALL_SERVER` (default on). Plain `npm run start`
+  remains the no-systemd path. The web server's persistence story is
+  weaker than shellhost's (it holds no PTYs), so users who don't want
+  a second unit can skip it without losing functionality.
