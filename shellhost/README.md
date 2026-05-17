@@ -16,7 +16,7 @@ Every frame is `{ type, requestId?, terminalId?, op, payload }` encoded as JSON,
 prefixed by a 4-byte big-endian length. Three frame types:
 
 - `req` — request from server to shellhost (`spawn`, `attach`, `detach`, `write`,
-  `resize`, `kill`, `list`, `inspect`, `getScrollback`, `respawn`, `noteClaudeSession`).
+  `resize`, `kill`, `list`, `inspect`, `getScrollback`, `respawn`, `noteClaudeSession`, `setBackground`).
 - `res` — response from shellhost (success: `{ ok: true, result }`, failure:
   `{ ok: false, error }`).
 - `event` — push from shellhost to server (`output`, `exit`).
@@ -39,7 +39,12 @@ See `src/wire.js` for the codec and `src/server.js` for the op handlers.
   scrollback, emits it to attached listeners, then spawns a fresh PTY at
   the saved cwd/command. A periodic flusher (default 60s) writes
   `lastActiveAt` from in-memory back to `meta.json` so the banner shows an
-  accurate timestamp after a Pi reboot.
+  accurate timestamp after a Pi reboot. Phase 8 adds opt-in background
+  mode: `spawn({ background: true })` wraps the command via
+  `systemd-run --user --scope --unit=dancode-bg-<id> setsid --wait $SHELL -lc <cmd>`
+  so the underlying process survives shellhost SIGKILL; `setBackground(id)`
+  toggles the flag without restarting the PTY; `kill` on a background
+  terminal also invokes `systemctl --user stop dancode-bg-<id>.scope`.
 - `src/scrollback.js` — `ScrollbackStore`: append-only `<terminalsDir>/<id>/scrollback.log`
   with 1MB rotation (one rotation kept as `scrollback.log.1`) and tail
   reads spanning both files in chronological order.

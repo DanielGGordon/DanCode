@@ -98,6 +98,7 @@ export class ShellhostTerminalManager {
         exited: !!t.exited,
         exitCode: t.exitCode ?? null,
         needsRespawn: !!t.needsRespawn,
+        background: !!t.background,
       };
       this.terminals.set(t.id, entry);
       // Only attach if the terminal has a live PTY. needs-respawn entries
@@ -154,7 +155,7 @@ export class ShellhostTerminalManager {
   /**
    * Create a new terminal in shellhost. Returns public metadata.
    */
-  async create({ projectSlug, label, command, cols = 80, rows = 24, cwd } = {}) {
+  async create({ projectSlug, label, command, cols = 80, rows = 24, cwd, background = false } = {}) {
     await this._ensureConnected();
     const { terminalId, terminal } = await this.client.spawn({
       projectSlug,
@@ -162,6 +163,7 @@ export class ShellhostTerminalManager {
       command,
       cols,
       rows,
+      background: !!background,
     });
     // Attach so we receive output/exit events for the whole lifetime.
     await this.client.attach(terminalId);
@@ -178,9 +180,32 @@ export class ShellhostTerminalManager {
       sockets: new Set(),
       exited: false,
       exitCode: null,
+      background: !!(terminal?.background ?? background),
     };
     this.terminals.set(terminalId, entry);
     return this._publicMeta(entry);
+  }
+
+  /**
+   * Toggle the background-mode flag on an existing terminal. Persists through
+   * to shellhost so the meta.json reflects the change immediately; takes
+   * effect on the PTY itself on next respawn.
+   *
+   * Returns the updated public metadata, or null if the terminal is unknown.
+   */
+  async setBackground(id, background) {
+    const t = this.terminals.get(id);
+    if (!t) return null;
+    await this._ensureConnected();
+    try {
+      const res = await this.client.setBackground(id, !!background);
+      const ok = res?.ok ?? true;
+      if (!ok) return null;
+      t.background = !!background;
+      return this._publicMeta(t);
+    } catch {
+      return null;
+    }
   }
 
   _publicMeta(entry) {
@@ -195,6 +220,7 @@ export class ShellhostTerminalManager {
       claudeSessionId: entry.claudeSessionId || null,
       claudeActive: !!entry.claudeActive,
       needsRespawn: !!entry.needsRespawn,
+      background: !!entry.background,
     };
   }
 

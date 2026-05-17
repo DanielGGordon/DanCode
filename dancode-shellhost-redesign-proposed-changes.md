@@ -428,3 +428,49 @@
   background-mode test can do the same to verify `systemd-run …`
   wrapping; the `(comm)` field can contain spaces so split on the LAST
   `)` then read fields offset-relative to that.
+
+## After Phase 8 (proposed by Phase 8 generator)
+
+- **`systemd-run --scope --pty` is rejected by systemd 251+.** The spec
+  literally calls for `--user --scope --pty --unit=...`, but `--pty` is
+  not compatible with `--scope`. We dropped `--pty` and let node-pty
+  provide the PTY (it wraps systemd-run's stdio). Phase 9/10 should NOT
+  reintroduce `--pty` to the scope invocation.
+- **`setsid --wait` is load-bearing.** Without it, when shellhost dies
+  the kernel sends SIGHUP to the foreground process group of the closed
+  PTY — even though the wrapper shell traps HUP, its children (the
+  actual user command, e.g. `sleep 30 && echo done`) do not, and the
+  `&&` chain breaks. Wrapping the shell in `setsid --wait` puts the user
+  command in its own session with no controlling terminal, so SIGHUP is
+  never delivered. If a future phase wants to expose a different
+  "background" implementation (e.g. transient `systemd-run --no-block`
+  service for fully-detached jobs), keep the setsid wrapper for the
+  `--scope` path.
+- **`systemctl --user stop` requires the `.scope` suffix.** Without it,
+  systemctl defaults to `.service` and silently no-ops on our unit.
+  `PTYManager.kill` passes `dancode-bg-<id>.scope`; tests assert this
+  exact arg shape.
+- **Background-mode terminals expose `background: true` everywhere in
+  the public surface.** Client renders a BG badge from `terminal.background`;
+  `_publicMeta` on both `PTYManager` and `ShellhostTerminalManager`
+  includes the flag; `meta.json` persists it. Phase 9's tmux removal
+  doesn't touch these but Phase 10's packaging should ensure the user
+  has `loginctl enable-linger` set, otherwise the scope dies when their
+  session ends.
+- **`POST /api/terminals` validates `background` is a boolean.** A
+  non-boolean returns 400. The legacy tmux backend doesn't implement
+  `setBackground`; the server falls back to 501 on
+  `/api/terminals/:id/background` if the manager lacks the method. Phase
+  9 deletes the legacy backend, so the 501 branch can also be deleted.
+- **Background terminals do NOT preserve live stdio across shellhost
+  restart.** The systemd scope keeps the user command running, but the
+  PTY (owned by node-pty in the dead shellhost) is gone. On respawn the
+  user gets a FRESH shell, not a re-attach to the running command. The
+  command must log to disk to be inspectable. Phase 10 docs should call
+  this out for users planning to run training runs in background mode.
+- **Real-systemd integration test (`background-integration.test.js`)
+  spawns shellhost as a subprocess and SIGKILLs it.** This is required
+  because the in-process `host.close()` path calls `killAll()` which
+  STOPS the scope — simulating a SIGKILL needs an actual subprocess
+  death. Future phases adding "shellhost survival" tests should follow
+  the same subprocess pattern.

@@ -1,7 +1,31 @@
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import pty from 'node-pty';
 import { isClaudeCommand, buildClaudeResumeCommand } from './claude-detector.js';
+
+/**
+ * Default systemctl runner used to stop background-mode systemd scopes when a
+ * terminal is killed. Returns `{ ok, status, error }`. Errors are swallowed
+ * so a missing systemctl binary never crashes shellhost.
+ */
+function defaultRunSystemctl(args) {
+  try {
+    const result = spawnSync('systemctl', args, { stdio: 'ignore' });
+    return { ok: result.status === 0, status: result.status, error: result.error };
+  } catch (err) {
+    return { ok: false, status: null, error: err };
+  }
+}
+
+/**
+ * Background-mode unit name for a terminal id. The shellhost spawns the PTY
+ * via `systemd-run --user --scope --pty --unit=<this>` so the underlying
+ * process survives shellhost restarts inside a transient systemd scope.
+ */
+export function backgroundUnitName(terminalId) {
+  return `dancode-bg-${terminalId}`;
+}
 
 /**
  * Owns the in-memory map of live (or recoverable) PTYs. Pure logic — no
@@ -39,10 +63,12 @@ export class PTYManager {
     scrollback = null,
     metaStore = null,
     lastActiveFlushIntervalMs = 60_000,
+    runSystemctl = defaultRunSystemctl,
   } = {}) {
     this._spawn = spawn;
     this.scrollback = scrollback;
     this.metaStore = metaStore;
+    this._runSystemctl = runSystemctl;
     this.lastActiveFlushIntervalMs = lastActiveFlushIntervalMs;
     this.terminals = new Map();
     this._lastActiveFlusher = null;
@@ -91,7 +117,7 @@ export class PTYManager {
   /**
    * Spawn a new PTY. Returns the public metadata (no internal refs).
    */
-  spawn({ projectSlug, cwd, command, cols = 80, rows = 24 } = {}) {
+  spawn({ projectSlug, cwd, command, cols = 80, rows = 24, background = false } = {}) {
     if (!projectSlug || typeof projectSlug !== 'string') {
       throw new TypeError('spawn: projectSlug is required');
     }
@@ -104,6 +130,7 @@ export class PTYManager {
       cols,
       rows,
       createdAt: new Date().toISOString(),
+      background: !!background,
     });
   }
 
@@ -111,7 +138,7 @@ export class PTYManager {
    * Internal helper: spawn a PTY for a given terminal record (whether it's
    * a brand-new id or a respawned one).
    */
-  _spawnInternal({ id, projectSlug, cwd, command, cols, rows, createdAt, spawnCommand }) {
+  _spawnInternal({ id, projectSlug, cwd, command, cols, rows, createdAt, spawnCommand, background }) {
     const shellPath = process.env.SHELL || '/bin/bash';
     // `command` is the canonical (preserved) value persisted to meta;
     // `spawnCommand` (when set) is what actually runs this time around —
@@ -120,7 +147,33 @@ export class PTYManager {
     const runCommand = spawnCommand || command;
     let file;
     let args;
-    if (runCommand && typeof runCommand === 'string' && runCommand.length > 0) {
+    if (background) {
+      // Wrap the shell command in a transient systemd user scope, then in
+      // `setsid --wait` so the user command runs in its own session (no
+      // controlling terminal). When shellhost is killed the PTY closes; the
+      // kernel sends SIGHUP to the foreground process group of the now-dead
+      // controlling terminal, but the user command — being in a different
+      // session — is not in that group, so it survives until it exits or is
+      // explicitly stopped via `systemctl --user stop dancode-bg-<id>`.
+      file = 'systemd-run';
+      const wrapperArgs = [
+        '--user',
+        '--scope',
+        '--quiet',
+        `--unit=${backgroundUnitName(id)}`,
+        'setsid',
+        '--wait',
+        shellPath,
+      ];
+      if (runCommand && typeof runCommand === 'string' && runCommand.length > 0) {
+        wrapperArgs.push('-lc', `trap '' HUP; ${runCommand}`);
+      } else {
+        // Background mode without an explicit command is unusual but
+        // supported: launch an interactive login shell in the new session.
+        wrapperArgs.push('-il');
+      }
+      args = wrapperArgs;
+    } else if (runCommand && typeof runCommand === 'string' && runCommand.length > 0) {
       file = shellPath;
       args = ['-lc', runCommand];
     } else {
@@ -156,6 +209,7 @@ export class PTYManager {
       exitListeners: new Set(),
       cols,
       rows,
+      background: !!background,
     };
     terminal.projectSlug = projectSlug;
     terminal.cwd = cwd;
@@ -171,6 +225,7 @@ export class PTYManager {
     terminal.exited = false;
     terminal.exitCode = null;
     terminal.lastActiveAt = now;
+    terminal.background = !!background;
 
     ptyProcess.onData((data) => {
       terminal.lastActiveAt = new Date().toISOString();
@@ -204,6 +259,7 @@ export class PTYManager {
           createdAt: terminal.createdAt,
           lastActiveAt: terminal.lastActiveAt,
           claudeSessionId: terminal.claudeSessionId || null,
+          background: !!terminal.background,
         });
       } catch { /* best effort */ }
     }
@@ -238,6 +294,7 @@ export class PTYManager {
         needsRespawn: true,
         exited: false,
         exitCode: null,
+        background: !!meta.background,
       });
       ids.push(meta.id);
     }
@@ -300,6 +357,7 @@ export class PTYManager {
       cols: terminal.cols,
       rows: terminal.rows,
       createdAt: terminal.createdAt || new Date().toISOString(),
+      background: !!terminal.background,
     });
   }
 
@@ -335,6 +393,34 @@ export class PTYManager {
     if (!t) return false;
     t.claudeActive = !!active;
     return true;
+  }
+
+  /**
+   * Toggle the background-mode flag on an existing terminal. The change is
+   * persisted to meta.json immediately but does NOT restart the PTY; the new
+   * value takes effect on the next respawn.
+   *
+   * Returns the public metadata of the updated terminal, or null if unknown.
+   */
+  setBackground(id, background) {
+    const terminal = this.terminals.get(id);
+    if (!terminal) return null;
+    terminal.background = !!background;
+    if (this.metaStore) {
+      try {
+        this.metaStore.writeSync({
+          id: terminal.id,
+          projectSlug: terminal.projectSlug,
+          cwd: terminal.cwd,
+          command: terminal.command,
+          createdAt: terminal.createdAt,
+          lastActiveAt: terminal.lastActiveAt,
+          claudeSessionId: terminal.claudeSessionId || null,
+          background: !!terminal.background,
+        });
+      } catch { /* best effort */ }
+    }
+    return this._publicMeta(terminal);
   }
 
   /**
@@ -398,8 +484,19 @@ export class PTYManager {
   kill(id, signal = 'SIGHUP') {
     const terminal = this.terminals.get(id);
     if (!terminal) return false;
+    const wasBackground = !!terminal.background;
     if (terminal.pty) {
       try { terminal.pty.kill(signal); } catch { /* already dead */ }
+    }
+    // Background-mode terminals run inside a transient systemd user scope
+    // (dancode-bg-<id>). Killing the PTY only severs stdio; the scope keeps
+    // running until we explicitly stop it.
+    if (wasBackground) {
+      try {
+        // `.scope` suffix is required: `systemctl stop foo` defaults to
+        // `foo.service`, which would silently no-op for our scope unit.
+        this._runSystemctl(['--user', 'stop', `${backgroundUnitName(id)}.scope`]);
+      } catch { /* best effort */ }
     }
     this.terminals.delete(id);
     this._lastActiveDirty.delete(id);
@@ -456,6 +553,7 @@ export class PTYManager {
       exited: terminal.exited,
       exitCode: terminal.exitCode,
       needsRespawn: !!terminal.needsRespawn,
+      background: !!terminal.background,
     };
   }
 }

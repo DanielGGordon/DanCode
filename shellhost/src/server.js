@@ -130,8 +130,8 @@ async function dispatchOp(op, payload, ctx) {
 
   switch (op) {
     case 'spawn': {
-      const { projectSlug, cwd, command, cols, rows } = payload;
-      const meta = ptyManager.spawn({ projectSlug, cwd, command, cols, rows });
+      const { projectSlug, cwd, command, cols, rows, background } = payload;
+      const meta = ptyManager.spawn({ projectSlug, cwd, command, cols, rows, background });
       return { terminalId: meta.id, terminal: meta };
     }
 
@@ -245,6 +245,14 @@ async function dispatchOp(op, payload, ctx) {
         });
       }
       return { ok: true };
+    }
+
+    case 'setBackground': {
+      const { terminalId, background } = payload;
+      if (!terminalId) throw new Error('setBackground: terminalId required');
+      const meta = ptyManager.setBackground(terminalId, !!background);
+      if (!meta) throw new Error(`setBackground: terminal ${terminalId} not found`);
+      return { ok: true, terminal: meta };
     }
 
     default:

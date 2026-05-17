@@ -138,6 +138,9 @@ export function createShellhostClient({ socketPath, reconnect = false } = {}) {
     noteClaudeSession(terminalId, sessionId) {
       return request('noteClaudeSession', { terminalId, sessionId });
     },
+    setBackground(terminalId, background) {
+      return request('setBackground', { terminalId, background: !!background });
+    },
 
     // Escape hatch for op-extensions (background mode, claude session, etc.) in
     // future phases.

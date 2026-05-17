@@ -456,9 +456,12 @@ app.post('/api/projects', async (req, res) => {
 
 // Terminal CRUD endpoints (new direct-PTY path, no tmux)
 app.post('/api/terminals', async (req, res) => {
-  const { projectSlug, label, command, cwd: requestedCwd } = req.body || {};
+  const { projectSlug, label, command, cwd: requestedCwd, background } = req.body || {};
   if (!projectSlug || typeof projectSlug !== 'string') {
     return res.status(400).json({ error: 'projectSlug is required' });
+  }
+  if (background !== undefined && typeof background !== 'boolean') {
+    return res.status(400).json({ error: 'background must be a boolean' });
   }
 
   try {
@@ -482,10 +485,35 @@ app.post('/api/terminals', async (req, res) => {
       // project doesn't exist, use HOME
     }
 
-    const terminal = await terminalManager.create({ projectSlug, label, command, cwd });
+    const terminal = await terminalManager.create({
+      projectSlug,
+      label,
+      command,
+      cwd,
+      background: !!background,
+    });
     res.status(201).json(terminal);
   } catch (err) {
     res.status(500).json({ error: `Failed to create terminal: ${err.message}` });
+  }
+});
+
+// Phase 8: Toggle background-mode on an existing terminal. The flag is
+// persisted to meta immediately and takes effect on the PTY on next respawn.
+app.post('/api/terminals/:id/background', async (req, res) => {
+  const { background } = req.body || {};
+  if (typeof background !== 'boolean') {
+    return res.status(400).json({ error: 'background must be a boolean' });
+  }
+  if (typeof terminalManager.setBackground !== 'function') {
+    return res.status(501).json({ error: 'background mode not supported by this backend' });
+  }
+  try {
+    const terminal = await terminalManager.setBackground(req.params.id, background);
+    if (!terminal) return res.status(404).json({ error: 'Terminal not found' });
+    res.json(terminal);
+  } catch (err) {
+    res.status(500).json({ error: `Failed to toggle background: ${err.message}` });
   }
 });
 
