@@ -254,7 +254,8 @@ Human work is confined to:
 
 <!-- PARALLEL 6,7,8 -->
 
-## Phase 6: CodeMirror 6 editor
+## Phase 6: CodeMirror 6 editor  [COMPLETE]
+<!-- PHASE 6 COMPLETE -->
 
 **Delivers**: The current text-only file viewer is replaced with a CodeMirror 6 editor. Files open with syntax highlighting for the major languages used in the project. Standard editing affordances (find/replace, undo/redo, multi-cursor, line numbers) work. Save is explicit (Ctrl+S) and automatic on blur. Path safety is enforced server-side.
 
@@ -276,6 +277,7 @@ Human work is confined to:
 ---
 
 ## Phase 7: Claude-aware resume
+<!-- PHASE 7 COMPLETE -->
 
 **Delivers**: When a terminal is running `claude`, DanCode detects it and persists the active session id to the terminal's `meta.json`. After a Pi reboot / shellhost restart, the respawn (Phase 5) uses `claude --resume <session-id>` instead of a bare shell, so the conversation continues. A "Resume Claude" button on the terminal pane offers manual resume of the most recent session for that project.
 
