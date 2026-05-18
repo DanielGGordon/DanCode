@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import LoginScreen from './LoginScreen.jsx'
 import NewProjectForm from './NewProjectForm.jsx'
 import CommandPalette from './CommandPalette.jsx'
+import HelpModal from './HelpModal.jsx'
 import Sidebar from './Sidebar.jsx'
 import ResizeHandle from './ResizeHandle.jsx'
 
@@ -50,6 +51,7 @@ function App() {
   const [selectedSlug, setSelectedSlug] = useState(null)
   const [selectedProjectName, setSelectedProjectName] = useState(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [projects, setProjects] = useState([])
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === 'true')
   const [fileExplorerCollapsed, setFileExplorerCollapsed] = useState(() => localStorage.getItem(FILE_EXPLORER_KEY) !== 'false')
@@ -68,6 +70,38 @@ function App() {
   const [mobileTerminal, setMobileTerminal] = useState(null) // { id, label }
   const [mobileTerminals, setMobileTerminals] = useState([]) // all terminals for current project
   const [projectTerminals, setProjectTerminals] = useState({}) // { [slug]: [...terminals with lastActivity] }
+  const [now, setNow] = useState(() => Date.now())
+
+  // Tick a Date.now() value every 1s so the derived Claude state (which
+  // depends on `now - lastActiveAt`) recomputes between API polls. This is
+  // pure local state — no network involved.
+  useEffect(() => {
+    if (!token) return
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [token])
+
+  // Per-project Claude state map, recomputed from projectTerminals + `now`.
+  //   'waiting' → at least one terminal has claude foreground and has been
+  //               quiet for >= 2s. Render a red dot.
+  //   'working' → at least one terminal has claude foreground with recent
+  //               output. Render a pulsing yellow dot.
+  //   undefined → no claude activity. No indicator.
+  const projectClaudeState = (() => {
+    const out = {}
+    for (const [slug, terms] of Object.entries(projectTerminals)) {
+      let state
+      for (const t of terms) {
+        if (!t?.claudeActive) continue
+        const last = t.lastActiveAt ? Date.parse(t.lastActiveAt) : 0
+        const idleMs = last ? now - last : Infinity
+        if (idleMs >= 2000) { state = 'waiting'; break }
+        state = state || 'working'
+      }
+      if (state) out[slug] = state
+    }
+    return out
+  })()
 
   useEffect(() => {
     if (!token) return
@@ -120,9 +154,11 @@ function App() {
     fetchProjects()
   }, [fetchProjects])
 
-  // Fetch terminal activity data for all projects (mobile dashboard)
+  // Fetch terminal activity data for all projects. Used on mobile for the
+  // dashboard and on desktop to power the per-project Claude state indicator
+  // in the sidebar.
   const fetchAllTerminalActivity = useCallback(async () => {
-    if (!token || !isMobile) return
+    if (!token) return
     try {
       const res = await fetch('/api/terminals', {
         headers: { Authorization: `Bearer ${token}` },
@@ -137,15 +173,16 @@ function App() {
         setProjectTerminals(grouped)
       }
     } catch {}
-  }, [token, isMobile])
+  }, [token])
 
   useEffect(() => {
+    if (!token) return
     fetchAllTerminalActivity()
-    // Refresh activity every 30 seconds
-    if (isMobile && token) {
-      const interval = setInterval(fetchAllTerminalActivity, 30000)
-      return () => clearInterval(interval)
-    }
+    // Desktop refreshes every 3s for snappy Claude indicators; mobile is
+    // every 30s since the dashboard is more coarse-grained.
+    const ms = isMobile ? 30_000 : 3_000
+    const interval = setInterval(fetchAllTerminalActivity, ms)
+    return () => clearInterval(interval)
   }, [fetchAllTerminalActivity, isMobile, token])
 
   // Persist file explorer width
@@ -191,6 +228,13 @@ function App() {
         e.preventDefault()
         e.stopPropagation()
         setPaletteOpen(false)
+      }
+      if (e.key === '?' && e.shiftKey) {
+        const tag = document.activeElement?.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return
+        e.preventDefault()
+        e.stopPropagation()
+        setHelpOpen((prev) => !prev)
       }
       if (e.altKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft') && Array.isArray(projects) && projects.length > 1) {
         e.preventDefault()
@@ -470,6 +514,7 @@ function App() {
         currentSlug={selectedSlug}
         onSelect={handlePaletteSelect}
       />
+      <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
       <header className="flex items-center px-4 py-1.5 bg-base03 border-b border-base01/30">
         <h1 className="text-sm font-medium text-base0 tracking-wide">DanCode</h1>
         {selectedProjectName && (
@@ -512,9 +557,18 @@ function App() {
           + New Project
         </button>
         <button
+          onClick={() => setHelpOpen(true)}
+          data-testid="help-button"
+          title="Keyboard shortcuts (?)"
+          aria-label="Keyboard shortcuts"
+          className="ml-auto w-6 h-6 flex items-center justify-center rounded border border-base01/40 text-xs text-base01 hover:text-base1 hover:border-base01 transition-colors"
+        >
+          ?
+        </button>
+        <button
           onClick={handleLogout}
           data-testid="logout-button"
-          className="ml-auto text-xs text-base01 hover:text-base0 transition-colors"
+          className="ml-3 text-xs text-base01 hover:text-base0 transition-colors"
         >
           Logout
         </button>
@@ -523,6 +577,8 @@ function App() {
         <Sidebar
           projects={projects}
           currentSlug={selectedSlug}
+          token={token}
+          claudeState={projectClaudeState}
           onSelect={handleSidebarSelect}
           onDelete={handleDeleteProject}
           onRename={handleRenameProject}

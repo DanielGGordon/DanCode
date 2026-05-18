@@ -14,7 +14,7 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
-    allowedHosts: ['danpi.tailce0a45.ts.net'],
+    allowedHosts: ['danpi.tailce0a45.ts.net', 'danpi.local', 'danpi'],
     proxy: {
       '/socket.io': {
         target: `http://localhost:${backendPort}`,

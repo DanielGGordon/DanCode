@@ -20,6 +20,7 @@ function defaultShellhostSocket() {
   return join(osHomedir(), '.dancode', 'shellhost.sock');
 }
 import { listDirectory, readFileContent, writeFileContent, createDirectory, renameFile, deleteFile, safePath, getFileStats } from './files.js';
+import { getSystemStats, listDirsForCompletion } from './system.js';
 import { defaultLayout, validateLayout, readLayout, writeLayout, removeMissingFiles, getLayoutsBaseDir } from './layout.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -755,6 +756,29 @@ app.delete('/api/files', async (req, res) => {
     if (err.code === 'FORBIDDEN') return res.status(403).json({ error: err.message });
     if (err.code === 'ENOENT') return res.status(404).json({ error: 'File not found' });
     res.status(500).json({ error: `Failed to delete: ${err.message}` });
+  }
+});
+
+// ---------- System info (CPU/memory + dir autocomplete) ----------
+
+app.get('/api/system/stats', async (req, res) => {
+  try {
+    const stats = await getSystemStats();
+    res.json(stats);
+  } catch (err) {
+    res.status(500).json({ error: `Failed to read system stats: ${err.message}` });
+  }
+});
+
+app.get('/api/system/dirs', async (req, res) => {
+  const { path: inputPath } = req.query;
+  try {
+    const result = await listDirsForCompletion(typeof inputPath === 'string' ? inputPath : '');
+    res.json(result);
+  } catch (err) {
+    if (err.code === 'ENOENT') return res.json({ base: '', entries: [] });
+    if (err.code === 'EACCES') return res.status(403).json({ error: 'Permission denied' });
+    res.status(500).json({ error: `Failed to list directories: ${err.message}` });
   }
 });
 

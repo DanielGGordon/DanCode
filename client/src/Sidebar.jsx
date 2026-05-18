@@ -1,6 +1,22 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import SystemStats from './SystemStats.jsx'
 
-export default function Sidebar({ projects, currentSlug, onSelect, onDelete, onRename, collapsed, onToggle }) {
+function ClaudeDot({ state }) {
+  if (state !== 'waiting' && state !== 'working') return null
+  const isWaiting = state === 'waiting'
+  return (
+    <span
+      data-testid={`claude-dot-${state}`}
+      title={isWaiting ? 'Claude is waiting for you' : 'Claude is working'}
+      aria-label={isWaiting ? 'Claude is waiting for you' : 'Claude is working'}
+      className={`shrink-0 w-2 h-2 rounded-full ${
+        isWaiting ? 'bg-red shadow-[0_0_4px_rgba(220,50,47,0.8)]' : 'bg-yellow animate-pulse'
+      }`}
+    />
+  )
+}
+
+export default function Sidebar({ projects, currentSlug, onSelect, onDelete, onRename, collapsed, onToggle, token, claudeState = {} }) {
   const [menu, setMenu] = useState(null) // { slug, x, y }
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [renaming, setRenaming] = useState(null) // { slug, name }
@@ -47,7 +63,7 @@ export default function Sidebar({ projects, currentSlug, onSelect, onDelete, onR
   return (
     <aside
       data-testid="sidebar"
-      className={`${collapsed ? 'w-10' : 'w-52'} bg-base02 border-r border-base01/30 flex flex-col shrink-0 overflow-y-auto transition-all duration-150`}
+      className={`${collapsed ? 'w-10' : 'w-52'} bg-base02 border-r border-base01/30 flex flex-col shrink-0 transition-all duration-150 min-h-0`}
     >
       <div className={`flex items-center border-b border-base01/30 ${collapsed ? 'justify-center py-2' : 'px-3 py-2'}`}>
         {!collapsed && (
@@ -63,7 +79,7 @@ export default function Sidebar({ projects, currentSlug, onSelect, onDelete, onR
           {collapsed ? '\u25b6' : '\u25c0'}
         </button>
       </div>
-      {!collapsed && <ul data-testid="sidebar-project-list" className="py-1">
+      {!collapsed && <ul data-testid="sidebar-project-list" className="py-1 flex-1 overflow-y-auto min-h-0">
         {(!projects || projects.length === 0) && (
           <li data-testid="sidebar-empty" className="px-3 py-2 text-xs text-base01">
             No projects yet
@@ -96,12 +112,17 @@ export default function Sidebar({ projects, currentSlug, onSelect, onDelete, onR
                   onBlur={(e) => handleRenameSubmit(p.slug, e.target.value)}
                 />
               ) : (
-                <span className="flex-1 truncate">{p.name}</span>
+                <>
+                  <span className="flex-1 truncate">{p.name}</span>
+                  <ClaudeDot state={claudeState[p.slug]} />
+                </>
               )}
             </li>
           )
         })}
       </ul>}
+
+      {!collapsed && <SystemStats token={token} />}
 
       {/* Context menu */}
       {menu && (
