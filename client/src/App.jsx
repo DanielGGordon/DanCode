@@ -93,7 +93,10 @@ function App() {
       let state
       for (const t of terms) {
         if (!t?.claudeActive) continue
-        const last = t.lastActiveAt ? Date.parse(t.lastActiveAt) : 0
+        // The server exposes the timestamp as `lastActivity` (it renames
+        // shellhost's `lastActiveAt`). Fall back to either for safety.
+        const raw = t.lastActivity || t.lastActiveAt
+        const last = raw ? Date.parse(raw) : 0
         const idleMs = last ? now - last : Infinity
         if (idleMs >= 2000) { state = 'waiting'; break }
         state = state || 'working'
