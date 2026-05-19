@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { existsSync, mkdirSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { isAccountSetUp, createAccount, verifyLogin, createSession, validateSession, destroySession, getCredentialsPath, startSessionCleanupInterval } from './auth.js';
-import { validateProjectInput, createProject, listProjects, getProject, updateProject, deleteProject, renameProject, getProjectsDir, slugify, isValidSlug } from './projects.js';
+import { validateProjectInput, createProject, listProjects, getProject, updateProject, deleteProject, renameProject, getProjectsDir, slugify, isValidSlug, writeProjectOrder } from './projects.js';
 import { ShellhostTerminalManager, setupShellhostNamespace } from './shellhost-terminal-manager.js';
 import { homedir as osHomedir } from 'node:os';
 
@@ -213,6 +213,19 @@ app.get('/api/projects', async (req, res) => {
     res.json(projects);
   } catch (err) {
     res.status(500).json({ error: 'Failed to list projects' });
+  }
+});
+
+app.put('/api/projects/order', async (req, res) => {
+  const { order } = req.body || {};
+  if (!Array.isArray(order)) {
+    return res.status(400).json({ error: 'order must be an array of slugs' });
+  }
+  try {
+    const saved = await writeProjectOrder(order);
+    res.json({ order: saved });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to save project order: ${err.message}` });
   }
 });
 

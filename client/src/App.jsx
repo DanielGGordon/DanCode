@@ -336,6 +336,33 @@ function App() {
     } catch {}
   }
 
+  async function handleReorderProjects(order) {
+    if (!Array.isArray(order)) return
+    // Optimistically reorder the local list so the UI feels instant; the
+    // server reply will reconcile if it differs.
+    setProjects((prev) => {
+      if (!Array.isArray(prev)) return prev
+      const bySlug = new Map(prev.map((p) => [p.slug, p]))
+      const reordered = order.map((s) => bySlug.get(s)).filter(Boolean)
+      // Append anything the server knows about that wasn't in `order`.
+      for (const p of prev) {
+        if (!order.includes(p.slug)) reordered.push(p)
+      }
+      return reordered
+    })
+    try {
+      await fetch('/api/projects/order', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ order }),
+      })
+      fetchProjects()
+    } catch {}
+  }
+
   async function handleDeleteProject(slug) {
     try {
       const res = await fetch(`/api/projects/${slug}`, {
@@ -585,6 +612,7 @@ function App() {
           onSelect={handleSidebarSelect}
           onDelete={handleDeleteProject}
           onRename={handleRenameProject}
+          onReorder={handleReorderProjects}
           collapsed={sidebarCollapsed}
           onToggle={() => setSidebarCollapsed((prev) => {
             const next = !prev

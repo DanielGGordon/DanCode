@@ -16,12 +16,47 @@ function ClaudeDot({ state }) {
   )
 }
 
-export default function Sidebar({ projects, currentSlug, onSelect, onDelete, onRename, collapsed, onToggle, token, claudeState = {} }) {
+export default function Sidebar({ projects, currentSlug, onSelect, onDelete, onRename, onReorder, collapsed, onToggle, token, claudeState = {} }) {
   const [menu, setMenu] = useState(null) // { slug, x, y }
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [renaming, setRenaming] = useState(null) // { slug, name }
+  const [dragSlug, setDragSlug] = useState(null)
+  const [dropSlug, setDropSlug] = useState(null) // slug whose row the drop-indicator hovers above
   const menuRef = useRef(null)
   const renameRef = useRef(null)
+
+  const handleDragStart = useCallback((e, slug) => {
+    setDragSlug(slug)
+    try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', slug) } catch {}
+  }, [])
+
+  const handleDragOver = useCallback((e, slug) => {
+    if (!dragSlug || dragSlug === slug) return
+    e.preventDefault()
+    try { e.dataTransfer.dropEffect = 'move' } catch {}
+    if (dropSlug !== slug) setDropSlug(slug)
+  }, [dragSlug, dropSlug])
+
+  const handleDrop = useCallback((e, targetSlug) => {
+    e.preventDefault()
+    const source = dragSlug
+    setDragSlug(null)
+    setDropSlug(null)
+    if (!source || source === targetSlug || !Array.isArray(projects)) return
+    const slugs = projects.map((p) => p.slug)
+    const from = slugs.indexOf(source)
+    const to = slugs.indexOf(targetSlug)
+    if (from < 0 || to < 0) return
+    const next = slugs.slice()
+    next.splice(from, 1)
+    next.splice(to, 0, source)
+    onReorder?.(next)
+  }, [dragSlug, projects, onReorder])
+
+  const handleDragEnd = useCallback(() => {
+    setDragSlug(null)
+    setDropSlug(null)
+  }, [])
 
   // Close context menu on outside click or Escape
   useEffect(() => {
@@ -86,15 +121,23 @@ export default function Sidebar({ projects, currentSlug, onSelect, onDelete, onR
           </li>
         )}
         {(projects || []).map((p) => {
+          const isDragging = dragSlug === p.slug
+          const isDropTarget = dropSlug === p.slug && dragSlug && dragSlug !== p.slug
           return (
             <li
               key={p.slug}
               data-testid={`sidebar-project-${p.slug}`}
+              draggable={renaming?.slug !== p.slug}
+              onDragStart={(e) => handleDragStart(e, p.slug)}
+              onDragOver={(e) => handleDragOver(e, p.slug)}
+              onDrop={(e) => handleDrop(e, p.slug)}
+              onDragEnd={handleDragEnd}
+              onDragLeave={() => { if (dropSlug === p.slug) setDropSlug(null) }}
               className={`px-3 py-2 text-sm cursor-pointer transition-colors flex items-center gap-2 ${
                 p.slug === currentSlug
                   ? 'text-base1 bg-base03/70 border-l-2 border-blue'
                   : 'text-base0 hover:bg-base03/30 border-l-2 border-transparent'
-              }`}
+              } ${isDragging ? 'opacity-40' : ''} ${isDropTarget ? 'border-t border-t-blue' : ''}`}
               onClick={() => onSelect?.(p.slug)}
               onContextMenu={(e) => handleContextMenu(e, p.slug)}
             >

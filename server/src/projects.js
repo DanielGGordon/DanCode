@@ -22,6 +22,35 @@ export function getProjectsDir() {
 }
 
 /**
+ * Path to the JSON file that records the user's preferred sidebar order
+ * (an array of slugs). The file is optional — when missing, listProjects
+ * falls back to alphabetical sort by name.
+ */
+export function getProjectOrderPath() {
+  return join(homedir(), '.dancode', 'project-order.json');
+}
+
+export async function readProjectOrder(orderPath = getProjectOrderPath()) {
+  if (!existsSync(orderPath)) return [];
+  try {
+    const txt = await readFile(orderPath, 'utf-8');
+    const parsed = JSON.parse(txt);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((s) => typeof s === 'string');
+    }
+  } catch {}
+  return [];
+}
+
+export async function writeProjectOrder(order, orderPath = getProjectOrderPath()) {
+  if (!Array.isArray(order)) throw new TypeError('order must be an array of slugs');
+  const clean = order.filter((s) => typeof s === 'string' && isValidSlug(s));
+  await mkdir(join(orderPath, '..'), { recursive: true });
+  await writeFile(orderPath, JSON.stringify(clean, null, 2) + '\n');
+  return clean;
+}
+
+/**
  * Returns the path to a specific project's config file.
  */
 export function getProjectConfigPath(slug, projectsDir = getProjectsDir()) {
@@ -133,7 +162,19 @@ export async function listProjects(projectsDir = getProjectsDir()) {
     }
   }
 
-  return projects.sort((a, b) => a.name.localeCompare(b.name));
+  const order = await readProjectOrder();
+  if (order.length === 0) {
+    return projects.sort((a, b) => a.name.localeCompare(b.name));
+  }
+  // Sort by index in `order`; anything not in `order` falls to the bottom
+  // in alphabetical order so newly-created projects appear at the end.
+  const rank = new Map(order.map((slug, i) => [slug, i]));
+  return projects.sort((a, b) => {
+    const ra = rank.has(a.slug) ? rank.get(a.slug) : Infinity;
+    const rb = rank.has(b.slug) ? rank.get(b.slug) : Infinity;
+    if (ra !== rb) return ra - rb;
+    return a.name.localeCompare(b.name);
+  });
 }
 
 /**
