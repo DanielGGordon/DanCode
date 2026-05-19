@@ -48,6 +48,7 @@ npm run dev              # Start shellhost + server + client concurrently
 - **Focused pane indicator** — 8px blue accent bar + dimmed unfocused panes
 - **Right-click context menu** on sidebar projects — Rename, Delete
 - **Keyboard shortcuts** — Ctrl+K command palette, Alt+arrows project switching, Ctrl+wheel font sizing
+- **Per-tab editor zoom** — In any open file editor, `Ctrl/Cmd +`, `Ctrl/Cmd -`, and `Ctrl/Cmd 0` change the font size of that editor only (range 8–32 px, default 14 px). The size is persisted per-project per-file in `localStorage` (key `dancode-zoom-file:<slug>:<filePath>`) and restored across reloads. Other open tabs, the file tree, and the surrounding UI are unaffected; when focus is outside any editor the shortcuts fall through to the browser's native page zoom.
 - **PWA installable** — manifest.json with DanCode branding, Solarized Dark theme color (#002b36), standalone display; service worker caches app shell for offline-capable fast loading; installable on Android home screen
 - **Mobile terminal** — Full-screen read-first terminal on mobile (<1024px) with thin top bar, keyboard toggle, and horizontal shortcut bar (Ctrl+C/V/D, Tab, arrows, Esc) with 44px tap targets
 - **Mobile dashboard** — Project card grid with activity indicators (active/idle), terminal labels, last activity timestamps, pull-to-refresh, long-press quick actions (open CLI/Claude terminal), and visibility-aware polling that pauses when the browser tab is hidden to save battery

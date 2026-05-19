@@ -60,11 +60,15 @@ DanCode/
 │   │   ├── CommandPalette.jsx  # Command palette overlay with fuzzy search for project switching (Ctrl+K)
 │   │   ├── FileExplorer.jsx   # Collapsible file explorer panel: lazy-loaded tree view, context menu, drag-to-terminal, click-to-view, .gitignore/.hidden toggles
 │   │   ├── FileExplorer.test.jsx # FileExplorer unit tests (tree view, context menu, toggles, drag, expand)
-│   │   ├── FileViewer.jsx     # Phase 6: CodeMirror 6 editor pane. Per-language packs lazy-loaded via editor/language.js, find/replace + undo/redo + multi-cursor via standard CM keymaps, always-on line numbers, saves on Ctrl+S and on blur through PUT /api/projects/:slug/files/*
-│   │   ├── FileViewer.test.jsx # Phase 6: FileViewer unit tests (language detection per ext, fetch via per-project file route, Ctrl+S save, blur save, undo/redo round-trip, find panel, line numbers always rendered)
+│   │   ├── FileViewer.jsx     # Phase 6: CodeMirror 6 editor pane. Per-language packs lazy-loaded via editor/language.js, find/replace + undo/redo + multi-cursor via standard CM keymaps, always-on line numbers, saves on Ctrl+S and on blur through PUT /api/projects/:slug/files/*. Per-tab-zoom: registers fileZoomKeymap and a font-size Compartment so Ctrl/Cmd +/-/0 resizes only the focused editor; initial size read from zoom.js on mount
+│   │   ├── FileViewer.test.jsx # Phase 6: FileViewer unit tests (language detection per ext, fetch via per-project file route, Ctrl+S save, blur save, undo/redo round-trip, find panel, line numbers always rendered). Per-tab-zoom: Ctrl+= bump, Ctrl+- decrement, Ctrl+0 reset, persisted-size restore on mount
 │   │   ├── editor/
 │   │   │   ├── language.js     # Phase 6: maps file extensions to CM language names and lazy-imports the matching language pack (bash via @codemirror/legacy-modes/mode/shell; jsx/tsx via lang-javascript flags)
-│   │   │   └── language.test.js # Phase 6: extension-to-language and language-to-extension mapping tests (19 cases)
+│   │   │   ├── language.test.js # Phase 6: extension-to-language and language-to-extension mapping tests (19 cases)
+│   │   │   ├── zoom.js         # Per-tab-zoom: pure helpers (clampFileZoom, fileZoomStorageKey, readFileZoom, writeFileZoom, clearFileZoom, stepFileZoom) backed by localStorage under `dancode-zoom-file:<slug>:<filePath>`. Default 14px, range [8, 32], integer step.
+│   │   │   ├── zoom.test.js    # Per-tab-zoom: 19 unit tests covering clamp, key namespacing, round-trip persistence, default-on-miss, and step semantics
+│   │   │   ├── zoom-keymap.js  # Per-tab-zoom: builds a CodeMirror keymap extension (Mod-=/+/-/0) that reconfigures a caller-owned font-size Compartment and persists the chosen size
+│   │   │   └── zoom-keymap.test.js # Per-tab-zoom: 10 specs that mount a CM view and assert keypresses dispatch the correct font-size effect and write through to localStorage
 │   │   ├── CommandPalette.test.jsx # CommandPalette unit tests (fuzzy match, filtering, open/close, selection)
 │   │   ├── LoginScreen.jsx     # Username/password + TOTP login form
 │   │   ├── LoginScreen.test.jsx # LoginScreen component unit tests
@@ -91,7 +95,7 @@ DanCode/
 │   ├── index.html              # HTML shell with PWA manifest link, theme-color meta, service worker registration
 │   ├── poc-terminal.html       # POC: HTML entry point for standalone terminal page
 │   ├── vite.config.js          # Vite config (proxy, Tailwind plugin, vitest jsdom env + setupFiles)
-│   ├── vitest.setup.js         # Phase 6: jsdom polyfills for CodeMirror's layout/measure APIs (Range.getClientRects, Element.getClientRects)
+│   ├── vitest.setup.js         # Phase 6: jsdom polyfills for CodeMirror's layout/measure APIs (Range.getClientRects, Element.getClientRects). Per-tab-zoom: also installs an in-memory localStorage shim so tests see a working Storage API regardless of Node's experimental built-in localStorage.
 │   ├── package.json            # Includes vitest test scripts
 │   └── README.md
 ├── docs/
@@ -145,7 +149,8 @@ DanCode/
 │   │   │   ├── shellhost-restart.spec.js  # Phase 5: SIGKILL shellhost via /test-only/restart-shellhost → reload → both terminals re-appear with prior-session banner + prior sentinel in DOM
 │   │   │   ├── codemirror.spec.js  # Phase 6: 8 fixture extensions render highlighted token spans, Ctrl+S persists edits across reload, Ctrl+F opens search panel, ../ traversal on PUT → 403
 │   │   │   ├── codemirror-perf.spec.js  # Phase 6: 100-keystroke p95<50ms / p99<100ms gate on a ~950KB JS fixture (skipped on aarch64; set DANCODE_FORCE_PERF=1 to enforce)
-│   │   │   └── resume-claude.spec.js  # Phase 7: sets a fake claudeSessionId via /api/test-only/note-claude-session → Resume Claude button visible → click → `claude --resume <id>` appears in xterm DOM; dismiss hides the button
+│   │   │   ├── resume-claude.spec.js  # Phase 7: sets a fake claudeSessionId via /api/test-only/note-claude-session → Resume Claude button visible → click → `claude --resume <id>` appears in xterm DOM; dismiss hides the button
+│   │   │   └── per-tab-zoom.spec.js  # Per-tab-zoom: opens two file tabs, zooms one with Ctrl/Cmd +/-/0, asserts the other tab stays at default, reloads, asserts zoom restored. Second test exercises minimum clamp at 8px.
 │   │   ├── shellhost-integration.test.js # Phase 1+2: server <-> shellhost integration over UNIX socket (incl. disk replay on reconnect)
 │   │   ├── claude-session-meta.test.js  # Phase 7: /api/terminals + /api/terminals/:id expose claudeSessionId (default null + after setClaudeSessionId)
 │   │   ├── shellhost-restart.test.js     # Phase 3: ShellhostTerminalManager.recover() + startServer() list-based recovery; data-race stress (1MB output during restart cycle)
