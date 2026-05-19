@@ -250,6 +250,27 @@ describe('TerminalLayout', () => {
     expect(getByTestId('confirm-delete-cancel')).toBeDefined()
   })
 
+  it('removes the persisted zoom entry when a terminal is closed', async () => {
+    // Phase 2: closing a terminal must drop dancode-zoom-terminal:<id> so
+    // stale ids don't pile up in localStorage.
+    localStorage.setItem('dancode-zoom-terminal:term-1', '20')
+    expect(localStorage.getItem('dancode-zoom-terminal:term-1')).toBe('20')
+
+    mockFetchSuccess()
+    const { getByTestId } = render(<TerminalLayout token="tok" slug="myproj" />)
+    await waitFor(() => {
+      expect(getByTestId('close-terminal-0')).toBeDefined()
+    })
+
+    // First click → confirmation; second click → DELETE.
+    act(() => { fireEvent.click(getByTestId('close-terminal-0')) })
+    await act(async () => { fireEvent.click(getByTestId('close-terminal-0')) })
+
+    await waitFor(() => {
+      expect(localStorage.getItem('dancode-zoom-terminal:term-1')).toBeNull()
+    })
+  })
+
   it('cancel button on delete confirmation closes overlay', async () => {
     mockFetchSuccess()
     const { getByTestId, queryByTestId } = render(<TerminalLayout token="tok" slug="myproj" />)

@@ -11,6 +11,12 @@ const mockOpen = vi.fn()
 const mockFocus = vi.fn()
 const mockClear = vi.fn()
 const mockReset = vi.fn()
+const mockFit = vi.fn()
+// Tracks every assignment to `term.options.fontSize`.
+let mockFontSizeAssignments = []
+// Captures the most recent custom key handler registered via
+// attachCustomKeyEventHandler so tests can drive xterm's pre-input hook.
+let mockCustomKeyHandler = null
 let mockCols = 80
 let mockRows = 24
 
@@ -25,11 +31,18 @@ vi.mock('@xterm/xterm', () => ({
       this.focus = mockFocus
       this.clear = mockClear
       this.reset = mockReset
-      this.attachCustomKeyEventHandler = vi.fn()
+      this.attachCustomKeyEventHandler = vi.fn((fn) => { mockCustomKeyHandler = fn })
       this.getSelection = vi.fn().mockReturnValue('')
       this.clearSelection = vi.fn()
       this.paste = vi.fn()
-      this.options = {}
+      // Use a setter on `fontSize` so tests can observe every assignment.
+      this.options = new Proxy({}, {
+        set(obj, prop, value) {
+          if (prop === 'fontSize') mockFontSizeAssignments.push(value)
+          obj[prop] = value
+          return true
+        },
+      })
     }
     get cols() { return mockCols }
     get rows() { return mockRows }
@@ -38,7 +51,7 @@ vi.mock('@xterm/xterm', () => ({
 
 vi.mock('@xterm/addon-fit', () => ({
   FitAddon: class MockFitAddon {
-    fit() {}
+    fit(...args) { mockFit(...args) }
   },
 }))
 
@@ -105,6 +118,9 @@ beforeEach(() => {
   managerHandlers = {}
   mockConnected = false
   mockSocket.io.opts.reconnection = true
+  mockFontSizeAssignments = []
+  mockCustomKeyHandler = null
+  localStorage.clear()
   cleanup()
   // jsdom elements have zero dimensions by default; set non-zero so terminals
   // treat containers as visible and connect normally in most tests.
@@ -635,6 +651,149 @@ describe('Terminal', () => {
     expect(preventSpy).toHaveBeenCalled()
 
     globalThis.FileReader = origFileReader
+  })
+
+  // Phase 2: per-terminal zoom keybindings
+  describe('per-terminal zoom (Ctrl/Cmd + =, -, 0)', () => {
+    function focusContainer(container) {
+      Object.defineProperty(document, 'activeElement', { value: container, configurable: true })
+    }
+
+    it('Ctrl+= on focused terminal increases font size by one step, fits, and emits resize', async () => {
+      const { getByTestId } = await renderTerminal({ token: 'tok', terminalId: 'zoom-1' })
+      vi.runAllTimers()
+      mockConnected = true
+      mockSocketEmit.mockClear()
+      mockFit.mockClear()
+      mockFontSizeAssignments = []
+
+      const container = getByTestId('terminal')
+      focusContainer(container)
+
+      const event = new KeyboardEvent('keydown', { key: '=', ctrlKey: true, bubbles: true, cancelable: true })
+      const preventSpy = vi.spyOn(event, 'preventDefault')
+      container.dispatchEvent(event)
+
+      // Default 13 -> 14
+      expect(mockFontSizeAssignments).toContain(14)
+      expect(mockFit).toHaveBeenCalled()
+      expect(mockSocketEmit).toHaveBeenCalledWith('resize', { cols: 80, rows: 24 })
+      expect(preventSpy).toHaveBeenCalled()
+    })
+
+    it('Cmd+= (metaKey) also zooms in', async () => {
+      const { getByTestId } = await renderTerminal({ token: 'tok', terminalId: 'zoom-1m' })
+      vi.runAllTimers()
+      mockFit.mockClear()
+      mockFontSizeAssignments = []
+      const container = getByTestId('terminal')
+      focusContainer(container)
+      container.dispatchEvent(new KeyboardEvent('keydown', { key: '=', metaKey: true, bubbles: true, cancelable: true }))
+      expect(mockFontSizeAssignments).toContain(14)
+      expect(mockFit).toHaveBeenCalled()
+    })
+
+    it("Ctrl+'+' (shifted '=') also zooms in", async () => {
+      const { getByTestId } = await renderTerminal({ token: 'tok', terminalId: 'zoom-plus' })
+      vi.runAllTimers()
+      mockFontSizeAssignments = []
+      const container = getByTestId('terminal')
+      focusContainer(container)
+      container.dispatchEvent(new KeyboardEvent('keydown', { key: '+', ctrlKey: true, bubbles: true, cancelable: true }))
+      expect(mockFontSizeAssignments).toContain(14)
+    })
+
+    it('Ctrl+- decreases font size and clamps at the minimum (8)', async () => {
+      // Persist a near-minimum to start so subsequent zoom-outs hit the clamp.
+      localStorage.setItem('dancode-zoom-terminal:zoom-clamp-min', '9')
+      const { getByTestId } = await renderTerminal({ token: 'tok', terminalId: 'zoom-clamp-min' })
+      vi.runAllTimers()
+      const container = getByTestId('terminal')
+      focusContainer(container)
+      mockFontSizeAssignments = []
+
+      container.dispatchEvent(new KeyboardEvent('keydown', { key: '-', ctrlKey: true, bubbles: true, cancelable: true }))
+      expect(mockFontSizeAssignments).toContain(8)
+      mockFontSizeAssignments = []
+      // Already at minimum; should NOT push another assignment.
+      container.dispatchEvent(new KeyboardEvent('keydown', { key: '-', ctrlKey: true, bubbles: true, cancelable: true }))
+      expect(mockFontSizeAssignments).toEqual([])
+    })
+
+    it('Ctrl+0 resets to the configured default (13)', async () => {
+      localStorage.setItem('dancode-zoom-terminal:zoom-reset', '22')
+      const { getByTestId } = await renderTerminal({ token: 'tok', terminalId: 'zoom-reset' })
+      vi.runAllTimers()
+      const container = getByTestId('terminal')
+      focusContainer(container)
+      mockFontSizeAssignments = []
+      container.dispatchEvent(new KeyboardEvent('keydown', { key: '0', ctrlKey: true, bubbles: true, cancelable: true }))
+      expect(mockFontSizeAssignments).toContain(13)
+    })
+
+    it('persists the new size to localStorage under the per-terminal key', async () => {
+      const { getByTestId } = await renderTerminal({ token: 'tok', terminalId: 'zoom-persist' })
+      vi.runAllTimers()
+      const container = getByTestId('terminal')
+      focusContainer(container)
+      container.dispatchEvent(new KeyboardEvent('keydown', { key: '=', ctrlKey: true, bubbles: true, cancelable: true }))
+      expect(localStorage.getItem('dancode-zoom-terminal:zoom-persist')).toBe('14')
+    })
+
+    it('restores a previously persisted size on mount', async () => {
+      localStorage.setItem('dancode-zoom-terminal:zoom-restore', '20')
+      await renderTerminal({ token: 'tok', terminalId: 'zoom-restore' })
+      vi.runAllTimers()
+      // The initial xterm `fontSize` constructor arg should be 20 (the persisted value).
+      // We look for it in the assignment stream too — but constructor uses
+      // {fontSize: ...} not assignment, so we instead check via the public
+      // contract: a subsequent Ctrl+= produces 21, not 14.
+      mockFontSizeAssignments = []
+      const container = document.querySelector('[data-testid="terminal"]')
+      Object.defineProperty(document, 'activeElement', { value: container, configurable: true })
+      container.dispatchEvent(new KeyboardEvent('keydown', { key: '=', ctrlKey: true, bubbles: true, cancelable: true }))
+      expect(mockFontSizeAssignments).toContain(21)
+    })
+
+    it('does NOT zoom when focus is outside the terminal pane', async () => {
+      const { getByTestId } = await renderTerminal({ token: 'tok', terminalId: 'zoom-blur' })
+      vi.runAllTimers()
+      const container = getByTestId('terminal')
+      // Make activeElement something outside the container.
+      const outside = document.createElement('div')
+      document.body.appendChild(outside)
+      Object.defineProperty(document, 'activeElement', { value: outside, configurable: true })
+      mockFontSizeAssignments = []
+
+      // Dispatch keydown on the outside element — should NOT trigger zoom.
+      const event = new KeyboardEvent('keydown', { key: '=', ctrlKey: true, bubbles: true, cancelable: true })
+      const preventSpy = vi.spyOn(event, 'preventDefault')
+      outside.dispatchEvent(event)
+
+      expect(mockFontSizeAssignments).toEqual([])
+      expect(preventSpy).not.toHaveBeenCalled()
+      // (also confirm container did not see preventDefault on its own listener)
+      container.removeChild // tidy
+    })
+
+    it("xterm custom key handler blocks zoom keys from reaching the PTY", async () => {
+      await renderTerminal({ token: 'tok', terminalId: 'zoom-ptyguard' })
+      vi.runAllTimers()
+      expect(mockCustomKeyHandler).toBeTypeOf('function')
+
+      const zoomIn = { type: 'keydown', ctrlKey: true, metaKey: false, key: '=' }
+      const zoomOut = { type: 'keydown', ctrlKey: true, metaKey: false, key: '-' }
+      const reset = { type: 'keydown', ctrlKey: true, metaKey: false, key: '0' }
+      const cmdZoom = { type: 'keydown', ctrlKey: false, metaKey: true, key: '+' }
+      const plain = { type: 'keydown', ctrlKey: false, metaKey: false, key: 'a' }
+
+      expect(mockCustomKeyHandler(zoomIn)).toBe(false)
+      expect(mockCustomKeyHandler(zoomOut)).toBe(false)
+      expect(mockCustomKeyHandler(reset)).toBe(false)
+      expect(mockCustomKeyHandler(cmdZoom)).toBe(false)
+      // Plain keys still pass through (true) so xterm sends them to the PTY.
+      expect(mockCustomKeyHandler(plain)).toBe(true)
+    })
   })
 
   // Phase 7: Resume Claude button
