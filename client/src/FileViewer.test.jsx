@@ -188,3 +188,43 @@ describe('FileViewer find panel', () => {
     expect(container.querySelector('.cm-gutter.cm-lineNumbers')).not.toBeNull()
   })
 })
+
+describe('FileViewer per-tab zoom', () => {
+  it('Ctrl+= writes a bumped font size to localStorage for this slug+filePath', async () => {
+    localStorage.clear()
+    const { container } = await renderEditor({ filePath: 'foo.js', slug: 'p' })
+    const cmContent = container.querySelector('.cm-content')
+    act(() => { cmContent.focus() })
+    fireEvent.keyDown(cmContent, { key: '=', code: 'Equal', ctrlKey: true })
+    const { readFileZoom, FILE_ZOOM_DEFAULT } = await import('./editor/zoom.js')
+    expect(readFileZoom('p', 'foo.js')).toBe(FILE_ZOOM_DEFAULT + 1)
+  })
+
+  it('Ctrl+- writes a decreased size, Ctrl+0 resets to default', async () => {
+    localStorage.clear()
+    const { container } = await renderEditor({ filePath: 'bar.js', slug: 'p' })
+    const cmContent = container.querySelector('.cm-content')
+    act(() => { cmContent.focus() })
+    fireEvent.keyDown(cmContent, { key: '-', code: 'Minus', ctrlKey: true })
+    const zoomMod = await import('./editor/zoom.js')
+    expect(zoomMod.readFileZoom('p', 'bar.js')).toBe(zoomMod.FILE_ZOOM_DEFAULT - 1)
+    fireEvent.keyDown(cmContent, { key: '0', code: 'Digit0', ctrlKey: true })
+    expect(zoomMod.readFileZoom('p', 'bar.js')).toBe(zoomMod.FILE_ZOOM_DEFAULT)
+  })
+
+  it('restores the persisted size on mount when one exists', async () => {
+    localStorage.clear()
+    const { writeFileZoom } = await import('./editor/zoom.js')
+    writeFileZoom('p', 'restored.js', 22)
+    const { container } = await renderEditor({ filePath: 'restored.js', slug: 'p' })
+    // The theme is injected as a generated stylesheet; we assert that the
+    // CM editor element renders with a font-size style block that mentions 22px.
+    const cmEditor = container.querySelector('.cm-editor')
+    expect(cmEditor).not.toBeNull()
+    // CM emits theme CSS into the host document head.
+    const styleText = Array.from(document.head.querySelectorAll('style'))
+      .map((s) => s.textContent || '')
+      .join('\n')
+    expect(styleText).toMatch(/22px/)
+  })
+})
