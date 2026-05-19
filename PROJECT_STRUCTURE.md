@@ -87,15 +87,17 @@ DanCode/
 │   │   ├── Sidebar.jsx         # Collapsible left sidebar listing all projects by name with active highlight
 │   │   ├── Sidebar.test.jsx    # Sidebar component unit tests
 │   │   ├── ResizeHandle.jsx    # Drag-to-resize handle component for split pane layouts (vertical/horizontal)
-│   │   ├── Terminal.jsx        # xterm.js terminal with forwardRef, pinch-to-zoom, readFirst mode, clipboard image paste (xterm dynamically imported)
-│   │   ├── Terminal.test.jsx   # Terminal component unit tests
+│   │   ├── Terminal.jsx        # xterm.js terminal with forwardRef, pinch-to-zoom, readFirst mode, clipboard image paste (xterm dynamically imported). Phase 2: Ctrl/Cmd + =, -, 0 zoom this xterm only (preventDefault'd via a document-capture keydown handler gated on container.contains(activeElement)); attachCustomKeyEventHandler returns false on zoom combos so xterm doesn't send them to the PTY; fontSize is read from / written to localStorage via terminalZoom.js, fit() runs after every change, and the new cols/rows are emitted on the existing resize wire.
+│   │   ├── Terminal.test.jsx   # Terminal component unit tests (incl. Phase 2 zoom-in/out/reset, persist + restore, clamp at bounds, focus gating, PTY-guard for zoom combos)
+│   │   ├── terminalZoom.js     # Phase 2: per-terminal zoom helpers — clamp [8,32] (default 13), zoomStorageKey('term') -> 'dancode-zoom-terminal:term', read/write/remove backed by localStorage with safe-storage guard, stepZoom(+/-1).
+│   │   ├── terminalZoom.test.js # Phase 2: 22 specs for clampTerminalFontSize, zoomStorageKey, read/write/remove round-trip, clamp-on-read, stepZoom bounds.
 │   │   ├── poc-terminal.js     # POC: standalone xterm.js page for new terminal API (E2E testing)
 │   │   ├── index.css           # Tailwind + Solarized Dark theme
 │   │   └── main.jsx            # Entry point
 │   ├── index.html              # HTML shell with PWA manifest link, theme-color meta, service worker registration
 │   ├── poc-terminal.html       # POC: HTML entry point for standalone terminal page
 │   ├── vite.config.js          # Vite config (proxy, Tailwind plugin, vitest jsdom env + setupFiles)
-│   ├── vitest.setup.js         # Phase 6: jsdom polyfills for CodeMirror's layout/measure APIs (Range.getClientRects, Element.getClientRects). Per-tab-zoom: also installs an in-memory localStorage shim so tests see a working Storage API regardless of Node's experimental built-in localStorage.
+│   ├── vitest.setup.js         # Phase 6: jsdom polyfills for CodeMirror's layout/measure APIs (Range.getClientRects, Element.getClientRects). Per-tab-zoom / Phase 2: also installs an in-memory localStorage shim (setItem/getItem/removeItem/clear/key/length) because jsdom@29 exposes only an empty plain object and Node's experimental built-in localStorage isn't a reliable Storage API.
 │   ├── package.json            # Includes vitest test scripts
 │   └── README.md
 ├── docs/
@@ -150,7 +152,8 @@ DanCode/
 │   │   │   ├── codemirror.spec.js  # Phase 6: 8 fixture extensions render highlighted token spans, Ctrl+S persists edits across reload, Ctrl+F opens search panel, ../ traversal on PUT → 403
 │   │   │   ├── codemirror-perf.spec.js  # Phase 6: 100-keystroke p95<50ms / p99<100ms gate on a ~950KB JS fixture (skipped on aarch64; set DANCODE_FORCE_PERF=1 to enforce)
 │   │   │   ├── resume-claude.spec.js  # Phase 7: sets a fake claudeSessionId via /api/test-only/note-claude-session → Resume Claude button visible → click → `claude --resume <id>` appears in xterm DOM; dismiss hides the button
-│   │   │   └── per-tab-zoom.spec.js  # Per-tab-zoom: opens two file tabs, zooms one with Ctrl/Cmd +/-/0, asserts the other tab stays at default, reloads, asserts zoom restored. Second test exercises minimum clamp at 8px.
+│   │   │   ├── per-tab-zoom.spec.js  # Per-tab-zoom: opens two file tabs, zooms one with Ctrl/Cmd +/-/0, asserts the other tab stays at default, reloads, asserts zoom restored. Second test exercises minimum clamp at 8px.
+│   │   │   └── terminal-zoom.spec.js  # Phase 2 (per-tab zoom): opens two terminals, presses Ctrl+= twice on term0, asserts xterm.options.fontSize is 15 on term0 only, types `echo hi`, verifies localStorage key dancode-zoom-terminal:<id>; Ctrl+0 resets to 13; reload restores a 17px zoom on term0 while term1 stays at default
 │   │   ├── shellhost-integration.test.js # Phase 1+2: server <-> shellhost integration over UNIX socket (incl. disk replay on reconnect)
 │   │   ├── claude-session-meta.test.js  # Phase 7: /api/terminals + /api/terminals/:id expose claudeSessionId (default null + after setClaudeSessionId)
 │   │   ├── shellhost-restart.test.js     # Phase 3: ShellhostTerminalManager.recover() + startServer() list-based recovery; data-race stress (1MB output during restart cycle)
