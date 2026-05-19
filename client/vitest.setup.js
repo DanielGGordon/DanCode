@@ -6,6 +6,38 @@
 // the missing methods so the editor mounts cleanly under tests. The values
 // returned don't matter for the behaviour we assert — we test document
 // state and DOM events, not layout/scroll/coordinates.
+
+// Node 22's experimental built-in `localStorage` clobbers jsdom's working
+// implementation but requires `--localstorage-file`. Install a small in-memory
+// shim so every test sees a clean, functional Storage API regardless of which
+// localStorage wins on the host.
+{
+  const memoryStorage = (() => {
+    let store = new Map()
+    const api = {
+      get length() { return store.size },
+      key(i) { return Array.from(store.keys())[i] ?? null },
+      getItem(k) { return store.has(String(k)) ? store.get(String(k)) : null },
+      setItem(k, v) { store.set(String(k), String(v)) },
+      removeItem(k) { store.delete(String(k)) },
+      clear() { store.clear() },
+    }
+    return api
+  })()
+  try {
+    Object.defineProperty(globalThis, 'localStorage', { value: memoryStorage, configurable: true, writable: true })
+  } catch {
+    globalThis.localStorage = memoryStorage
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      Object.defineProperty(window, 'localStorage', { value: memoryStorage, configurable: true, writable: true })
+    } catch {
+      window.localStorage = memoryStorage
+    }
+  }
+}
+
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   const RangeProto = window.Range && window.Range.prototype
   if (RangeProto && typeof RangeProto.getClientRects !== 'function') {

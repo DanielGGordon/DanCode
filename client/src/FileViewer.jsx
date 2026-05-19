@@ -6,6 +6,8 @@ import { searchKeymap, search, openSearchPanel } from '@codemirror/search'
 import { syntaxHighlighting, defaultHighlightStyle, bracketMatching, indentOnInput, foldKeymap, foldGutter } from '@codemirror/language'
 import { closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete'
 import { detectLanguageName, getLanguageExtension } from './editor/language.js'
+import { readFileZoom } from './editor/zoom.js'
+import { fileZoomFontTheme, fileZoomKeymap } from './editor/zoom-keymap.js'
 
 function getFileName(filePath) {
   return filePath.split('/').pop() || filePath
@@ -58,6 +60,7 @@ export default function FileViewer({ token, slug, filePath, focused, onFocus }) 
   const hostRef = useRef(null)
   const viewRef = useRef(null)
   const languageCompartment = useRef(new Compartment())
+  const zoomCompartment = useRef(new Compartment())
   // Stash the latest doc + handlers in refs so we can call them from CM
   // callbacks without recreating the editor.
   const latestRef = useRef({ token, slug, filePath, dirty: false })
@@ -172,9 +175,12 @@ export default function FileViewer({ token, slug, filePath, focused, onFocus }) 
         },
       })
 
+      const initialZoom = readFileZoom(slug, filePath)
       const extensions = [
         ...baseExtensions(),
         keymap.of([ctrlS]),
+        fileZoomKeymap({ slug, filePath, compartment: zoomCompartment.current }),
+        zoomCompartment.current.of(fileZoomFontTheme(initialZoom)),
         updateListener,
         blurHandler,
         languageCompartment.current.of(langExt ? [langExt] : []),
