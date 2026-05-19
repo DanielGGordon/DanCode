@@ -87,7 +87,8 @@ export async function verifyLogin(username, password, totpCode, credPath = getCr
     return false;
   }
 
-  if (username !== creds.username) return false;
+  if (typeof username !== 'string') return false;
+  if (username.trim().toLowerCase() !== (creds.username || '').toLowerCase()) return false;
 
   const passwordValid = await bcrypt.compare(password, creds.passwordHash);
   if (!passwordValid) return false;
