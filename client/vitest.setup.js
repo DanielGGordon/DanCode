@@ -52,4 +52,24 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   if (typeof Element !== 'undefined' && !Element.prototype.getClientRects) {
     Element.prototype.getClientRects = function () { return [] }
   }
+  // jsdom@29 exposes `localStorage` as a plain Object rather than the WebStorage
+  // interface, so getItem/setItem/clear are missing. Provide a tiny in-memory
+  // implementation so feature code (and tests like terminalZoom.test) work.
+  if (typeof window.localStorage?.setItem !== 'function') {
+    const store = new Map()
+    const ls = {
+      getItem: (k) => (store.has(String(k)) ? store.get(String(k)) : null),
+      setItem: (k, v) => { store.set(String(k), String(v)) },
+      removeItem: (k) => { store.delete(String(k)) },
+      clear: () => { store.clear() },
+      key: (i) => Array.from(store.keys())[i] ?? null,
+      get length() { return store.size },
+    }
+    try {
+      Object.defineProperty(window, 'localStorage', { value: ls, configurable: true })
+      Object.defineProperty(globalThis, 'localStorage', { value: ls, configurable: true })
+    } catch {
+      // ignore
+    }
+  }
 }

@@ -1,5 +1,13 @@
 import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react'
 import { io } from 'socket.io-client'
+import {
+  DEFAULT_TERMINAL_FONT_SIZE,
+  MIN_TERMINAL_FONT_SIZE,
+  MAX_TERMINAL_FONT_SIZE,
+  readTerminalFontSize,
+  writeTerminalFontSize,
+  stepZoom,
+} from './terminalZoom.js'
 
 // xterm.js is dynamically imported on first use for code splitting
 let xtermCache = null
@@ -15,6 +23,15 @@ export function loadXterm() {
   })
 }
 
+// Maps a (ctrl|meta)+key combo to a zoom action, or null if not a zoom key.
+function zoomActionFromKey(e) {
+  if (!(e.ctrlKey || e.metaKey)) return null
+  if (e.key === '=' || e.key === '+') return 'in'
+  if (e.key === '-' || e.key === '_') return 'out'
+  if (e.key === '0') return 'reset'
+  return null
+}
+
 /**
  * Connection state values:
  * - 'connecting': socket is being established
@@ -24,9 +41,9 @@ export function loadXterm() {
  * - 'session-exit': PTY process exited
  */
 
-const DEFAULT_FONT_SIZE = 14
-const MIN_FONT_SIZE = 8
-const MAX_FONT_SIZE = 32
+const DEFAULT_FONT_SIZE = DEFAULT_TERMINAL_FONT_SIZE
+const MIN_FONT_SIZE = MIN_TERMINAL_FONT_SIZE
+const MAX_FONT_SIZE = MAX_TERMINAL_FONT_SIZE
 const RECONNECT_TIMEOUT_MS = 30000
 
 function fallbackCopy(text) {
@@ -54,7 +71,8 @@ const Terminal = forwardRef(function Terminal({
   const termRef = useRef(null)
   const fitAddonRef = useRef(null)
   const socketRef = useRef(null)
-  const fontSizeRef = useRef(DEFAULT_FONT_SIZE)
+  // Restore the persisted per-terminal font size on mount (falls back to default).
+  const fontSizeRef = useRef(readTerminalFontSize(terminalId))
   const [connectionState, setConnectionState] = useState('connecting')
   const [exitCode, setExitCode] = useState(null)
   // Phase 7: per-terminal dismissal of the Resume Claude button.
@@ -103,6 +121,10 @@ const Terminal = forwardRef(function Terminal({
         fontSizeRef.current = clamped
         termRef.current.options.fontSize = clamped
         if (fitAddonRef.current) fitAddonRef.current.fit()
+        writeTerminalFontSize(terminalId, clamped)
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('resize', { cols: termRef.current.cols, rows: termRef.current.rows })
+        }
       }
     },
     getFontSize: () => fontSizeRef.current,
@@ -190,9 +212,13 @@ const Terminal = forwardRef(function Terminal({
       window.__dancodeTerminals.set(terminalId, term)
     }
 
-    // Intercept Ctrl+C/V before xterm processes them as terminal input.
+    // Intercept Ctrl+C/V and per-terminal zoom keys before xterm sends them
+    // to the PTY. The container-level keydown listener (below) does the
+    // actual zoom; this just prevents xterm from also writing the keys.
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown' || !(e.ctrlKey || e.metaKey)) return true
+
+      if (zoomActionFromKey(e)) return false
 
       if (e.key === 'c') {
         const selection = term.getSelection()
@@ -348,6 +374,22 @@ const Terminal = forwardRef(function Terminal({
     return () => container.removeEventListener('focusin', handler)
   })
 
+  // Apply a new font size to xterm + reflow + emit resize + persist.
+  // Returns true if the size actually changed.
+  const applyFontSize = useCallback((nextSize) => {
+    const term = termRef.current
+    if (!term) return false
+    if (nextSize === fontSizeRef.current) return false
+    fontSizeRef.current = nextSize
+    term.options.fontSize = nextSize
+    if (fitAddonRef.current) fitAddonRef.current.fit()
+    writeTerminalFontSize(terminalId, nextSize)
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('resize', { cols: term.cols, rows: term.rows })
+    }
+    return true
+  }, [terminalId])
+
   // Ctrl+wheel to resize font
   useEffect(() => {
     const container = containerRef.current
@@ -356,19 +398,38 @@ const Terminal = forwardRef(function Terminal({
       if (!e.ctrlKey) return
       e.preventDefault()
       e.stopPropagation()
-      const term = termRef.current
-      if (!term) return
       const delta = e.deltaY > 0 ? -1 : 1
       const newSize = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, fontSizeRef.current + delta))
-      if (newSize !== fontSizeRef.current) {
-        fontSizeRef.current = newSize
-        term.options.fontSize = newSize
-        if (fitAddonRef.current) fitAddonRef.current.fit()
-      }
+      applyFontSize(newSize)
     }
     container.addEventListener('wheel', handler, { passive: false, capture: true })
     return () => container.removeEventListener('wheel', handler, { capture: true })
-  }, [])
+  }, [applyFontSize])
+
+  // Ctrl/Cmd + =, -, 0 zoom for THIS terminal only. Attached at document
+  // level (capture phase) so we see the keydown before xterm's textarea
+  // listener; we then preventDefault to block the browser's page zoom.
+  // The handler bails unless `document.activeElement` is inside this
+  // terminal's container, so multiple Terminal instances don't fight.
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const handler = (e) => {
+      const action = zoomActionFromKey(e)
+      if (!action) return
+      const active = document.activeElement
+      if (!active || !container.contains(active)) return
+      e.preventDefault()
+      e.stopPropagation()
+      let next
+      if (action === 'reset') next = DEFAULT_FONT_SIZE
+      else if (action === 'in') next = stepZoom(fontSizeRef.current, +1)
+      else next = stepZoom(fontSizeRef.current, -1)
+      applyFontSize(next)
+    }
+    document.addEventListener('keydown', handler, true)
+    return () => document.removeEventListener('keydown', handler, true)
+  }, [applyFontSize])
 
   // Pinch-to-zoom for mobile font size
   useEffect(() => {
@@ -401,11 +462,7 @@ const Terminal = forwardRef(function Terminal({
       const newSize = Math.round(initialFontSize * scale)
       const clamped = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, newSize))
 
-      if (clamped !== fontSizeRef.current && termRef.current) {
-        fontSizeRef.current = clamped
-        termRef.current.options.fontSize = clamped
-        if (fitAddonRef.current) fitAddonRef.current.fit()
-      }
+      applyFontSize(clamped)
     }
 
     container.addEventListener('touchstart', handleTouchStart, { passive: false })
@@ -414,7 +471,7 @@ const Terminal = forwardRef(function Terminal({
       container.removeEventListener('touchstart', handleTouchStart)
       container.removeEventListener('touchmove', handleTouchMove)
     }
-  }, [])
+  }, [applyFontSize])
 
   // Intercept clipboard-image pastes only; text pastes are handled natively by xterm.
   // Listen on document in capture phase — image-only pastes may not fire on xterm's textarea.

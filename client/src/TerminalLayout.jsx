@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef, forwardRef, useImperativeHand
 import Terminal from './Terminal.jsx'
 import ShortcutBar from './ShortcutBar.jsx'
 import ResizeHandle from './ResizeHandle.jsx'
+import { removeTerminalFontSize } from './terminalZoom.js'
 
 const FileViewer = lazy(() => import('./FileViewer.jsx'))
 
@@ -452,6 +453,9 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
           const next = prev.filter((t) => t.id !== id)
           return next
         })
+        // Drop the persisted zoom for this terminal id so stale entries
+        // don't accumulate in localStorage.
+        removeTerminalFontSize(id)
         setFocusedIndex((prev) => Math.min(prev, allPanes.length - 2))
       }
     } catch {}
