@@ -15,6 +15,9 @@ import {
   updateProject,
   deleteProject,
   isValidSlug,
+  readProjectOrder,
+  writeProjectOrder,
+  bumpProjectToTop,
 } from '../src/projects.js';
 
 describe('slugify', () => {
@@ -349,6 +352,74 @@ describe('project config CRUD', () => {
     it('rejects slugs with leading or trailing hyphens', () => {
       expect(isValidSlug('-leading')).toBe(false);
       expect(isValidSlug('trailing-')).toBe(false);
+    });
+  });
+});
+
+describe('project order persistence', () => {
+  let tmpDir;
+  let orderPath;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), 'dancode-order-'));
+    orderPath = join(tmpDir, 'project-order.json');
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  describe('readProjectOrder', () => {
+    it('returns empty array when file does not exist', async () => {
+      expect(await readProjectOrder(orderPath)).toEqual([]);
+    });
+
+    it('returns the saved slugs in order', async () => {
+      await writeFile(orderPath, JSON.stringify(['a', 'b', 'c']));
+      expect(await readProjectOrder(orderPath)).toEqual(['a', 'b', 'c']);
+    });
+
+    it('returns empty array when the file is malformed', async () => {
+      await writeFile(orderPath, 'not json');
+      expect(await readProjectOrder(orderPath)).toEqual([]);
+    });
+  });
+
+  describe('writeProjectOrder', () => {
+    it('filters out invalid slugs', async () => {
+      const saved = await writeProjectOrder(['a', '../etc', 'b', null, 'c-2'], orderPath);
+      expect(saved).toEqual(['a', 'b', 'c-2']);
+      expect(JSON.parse(await readFile(orderPath, 'utf-8'))).toEqual(['a', 'b', 'c-2']);
+    });
+
+    it('throws when given a non-array', async () => {
+      await expect(writeProjectOrder('not-an-array', orderPath)).rejects.toThrow(/array of slugs/);
+    });
+  });
+
+  describe('bumpProjectToTop', () => {
+    it('seeds the order with just the slug when no order exists', async () => {
+      expect(await bumpProjectToTop('alpha', orderPath)).toEqual(['alpha']);
+    });
+
+    it('moves an existing slug from the middle to the front', async () => {
+      await writeProjectOrder(['a', 'b', 'c', 'd'], orderPath);
+      expect(await bumpProjectToTop('c', orderPath)).toEqual(['c', 'a', 'b', 'd']);
+    });
+
+    it('is a no-op when the slug is already at the front', async () => {
+      await writeProjectOrder(['top', 'a', 'b'], orderPath);
+      expect(await bumpProjectToTop('top', orderPath)).toEqual(['top', 'a', 'b']);
+    });
+
+    it('prepends the slug when it is missing from the order', async () => {
+      await writeProjectOrder(['a', 'b'], orderPath);
+      expect(await bumpProjectToTop('new', orderPath)).toEqual(['new', 'a', 'b']);
+    });
+
+    it('rejects invalid slugs', async () => {
+      await expect(bumpProjectToTop('../etc', orderPath)).rejects.toThrow(/Invalid project slug/);
+      await expect(bumpProjectToTop('', orderPath)).rejects.toThrow(/Invalid project slug/);
     });
   });
 });

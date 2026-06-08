@@ -293,7 +293,24 @@ function App() {
     setShowNewProject(false)
     setSelectedSlug(project.slug)
     setSelectedProjectName(project.name || null)
+    markProjectVisited(project.slug)
     fetchProjects()
+  }
+
+  function markProjectVisited(slug) {
+    if (!slug) return
+    setProjects((prev) => {
+      if (!Array.isArray(prev) || prev.length === 0) return prev
+      if (prev[0]?.slug === slug) return prev
+      const target = prev.find((p) => p.slug === slug)
+      if (!target) return prev
+      const others = prev.filter((p) => p.slug !== slug)
+      return [target, ...others]
+    })
+    fetch(`/api/projects/${slug}/visit`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => {})
   }
 
   function handlePaletteSelect(slug) {
@@ -302,6 +319,7 @@ function App() {
     setSelectedSlug(slug)
     setSelectedProjectName(Array.isArray(projects) ? projects.find((p) => p.slug === slug)?.name || null : null)
     setShowNewProject(false)
+    markProjectVisited(slug)
   }
 
   function handleDropdownSelect(slug) {
@@ -309,12 +327,14 @@ function App() {
     setSelectedSlug(slug)
     setSelectedProjectName(Array.isArray(projects) ? projects.find((p) => p.slug === slug)?.name || null : null)
     setShowNewProject(false)
+    markProjectVisited(slug)
   }
 
   function handleSidebarSelect(slug) {
     setSelectedSlug(slug)
     setSelectedProjectName(Array.isArray(projects) ? projects.find((p) => p.slug === slug)?.name || null : null)
     setShowNewProject(false)
+    markProjectVisited(slug)
   }
 
   async function handleRenameProject(slug, newName) {
@@ -383,6 +403,7 @@ function App() {
   async function handleMobileSelectProject(slug) {
     setSelectedSlug(slug)
     setSelectedProjectName(Array.isArray(projects) ? projects.find((p) => p.slug === slug)?.name || null : null)
+    markProjectVisited(slug)
     try {
       const res = await fetch(`/api/terminals?project=${slug}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -405,6 +426,7 @@ function App() {
   async function handleMobileQuickAction(slug, action) {
     setSelectedSlug(slug)
     setSelectedProjectName(Array.isArray(projects) ? projects.find((p) => p.slug === slug)?.name || null : null)
+    markProjectVisited(slug)
     try {
       const res = await fetch(`/api/terminals?project=${slug}`, {
         headers: { Authorization: `Bearer ${token}` },

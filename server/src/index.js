@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { existsSync, mkdirSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { isAccountSetUp, createAccount, verifyLogin, createSession, validateSession, destroySession, getCredentialsPath, startSessionCleanupInterval } from './auth.js';
-import { validateProjectInput, createProject, listProjects, getProject, updateProject, deleteProject, renameProject, getProjectsDir, slugify, isValidSlug, writeProjectOrder } from './projects.js';
+import { validateProjectInput, createProject, listProjects, getProject, updateProject, deleteProject, renameProject, getProjectsDir, slugify, isValidSlug, writeProjectOrder, bumpProjectToTop } from './projects.js';
 import { ShellhostTerminalManager, setupShellhostNamespace } from './shellhost-terminal-manager.js';
 import { homedir as osHomedir } from 'node:os';
 
@@ -226,6 +226,23 @@ app.put('/api/projects/order', async (req, res) => {
     res.json({ order: saved });
   } catch (err) {
     res.status(500).json({ error: `Failed to save project order: ${err.message}` });
+  }
+});
+
+app.post('/api/projects/:slug/visit', async (req, res) => {
+  const { slug } = req.params;
+  if (!isValidSlug(slug)) {
+    return res.status(400).json({ error: 'Invalid project slug' });
+  }
+  try {
+    const project = await getProject(slug, projectsDir);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    const order = await bumpProjectToTop(slug);
+    res.json({ order });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to record visit: ${err.message}` });
   }
 });
 

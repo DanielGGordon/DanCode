@@ -51,6 +51,18 @@ export async function writeProjectOrder(order, orderPath = getProjectOrderPath()
 }
 
 /**
+ * Move `slug` to the front of the persisted project order (MRU bump).
+ * Preserves the relative ordering of everything else. If `slug` is missing
+ * from the current order it is prepended. Returns the new order.
+ */
+export async function bumpProjectToTop(slug, orderPath = getProjectOrderPath()) {
+  if (!isValidSlug(slug)) throw new Error('Invalid project slug');
+  const current = await readProjectOrder(orderPath);
+  const next = [slug, ...current.filter((s) => s !== slug)];
+  return writeProjectOrder(next, orderPath);
+}
+
+/**
  * Returns the path to a specific project's config file.
  */
 export function getProjectConfigPath(slug, projectsDir = getProjectsDir()) {
