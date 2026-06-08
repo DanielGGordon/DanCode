@@ -221,7 +221,8 @@ describe('TerminalLayout', () => {
     await waitFor(() => {
       expect(getByTestId('add-terminal-button')).toBeDefined()
     })
-    expect(getByTestId('add-terminal-button').textContent).toBe('+')
+    expect(getByTestId('add-terminal-button').textContent).toContain('+')
+    expect(getByTestId('add-terminal-button').textContent).toContain('New')
   })
 
   it('renders close buttons for each terminal', async () => {

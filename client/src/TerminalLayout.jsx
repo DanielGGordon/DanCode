@@ -736,10 +736,10 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
             e.stopPropagation()
             handleClosePane(pane)
           }}
-          className={`ml-2 px-2 py-1 rounded leading-none transition-colors ${
+          className={`inline-flex items-center justify-center ml-2 rounded-md leading-none font-semibold transition-colors border ${
             isConfirmingDelete
-              ? 'text-red bg-red/15 border border-red/40 text-xs font-semibold'
-              : 'text-base01 hover:text-red hover:bg-red/10 text-base'
+              ? 'text-base03 bg-red border-red hover:bg-red/80 px-3 py-2 text-sm min-h-[2.25rem]'
+              : 'text-red border-red/50 hover:text-base03 hover:bg-red w-9 h-9 text-2xl'
           }`}
           aria-label={isFile ? 'Close file' : 'Close terminal'}
           title={isConfirmingDelete ? 'Click again to confirm' : (isFile ? 'Close file' : 'Close terminal')}
@@ -881,9 +881,10 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
           onClick={handleAddTerminal}
           title="New terminal"
           aria-label="New terminal"
-          className="px-3 py-1.5 text-base font-semibold leading-none text-blue hover:text-blue/80 hover:bg-blue/10 border border-blue/40 rounded transition-colors mr-auto min-w-[2.25rem]"
+          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold leading-none text-base03 bg-blue hover:bg-blue/80 border border-blue rounded-md shadow-sm transition-colors mr-auto min-h-[2.25rem]"
         >
-          +
+          <span className="text-xl leading-none">+</span>
+          <span>New</span>
         </button>
         <div className="flex gap-1 ml-auto">
           {!isMobile && effectiveLayout === 'split' && allPanes.length >= 2 && (
