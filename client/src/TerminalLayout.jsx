@@ -736,7 +736,12 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
             e.stopPropagation()
             handleClosePane(pane)
           }}
-          className="text-base01 hover:text-red text-xs ml-2 transition-colors"
+          className={`ml-2 px-2 py-1 rounded leading-none transition-colors ${
+            isConfirmingDelete
+              ? 'text-red bg-red/15 border border-red/40 text-xs font-semibold'
+              : 'text-base01 hover:text-red hover:bg-red/10 text-base'
+          }`}
+          aria-label={isFile ? 'Close file' : 'Close terminal'}
           title={isConfirmingDelete ? 'Click again to confirm' : (isFile ? 'Close file' : 'Close terminal')}
         >
           {isConfirmingDelete ? 'Confirm?' : '\u00d7'}
@@ -874,7 +879,9 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
         <button
           data-testid="add-terminal-button"
           onClick={handleAddTerminal}
-          className="px-2 py-1 text-xs text-blue hover:text-blue/80 border border-base01/30 rounded transition-colors mr-auto"
+          title="New terminal"
+          aria-label="New terminal"
+          className="px-3 py-1.5 text-base font-semibold leading-none text-blue hover:text-blue/80 hover:bg-blue/10 border border-blue/40 rounded transition-colors mr-auto min-w-[2.25rem]"
         >
           +
         </button>
