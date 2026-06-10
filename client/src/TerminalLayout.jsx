@@ -736,10 +736,10 @@ const TerminalLayout = forwardRef(function TerminalLayout({ token, slug }, ref) 
             e.stopPropagation()
             handleClosePane(pane)
           }}
-          className={`inline-flex items-center justify-center ml-2 rounded-md leading-none font-semibold transition-colors border-2 cursor-pointer ${
+          className={`inline-flex items-center justify-center ml-2 rounded-md leading-none font-semibold transition-colors border-2 cursor-pointer shadow-sm ${
             isConfirmingDelete
               ? 'text-base03 bg-red border-red hover:bg-red/80 px-3 py-2 text-sm min-h-[2.25rem]'
-              : 'text-red bg-red/15 border-red/60 hover:text-base03 hover:bg-red hover:border-red w-9 h-9 text-2xl'
+              : 'text-red bg-base03 border-red hover:text-base03 hover:bg-red w-9 h-9 text-2xl'
           }`}
           aria-label={isFile ? 'Close file' : 'Close terminal'}
           title={isConfirmingDelete ? 'Click again to confirm' : (isFile ? 'Close file' : 'Close terminal')}

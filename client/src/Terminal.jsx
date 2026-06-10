@@ -46,15 +46,34 @@ const MIN_FONT_SIZE = MIN_TERMINAL_FONT_SIZE
 const MAX_FONT_SIZE = MAX_TERMINAL_FONT_SIZE
 const RECONNECT_TIMEOUT_MS = 30000
 
-function fallbackCopy(text) {
+// Synchronous copy that works in user-gesture handlers even on
+// non-secure origins (plain http on a public IP). Tries the modern
+// async navigator.clipboard first when available, but falls back to
+// a hidden-textarea + execCommand so we still copy reliably from
+// http://<lan-or-public-ip>/. The execCommand path is the load-bearing
+// one for Claude-session selections inside an alt-screen buffer where
+// the mouse-tracking + redraw cycle keeps wiping the visible selection.
+function copyToClipboardSync(text) {
+  if (!text) return false
+  // Try the async API but DON'T await it — we still want the synchronous
+  // fallback to run inside the same gesture so at least one path wins.
+  try { navigator.clipboard?.writeText?.(text) } catch {}
   const textarea = document.createElement('textarea')
   textarea.value = text
-  textarea.style.cssText = 'position:fixed;opacity:0'
+  textarea.setAttribute('readonly', '')
+  textarea.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none'
   document.body.appendChild(textarea)
+  const prevActive = document.activeElement
+  textarea.focus()
   textarea.select()
-  document.execCommand('copy')
+  let ok = false
+  try { ok = document.execCommand('copy') } catch {}
   document.body.removeChild(textarea)
+  if (prevActive && typeof prevActive.focus === 'function') prevActive.focus()
+  return ok
 }
+// Kept for backward-compat with existing call sites.
+const fallbackCopy = (text) => copyToClipboardSync(text)
 
 const Terminal = forwardRef(function Terminal({
   token,
@@ -212,6 +231,19 @@ const Terminal = forwardRef(function Terminal({
       window.__dancodeTerminals.set(terminalId, term)
     }
 
+    // Auto-copy on mouse-up: when the user finishes a (Shift+)drag inside
+    // an alt-screen TUI like Claude, the very next redraw clears the
+    // visible selection — so by the time they press Ctrl+C there's
+    // nothing to copy. We grab the selection synchronously on mouseup
+    // (still inside a user gesture) so the clipboard is written before
+    // any redraw can wipe it. Ctrl+C still works as a second path.
+    const handleMouseUp = () => {
+      if (!termRef.current) return
+      const sel = termRef.current.getSelection()
+      if (sel) copyToClipboardSync(sel)
+    }
+    container.addEventListener('mouseup', handleMouseUp)
+
     // Intercept Ctrl+C/V and per-terminal zoom keys before xterm sends them
     // to the PTY. The container-level keydown listener (below) does the
     // actual zoom; this just prevents xterm from also writing the keys.
@@ -335,6 +367,7 @@ const Terminal = forwardRef(function Terminal({
       clearTimeout(connectTimer)
       clearReconnectTimer()
       resizeObserver?.disconnect()
+      container.removeEventListener('mouseup', handleMouseUp)
       if (socketRef.current) {
         socketRef.current.io.opts.reconnection = false
         socketRef.current.disconnect()
