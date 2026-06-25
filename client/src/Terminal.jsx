@@ -75,6 +75,45 @@ function copyToClipboardSync(text) {
 // Kept for backward-compat with existing call sites.
 const fallbackCopy = (text) => copyToClipboardSync(text)
 
+// Wrap-aware selection text. xterm.getSelection() returns one \n per visible
+// row, which mangles copies from width-wrapped output (Claude messages,
+// long logs) by injecting newlines and trailing whitespace at the wrap
+// columns. We walk the buffer range and only emit \n when the next row
+// is NOT a continuation (isWrapped=false), then trim trailing whitespace
+// from each logical line.
+export function getSelectionText(term) {
+  if (!term) return ''
+  const pos = typeof term.getSelectionPosition === 'function' ? term.getSelectionPosition() : null
+  const raw = term.getSelection ? term.getSelection() : ''
+  const buf = term.buffer?.active
+  if (!pos || !buf) return raw
+  const { start, end } = pos
+  let out = ''
+  for (let y = start.y; y <= end.y; y++) {
+    const line = buf.getLine(y)
+    if (!line) continue
+    const lineLen = line.length
+    const startCol = y === start.y ? start.x : 0
+    const endCol = y === end.y ? end.x : lineLen
+    let text
+    try {
+      text = line.translateToString(false, startCol, endCol)
+    } catch {
+      text = ''
+    }
+    out += text
+    if (y < end.y) {
+      const next = buf.getLine(y + 1)
+      // Only insert a newline when the next row is a *fresh* logical line.
+      if (!next || !next.isWrapped) out += '\n'
+    }
+  }
+  return out
+    .split('\n')
+    .map((l) => l.replace(/[  ]+$/, ''))
+    .join('\n')
+}
+
 const Terminal = forwardRef(function Terminal({
   token,
   terminalId,
@@ -234,15 +273,38 @@ const Terminal = forwardRef(function Terminal({
     // Auto-copy on mouse-up: when the user finishes a (Shift+)drag inside
     // an alt-screen TUI like Claude, the very next redraw clears the
     // visible selection — so by the time they press Ctrl+C there's
-    // nothing to copy. We grab the selection synchronously on mouseup
-    // (still inside a user gesture) so the clipboard is written before
-    // any redraw can wipe it. Ctrl+C still works as a second path.
-    const handleMouseUp = () => {
+    // nothing to copy. We:
+    //   1) Track every selection change into lastSelectionText so we
+    //      keep a stable copy of what was last selected, even if Claude
+    //      redraws and wipes the visible highlight before mouseup fires.
+    //   2) Listen for mouseup at the DOCUMENT level (capture phase) so
+    //      we still see it when the user releases the button outside
+    //      the terminal pane (common when dragging upward into header
+    //      bars or onto the page chrome).
+    //   3) Only act on a mouseup if the drag started inside our
+    //      container — so other terminals / UI controls don't trigger a
+    //      copy from this terminal's selection.
+    let lastSelectionText = ''
+    const selectionDisposable = term.onSelectionChange
+      ? term.onSelectionChange(() => {
+          const s = getSelectionText(term)
+          if (s) lastSelectionText = s
+        })
+      : null
+
+    let dragStartedInTerm = false
+    const handleDocMouseDown = (e) => {
+      dragStartedInTerm = container.contains(e.target)
+    }
+    const handleDocMouseUp = () => {
+      if (!dragStartedInTerm) return
+      dragStartedInTerm = false
       if (!termRef.current) return
-      const sel = termRef.current.getSelection()
+      const sel = getSelectionText(termRef.current) || lastSelectionText
       if (sel) copyToClipboardSync(sel)
     }
-    container.addEventListener('mouseup', handleMouseUp)
+    document.addEventListener('mousedown', handleDocMouseDown, true)
+    document.addEventListener('mouseup', handleDocMouseUp, true)
 
     // Intercept Ctrl+C/V and per-terminal zoom keys before xterm sends them
     // to the PTY. The container-level keydown listener (below) does the
@@ -253,7 +315,7 @@ const Terminal = forwardRef(function Terminal({
       if (zoomActionFromKey(e)) return false
 
       if (e.key === 'c') {
-        const selection = term.getSelection()
+        const selection = getSelectionText(term) || lastSelectionText
         if (selection) {
           fallbackCopy(selection)
           term.clearSelection()
@@ -367,7 +429,11 @@ const Terminal = forwardRef(function Terminal({
       clearTimeout(connectTimer)
       clearReconnectTimer()
       resizeObserver?.disconnect()
-      container.removeEventListener('mouseup', handleMouseUp)
+      document.removeEventListener('mousedown', handleDocMouseDown, true)
+      document.removeEventListener('mouseup', handleDocMouseUp, true)
+      if (selectionDisposable && typeof selectionDisposable.dispose === 'function') {
+        try { selectionDisposable.dispose() } catch { /* ignore */ }
+      }
       if (socketRef.current) {
         socketRef.current.io.opts.reconnection = false
         socketRef.current.disconnect()
