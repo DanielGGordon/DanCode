@@ -591,11 +591,29 @@ const Terminal = forwardRef(function Terminal({
         const dy = currentCenterY - scrollAnchorY
         const steps = Math.trunc(dy / SCROLL_STEP_PX)
         if (steps !== 0) {
-          // Dragging fingers DOWN should reveal content ABOVE → up arrow.
-          const seq = steps > 0 ? '\x1b[A' : '\x1b[B'
-          const data = seq.repeat(Math.abs(steps))
-          if (socketRef.current?.connected) {
-            socketRef.current.emit('input', data)
+          // Dragging fingers DOWN should reveal content ABOVE.
+          // - In an alt-screen TUI (Claude) we send SGR mouse-wheel
+          //   sequences so the app scrolls its OWN viewport. Arrow keys
+          //   would double as history navigation in Claude's prompt,
+          //   which we don't want.
+          // - In the normal screen buffer (plain shell, less, etc.) we
+          //   scroll xterm's local scrollback directly so nothing is
+          //   written to the PTY.
+          const term = termRef.current
+          const buf = term?.buffer?.active
+          const isAltScreen = buf?.type === 'alternate'
+          if (isAltScreen) {
+            // SGR (1006) mouse-wheel: \e[<64;x;yM = up, <65 = down.
+            // Coordinates are 1-based; (1,1) is fine — Claude doesn't
+            // care which cell the wheel "happened" over.
+            const button = steps > 0 ? 64 : 65
+            const seq = `\x1b[<${button};1;1M`.repeat(Math.abs(steps))
+            if (socketRef.current?.connected) {
+              socketRef.current.emit('input', seq)
+            }
+          } else if (term && typeof term.scrollLines === 'function') {
+            // scrollLines(negative) scrolls toward older content.
+            term.scrollLines(-steps)
           }
           scrollAnchorY += steps * SCROLL_STEP_PX
         }
