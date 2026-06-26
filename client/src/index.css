@@ -19,11 +19,17 @@
   --color-green: #859900;
 }
 
+html,
 body {
   margin: 0;
   background-color: var(--color-base03);
   color: var(--color-base0);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  /* Block Chrome-on-Android pull-to-refresh and rubber-band overscroll
+     glyphs when the user drags inside a non-scrolling pane (xterm canvas,
+     terminal viewport in TUI alt-screen). Without this, a one-finger
+     downward swipe inside a Claude session reloads the page. */
+  overscroll-behavior: none;
 }
 
 @keyframes fade-in {

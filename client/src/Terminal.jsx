@@ -530,26 +530,41 @@ const Terminal = forwardRef(function Terminal({
     return () => document.removeEventListener('keydown', handler, true)
   }, [applyFontSize])
 
-  // Pinch-to-zoom for mobile font size
+  // Two-finger gesture: pinch zooms font, vertical pan scrolls (sends
+  // arrow keys to the TUI). The previous implementation treated *any*
+  // two-finger motion as a pinch, so resting two fingers and swiping to
+  // scroll a Claude session would jitter the font size wildly. We now
+  // disambiguate once per gesture: whichever motion (distance vs centroid
+  // drift) leaves the deadzone first locks the mode for the rest of the
+  // touch. Pinch needs to dominate by 1.5× to win, so a "scroll-y" pan
+  // with minor rotation doesn't flip into zoom.
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
 
+    const DEADZONE_PX = 8
+    const SCROLL_STEP_PX = 28
     let initialDistance = 0
+    let initialCenterY = 0
     let initialFontSize = fontSizeRef.current
+    let scrollAnchorY = 0
+    let gestureMode = null // null | 'zoom' | 'scroll'
 
     const getDistance = (touches) => {
       const dx = touches[0].clientX - touches[1].clientX
       const dy = touches[0].clientY - touches[1].clientY
       return Math.sqrt(dx * dx + dy * dy)
     }
+    const getCenterY = (touches) => (touches[0].clientY + touches[1].clientY) / 2
 
     const handleTouchStart = (e) => {
-      if (e.touches.length === 2) {
-        e.preventDefault()
-        initialDistance = getDistance(e.touches)
-        initialFontSize = fontSizeRef.current
-      }
+      if (e.touches.length !== 2) return
+      e.preventDefault()
+      initialDistance = getDistance(e.touches)
+      initialCenterY = getCenterY(e.touches)
+      scrollAnchorY = initialCenterY
+      initialFontSize = fontSizeRef.current
+      gestureMode = null
     }
 
     const handleTouchMove = (e) => {
@@ -557,18 +572,49 @@ const Terminal = forwardRef(function Terminal({
       e.preventDefault()
 
       const currentDistance = getDistance(e.touches)
-      const scale = currentDistance / initialDistance
-      const newSize = Math.round(initialFontSize * scale)
-      const clamped = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, newSize))
+      const currentCenterY = getCenterY(e.touches)
+      const distDelta = Math.abs(currentDistance - initialDistance)
+      const centerDelta = Math.abs(currentCenterY - initialCenterY)
 
-      applyFontSize(clamped)
+      if (gestureMode === null) {
+        if (distDelta < DEADZONE_PX && centerDelta < DEADZONE_PX) return
+        // Bias toward scroll — pinch must clearly dominate to be a zoom.
+        gestureMode = distDelta > centerDelta * 1.5 ? 'zoom' : 'scroll'
+      }
+
+      if (gestureMode === 'zoom') {
+        const scale = currentDistance / initialDistance
+        const newSize = Math.round(initialFontSize * scale)
+        const clamped = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, newSize))
+        applyFontSize(clamped)
+      } else {
+        const dy = currentCenterY - scrollAnchorY
+        const steps = Math.trunc(dy / SCROLL_STEP_PX)
+        if (steps !== 0) {
+          // Dragging fingers DOWN should reveal content ABOVE → up arrow.
+          const seq = steps > 0 ? '\x1b[A' : '\x1b[B'
+          const data = seq.repeat(Math.abs(steps))
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('input', data)
+          }
+          scrollAnchorY += steps * SCROLL_STEP_PX
+        }
+      }
+    }
+
+    const handleTouchEnd = (e) => {
+      if (e.touches.length < 2) gestureMode = null
     }
 
     container.addEventListener('touchstart', handleTouchStart, { passive: false })
     container.addEventListener('touchmove', handleTouchMove, { passive: false })
+    container.addEventListener('touchend', handleTouchEnd)
+    container.addEventListener('touchcancel', handleTouchEnd)
     return () => {
       container.removeEventListener('touchstart', handleTouchStart)
       container.removeEventListener('touchmove', handleTouchMove)
+      container.removeEventListener('touchend', handleTouchEnd)
+      container.removeEventListener('touchcancel', handleTouchEnd)
     }
   }, [applyFontSize])
 
