@@ -46,6 +46,30 @@ describe('MobileDashboard', () => {
     expect(onSelect).toHaveBeenCalledWith('proj-a')
   })
 
+  it('does not call onSelectProject when the touch turns into a swipe', () => {
+    const onSelect = vi.fn()
+    const { getByTestId } = render(
+      <MobileDashboard projects={mockProjects} onSelectProject={onSelect} />
+    )
+    const card = getByTestId('project-card-proj-a')
+    fireEvent.touchStart(card, { touches: [{ clientX: 50, clientY: 50 }] })
+    fireEvent.touchMove(card, { touches: [{ clientX: 50, clientY: 200 }] })
+    fireEvent.touchEnd(card)
+    fireEvent.click(card)
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('calls onSelectProject for a tap (touch without movement)', () => {
+    const onSelect = vi.fn()
+    const { getByTestId } = render(
+      <MobileDashboard projects={mockProjects} onSelectProject={onSelect} />
+    )
+    const card = getByTestId('project-card-proj-a')
+    fireEvent.touchStart(card, { touches: [{ clientX: 50, clientY: 50 }] })
+    fireEvent.touchEnd(card)
+    expect(onSelect).toHaveBeenCalledWith('proj-a')
+  })
+
   it('calls onNewProject when new project button is clicked', () => {
     const onNew = vi.fn()
     const { getByTestId } = render(

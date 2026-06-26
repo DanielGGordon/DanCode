@@ -43,6 +43,12 @@ export default function MobileDashboard({
   const [refreshing, setRefreshing] = useState(false)
   const longPressTimer = useRef(null)
   const longPressTriggered = useRef(false)
+  // Tracks whether the finger moved between touchstart and touchend.
+  // Without this, every swipe-to-scroll registers as a card tap because
+  // touchend fires `onSelectProject` whenever the long-press timer hasn't
+  // fired — turning a downward scroll gesture into an accidental project
+  // select. See MobileDashboard touch tests for the regression guard.
+  const touchMoved = useRef(false)
   const menuRef = useRef(null)
   const scrollRef = useRef(null)
   const pullStartY = useRef(null)
@@ -105,6 +111,7 @@ export default function MobileDashboard({
 
   const handleTouchStart = useCallback((e, slug) => {
     longPressTriggered.current = false
+    touchMoved.current = false
     const touch = e.touches[0]
     longPressTimer.current = setTimeout(() => {
       longPressTriggered.current = true
@@ -114,12 +121,14 @@ export default function MobileDashboard({
 
   const handleTouchEnd = useCallback((slug) => {
     clearTimeout(longPressTimer.current)
+    if (touchMoved.current) return
     if (!longPressTriggered.current) {
       onSelectProject?.(slug)
     }
   }, [onSelectProject])
 
   const handleTouchMove = useCallback(() => {
+    touchMoved.current = true
     clearTimeout(longPressTimer.current)
   }, [])
 
@@ -238,7 +247,8 @@ export default function MobileDashboard({
                   onTouchEnd={() => handleTouchEnd(p.slug)}
                   onTouchMove={handleTouchMove}
                   onClick={() => {
-                    if (!longPressTriggered.current) onSelectProject?.(p.slug)
+                    if (touchMoved.current || longPressTriggered.current) return
+                    onSelectProject?.(p.slug)
                   }}
                   onContextMenu={(e) => {
                     e.preventDefault()
