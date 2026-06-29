@@ -11,3 +11,10 @@ captures/
 .cxx/
 *.iml
 .idea/
+
+# Reverse-proxy private key — committing the cert (server.crt) is fine and
+# even desirable so the pinned SPKI stays reproducible across checkouts, but
+# leaking the matching key would let anyone with a network MITM position
+# spoof the pinned channel until a new cert is minted.
+reverse-proxy/certs/server.key
+

@@ -54,8 +54,10 @@ class AuthApi(private val httpClient: OkHttpClient = OkHttpClient()) {
                         LoginResult.Success(token)
                     }
                 } else {
-                    val errorMessage = runCatching { JSONObject(payload).optString("error", null) }
-                        .getOrNull()
+                    val errorMessage = runCatching {
+                        val obj = JSONObject(payload)
+                        if (obj.has("error")) obj.getString("error") else null
+                    }.getOrNull()
                     LoginResult.Failure(response.code, errorMessage)
                 }
             }

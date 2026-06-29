@@ -10,6 +10,10 @@ Native replacement for the mobile web client.
   emulator and asserts screen-buffer snapshots, alt-screen and
   mouse-tracking transitions. See
   [`terminal-emulator/README.md`](./terminal-emulator/README.md).
+- **Phase 2** — TLS-pinned networking, a TOTP-based login flow that
+  persists the auth token in `EncryptedSharedPreferences`, and a
+  dashboard listing the user's projects from `GET /api/projects`, served
+  through a server-side Caddy TLS terminator (`reverse-proxy/`).
 
 ## One-time setup
 
@@ -53,21 +57,52 @@ android/
 ├── settings.gradle.kts              Registers :app, :terminal-emulator, :terminal-view
 ├── terminal-emulator/               Phase 1: vendored Termux emulator (GPLv3) + golden tests
 ├── terminal-view/                   Phase 1: vendored Termux View (GPLv3)
-├── build.gradle.kts                 Top-level plugins (AGP 8.5.2, Kotlin 1.9.24)
+├── build.gradle.kts                 Top-level plugins (AGP 8.7.3, Kotlin 1.9.24)
 ├── gradle.properties                AndroidX on, parallel + caching enabled
 ├── local.properties                 Generated — sdk.dir=<.toolchain/android-sdk>
+├── reverse-proxy/                   Phase 2: Caddy config + self-signed
+│   │                                cert + APK download route (server-side)
+│   ├── Caddyfile                    https://5.78.231.51:8443 → 127.0.0.1:3000
+│   ├── install.sh                   Copy cert + symlink config into /etc/caddy
+│   ├── README.md                    One-time setup + rebuild flow
+│   ├── certs/server.crt             Self-signed cert (committed for pin reproducibility)
+│   └── scripts/
+│       ├── generate-cert.sh         Mint self-signed cert with SAN=IP:5.78.231.51
+│       ├── sync-pin.sh              Copy cert to raw/, update NSC pin in app
+│       └── publish-apk.sh           Build :app:assembleDebug, copy → /var/lib/dancode-apk/
 └── app/
-    ├── build.gradle.kts             Compose, minSdk 30, targetSdk 34
+    ├── build.gradle.kts             Compose, minSdk 30, targetSdk 35
     └── src/
         ├── main/
-        │   ├── AndroidManifest.xml
+        │   ├── AndroidManifest.xml          INTERNET + networkSecurityConfig
+        │   ├── res/raw/dancode_server.crt   Pinned trust anchor (Phase 2)
         │   ├── res/values/themes.xml
+        │   ├── res/xml/network_security_config.xml  Pins SPKI hash to 5.78.231.51
         │   └── java/com/dancode/android/
-        │       ├── MainActivity.kt          ComponentActivity host
-        │       └── ui/HomeScreen.kt         Phase-0 placeholder composable
+        │       ├── MainActivity.kt          ComponentActivity hosting AppNav
+        │       ├── auth/
+        │       │   ├── TokenStorage.kt      EncryptedSharedPreferences wrapper
+        │       │   ├── AuthApi.kt           POST /api/auth/login (OkHttp)
+        │       │   ├── LoginController.kt   Form state + submit + token persist
+        │       │   └── LoginScreen.kt       Compose form (URL + user + pw + TOTP)
+        │       ├── net/
+        │       │   └── BearerAuthInterceptor.kt  Injects Authorization: Bearer
+        │       └── projects/
+        │           ├── Project.kt           name/slug/path record
+        │           ├── ProjectsApi.kt       GET /api/projects (sealed ListResult)
+        │           ├── DashboardController.kt  Loads + dispatches 401 to onUnauthorized
+        │           └── DashboardScreen.kt   LazyColumn over project names
         └── test/java/com/dancode/android/
             ├── SmokeTest.kt                 JUnit unit test (2+2=4)
-            └── HomeScreenRenderTest.kt      Robolectric Compose render test
+            ├── auth/TokenStorageTest.kt        Robolectric round-trip
+            ├── auth/AuthApiTest.kt             MockWebServer + Robolectric
+            ├── auth/LoginControllerTest.kt     Persist + onLoggedIn + error paths
+            ├── auth/LoginScreenRenderTest.kt   Compose render + typing
+            ├── net/BearerAuthInterceptorTest.kt MockWebServer header assertion
+            ├── net/NetworkSecurityConfigTest.kt XML pin scoped to 5.78.231.51
+            ├── projects/ProjectsApiTest.kt     MockWebServer Bearer + parse + 401
+            ├── projects/DashboardControllerTest.kt  401 → onUnauthorized fires
+            └── projects/DashboardScreenTest.kt  Loading / Loaded / Error / Empty
 ```
 
 ## Versions
