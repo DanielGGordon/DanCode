@@ -18,7 +18,13 @@ import com.dancode.android.auth.TokenStorage
 import com.dancode.android.net.BearerAuthInterceptor
 import com.dancode.android.projects.DashboardController
 import com.dancode.android.projects.DashboardScreen
+import com.dancode.android.projects.Project
 import com.dancode.android.projects.ProjectsApi
+import com.dancode.android.terminal.TerminalHost
+import com.dancode.android.terminal.TerminalListController
+import com.dancode.android.terminal.TerminalListScreen
+import com.dancode.android.terminal.TerminalSummary
+import com.dancode.android.terminal.TerminalsApi
 import okhttp3.OkHttpClient
 
 class MainActivity : ComponentActivity() {
@@ -30,6 +36,7 @@ class MainActivity : ComponentActivity() {
             .build()
         val authApi = AuthApi(OkHttpClient())
         val projectsApi = ProjectsApi(authedClient)
+        val terminalsApi = TerminalsApi(authedClient)
 
         setContent {
             MaterialTheme {
@@ -37,29 +44,43 @@ class MainActivity : ComponentActivity() {
                     tokenStorage = tokenStorage,
                     authApi = authApi,
                     projectsApi = projectsApi,
+                    terminalsApi = terminalsApi,
+                    authedClient = authedClient,
                 )
             }
         }
     }
 }
 
-private enum class Screen { Login, Dashboard }
+private sealed class Screen {
+    data object Login : Screen()
+    data object Dashboard : Screen()
+    data class TerminalList(val project: Project) : Screen()
+    data class Terminal(val project: Project, val terminal: TerminalSummary) : Screen()
+}
 
 @Composable
 private fun AppNav(
     tokenStorage: TokenStorage,
     authApi: AuthApi,
     projectsApi: ProjectsApi,
+    terminalsApi: TerminalsApi,
+    authedClient: OkHttpClient,
 ) {
-    var screen by remember {
+    var screen: Screen by remember {
         mutableStateOf(if (tokenStorage.read() != null) Screen.Dashboard else Screen.Login)
     }
-    var serverUrl by remember {
-        mutableStateOf(LoginController.DEFAULT_SERVER_URL)
+    var serverUrl by remember { mutableStateOf(LoginController.DEFAULT_SERVER_URL) }
+
+    val onUnauthorized: () -> Unit = remember {
+        {
+            tokenStorage.clear()
+            screen = Screen.Login
+        }
     }
 
-    when (screen) {
-        Screen.Login -> {
+    when (val current = screen) {
+        is Screen.Login -> {
             val controller = remember {
                 LoginController(
                     authApi = authApi,
@@ -68,26 +89,55 @@ private fun AppNav(
                     initialServerUrl = serverUrl,
                 )
             }
-            // Track the URL the user typed so the dashboard can reuse it.
             LaunchedEffect(controller) {
                 controller.state.collect { serverUrl = it.serverUrl }
             }
             LoginScreen(controller = controller)
         }
-        Screen.Dashboard -> {
+        is Screen.Dashboard -> {
             val controller = remember(serverUrl) {
                 DashboardController(
                     api = projectsApi,
                     baseUrl = serverUrl,
-                    onUnauthorized = {
-                        tokenStorage.clear()
-                        screen = Screen.Login
-                    },
+                    onUnauthorized = onUnauthorized,
                 )
             }
             LaunchedEffect(controller) { controller.load() }
             val state by controller.state.collectAsState()
-            DashboardScreen(state = state)
+            DashboardScreen(
+                state = state,
+                onSelect = { project -> screen = Screen.TerminalList(project) },
+            )
+        }
+        is Screen.TerminalList -> {
+            val controller = remember(current.project.slug, serverUrl) {
+                TerminalListController(
+                    api = terminalsApi,
+                    baseUrl = serverUrl,
+                    projectSlug = current.project.slug,
+                    onUnauthorized = onUnauthorized,
+                )
+            }
+            LaunchedEffect(controller) { controller.load() }
+            val state by controller.state.collectAsState()
+            TerminalListScreen(
+                state = state,
+                onSelect = { terminal -> screen = Screen.Terminal(current.project, terminal) },
+            )
+        }
+        is Screen.Terminal -> {
+            val token = tokenStorage.read()
+            if (token == null) {
+                onUnauthorized()
+            } else {
+                TerminalHost(
+                    terminal = current.terminal,
+                    serverBaseUrl = serverUrl,
+                    httpClient = authedClient,
+                    token = token,
+                    onBack = { screen = Screen.TerminalList(current.project) },
+                )
+            }
         }
     }
 }

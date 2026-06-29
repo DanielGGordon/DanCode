@@ -39,11 +39,26 @@ DanCode/
 │   │       │       │   └── LoginScreen.kt       # Phase 2: Compose form — OutlinedTextField × 4 (server URL, username, password, TOTP) + submit button + error text + progress indicator
 │   │       │       ├── net/
 │   │       │       │   └── BearerAuthInterceptor.kt  # Phase 2: OkHttp interceptor injecting Authorization: Bearer <token> only when a non-null token is available
-│   │       │       └── projects/
-│   │       │           ├── Project.kt           # Phase 2: minimal {name, slug, path} record (server returns more fields, dashboard ignores them)
-│   │       │           ├── ProjectsApi.kt       # Phase 2: GET {baseUrl}/api/projects via OkHttp; sealed ListResult Success/Unauthorized/Failure/NetworkError
-│   │       │           ├── DashboardController.kt   # Phase 2: load() drives state Loading→Loaded/Error and fires onUnauthorized on 401 so AppNav routes back to login
-│   │       │           └── DashboardScreen.kt   # Phase 2: LazyColumn over Project list with testTag DashboardScreenTags.PROJECT_LIST; loading spinner, empty hint, error text
+│   │       │       ├── projects/
+│   │       │       │   ├── Project.kt           # Phase 2: minimal {name, slug, path} record (server returns more fields, dashboard ignores them)
+│   │       │       │   ├── ProjectsApi.kt       # Phase 2: GET {baseUrl}/api/projects via OkHttp; sealed ListResult Success/Unauthorized/Failure/NetworkError
+│   │       │       │   ├── DashboardController.kt   # Phase 2: load() drives state Loading→Loaded/Error and fires onUnauthorized on 401 so AppNav routes back to login
+│   │       │       │   └── DashboardScreen.kt   # Phase 2/3: LazyColumn over Project list; Phase 3 adds onSelect → MainActivity navigates to TerminalListScreen
+│   │       │       └── terminal/                # Phase 3: live terminal stack — REST, socket, emulator binding, full-screen view
+│   │       │           ├── TerminalSummary.kt           # {id, projectSlug, label, command, cwd}; extra server fields are ignored at this layer
+│   │       │           ├── TerminalsApi.kt              # GET {baseUrl}/api/terminals?project=<slug> via OkHttp; sealed ListResult Success/Unauthorized/Failure/NetworkError
+│   │       │           ├── TerminalListController.kt    # load() drives state Loading→Loaded/Error; 401 routes to onUnauthorized
+│   │       │           ├── TerminalListScreen.kt        # LazyColumn over terminals; onSelect → TerminalScreen via MainActivity
+│   │       │           ├── TerminalInputEncoder.kt      # cooked-mode: strips trailing \r/\n, appends "\r"
+│   │       │           ├── TerminalViewMetrics.kt       # gridDimensions(viewPx, cellPx): floor + clamp-to-1; cellSizeForFont heuristic
+│   │       │           ├── TerminalTransport.kt         # Interfaces: TerminalTransport, TransportListener, TerminalSink (production + fakes share)
+│   │       │           ├── TerminalConnection.kt        # State machine Idle→Connecting→Connected→Reconnecting→Disconnected. On *re*connect emits sink.reset() before output; sendResize buffers pre-Connect calls + replays on connect; auto-redials transport.connect on disconnect; stop() suppresses further reconnects
+│   │       │           ├── SocketIoTransport.kt         # io.socket:socket.io-client 2.1.0 binding. IO.Options.builder: transports=["websocket"], auth={token}, reconnection=true; reuses pinned-TLS OkHttp client as both callFactory + webSocketFactory
+│   │       │           ├── TerminalEmulatorSink.kt      # write → emulator.append; reset → writes RIS + ESC[?1049l + ESC[3J + ESC[2J + ESC[H + session.reset() (TerminalEmulator.reset doesn't blank cells on its own)
+│   │       │           ├── TerminalScreen.kt            # Compose: Back header + AndroidView slot + cooked-mode OutlinedTextField + Send + "Reconnecting…" overlay (state == Reconnecting)
+│   │       │           └── TerminalHost.kt              # Wires SocketIoTransport + RemoteTerminalSession + TerminalEmulatorSink + TerminalConnection to com.termux.view.TerminalView; main-thread sink marshalling; AndroidView update() emits resize from renderer fontWidth/fontLineSpacing
+│   │       ├── java/com/termux/terminal/
+│   │       │   └── RemoteTerminalSession.kt    # Phase 3: TerminalSession subclass that never opens a JNI PTY — initializeEmulator constructs only the emulator; write() forwards bytes to a (data, offset, count) callback the host wires to transport.sendInput. Lives in com.termux.terminal so it can see package-private mEmulator/mClient on the parent
 │   │       └── test/java/com/dancode/android/
 │   │           ├── SmokeTest.kt                 # JUnit trivial unit test (2+2=4) — proves test path works headless
 │   │           ├── auth/TokenStorageTest.kt        # Phase 2: Robolectric round-trip — save/read/clear + overwrite via ApplicationProvider
@@ -54,7 +69,18 @@ DanCode/
 │   │           ├── net/NetworkSecurityConfigTest.kt # Phase 2: parses res/xml/network_security_config.xml, asserts <pin-set> scoped to <domain>5.78.231.51</domain>, SHA-256 base64 pin is a real (non-placeholder) 44-char value, cleartextTrafficPermitted=false on both base-config and the pinned domain-config, AndroidManifest wires android:networkSecurityConfig
 │   │           ├── projects/ProjectsApiTest.kt     # Phase 2: MockWebServer — Bearer token reaches GET /api/projects, JSON array parses into Project records, 401 → Unauthorized, 500 → Failure, unknown fields tolerated
 │   │           ├── projects/DashboardControllerTest.kt  # Phase 2: 200 → Loaded; 401 invokes onUnauthorized callback; 500 + network failure → Error
-│   │           └── projects/DashboardScreenTest.kt  # Phase 2: Loaded state renders each project name; Loading state shows spinner; Error state shows the message; empty Loaded shows the empty hint
+│   │           ├── projects/DashboardScreenTest.kt  # Phase 2/3: Loaded renders names; Loading spins; Error shows message; empty shows hint; Phase 3 adds onSelect callback for row tap
+│   │           └── terminal/                # Phase 3: live-terminal tests (all headless — no device, no live server)
+│   │               ├── TerminalInputEncoderTest.kt   # cooked-mode edge cases: plain line, embedded whitespace, trailing \n/\r/\r\n stripped, empty line → "\r"
+│   │               ├── TerminalViewMetricsTest.kt    # cols/rows = floor; partial cell flooring; zero view → 1×1; garbage cell → 1×1; font-size scaling; width<height invariant
+│   │               ├── TerminalsApiTest.kt           # Phase 3 MockWebServer: Bearer + ?project=<slug>; JSON array parses; missing optional fields tolerated; 401/500 routing
+│   │               ├── TerminalListControllerTest.kt # 200 → Loaded; 401 → onUnauthorized; 500 → Error without onUnauthorized
+│   │               ├── TerminalListScreenTest.kt     # Loading/Loaded/Empty render; tap forwards TerminalSummary to onSelect
+│   │               ├── TerminalScreenTest.kt         # Overlay surfaces only when state == Reconnecting; typing + Send forwards typed line to onSend; Back invokes onBack
+│   │               ├── TerminalConnectionTest.kt     # Drives FakeTransport+FakeSink: start→Connecting; onConnected→Connected; output→sink.write; first connect → no reset (initial replay kept); disconnect→Reconnecting + reconnect→reset before next output; multiple cycles each reset once; auto-redial via transport.connect; stop suppresses; sendLine encodes via TerminalInputEncoder; sendResize buffered pre-Connect, replayed on Connect
+│   │               ├── SocketIoTransportOptionsTest.kt # IO.Options assertions: auth.token, transports=["websocket"], reconnection enabled, OkHttp wired as callFactory + webSocketFactory
+│   │               ├── RemoteTerminalSessionTest.kt  # initializeEmulator constructs emulator without loadLibrary("termux"); write() forwards bytes to the callback; isRunning safe before init
+│   │               └── TerminalEmulatorSinkTest.kt   # write appends to row 0; reset clears so write("x") after a prior "hello" leaves only "x" on row 0
 │   ├── terminal-emulator/      # Phase 1: vendored Termux terminal-emulator (GPLv3, github.com/termux/termux-app @ 401bbe54)
 │   │   ├── LICENSE.md          # GPLv3 from upstream
 │   │   ├── build.gradle.kts    # AGP library; NDK build intentionally disabled (`jni.srcDirs()` empty) so pure-JVM tests don't need libtermux.so; forwards -Dregen.goldens=true to test JVM

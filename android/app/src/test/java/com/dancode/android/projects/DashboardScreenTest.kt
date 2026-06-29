@@ -4,6 +4,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -61,5 +63,25 @@ class DashboardScreenTest {
         }
 
         composeRule.onNodeWithTag(DashboardScreenTags.EMPTY).assertIsDisplayed()
+    }
+
+    @Test
+    fun tapping_a_project_row_invokes_on_select_with_that_project() {
+        val projects = listOf(
+            Project(name = "DanCode", slug = "dancode", path = "/p"),
+            Project(name = "Notes", slug = "notes", path = "/q"),
+        )
+        var selected: Project? = null
+        composeRule.setContent {
+            DashboardScreen(
+                state = DashboardState.Loaded(projects),
+                onSelect = { selected = it },
+            )
+        }
+
+        composeRule.onNodeWithTag(DashboardScreenTags.PROJECT_ITEM_PREFIX + "notes")
+            .performClick()
+
+        assertEquals(projects[1], selected)
     }
 }

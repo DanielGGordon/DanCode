@@ -173,3 +173,55 @@
   resulting `MalformedURLException` as a "Network error" toast. A
   trivial regex check (or `HttpUrl.parse(...)` from OkHttp) would give
   a friendlier message.
+
+## After Phase 3 (proposed by Phase 3 generator)
+
+- **`AppNav` is now four screens and obviously outgrown the hand-rolled
+  `sealed class Screen` pattern.** Phase 4 will add the key bar, raw
+  mode, and inter-terminal swipe — all of which want a real back stack.
+  Move to `androidx.navigation:navigation-compose` before adding more
+  screens; the current `var screen: Screen by remember` survives only
+  because nothing yet needs system Back to navigate up.
+
+- **`TerminalSession` had to be un-finalized.** Phase 1 vendored
+  Termux's source as-is; Phase 3 needed to subclass it for the
+  remote-PTY variant. The change is a one-token edit
+  (`public final class` → `public class`) but it diverges from
+  upstream. Worth either (a) carrying a tiny vendoring patch file that
+  records the diff or (b) submitting upstream a "make
+  `initializeEmulator` overridable" patch so future syncs are cheaper.
+
+- **Sink reset uses control sequences, not a renderer call.** The
+  Termux `TerminalEmulator.reset()` resets state (cursor style,
+  effects, DEC flags) but does NOT clear the cell buffer. The Phase 3
+  sink works around this by writing `ESC c` + `ESC[?1049l` + `ESC[3J` +
+  `ESC[2J` + `ESC[H` ahead of `session.reset()`. If Phase 4 ever needs
+  a "true" clear (e.g. for explicit `terminal.clear()` UI), consider
+  adding a `blockClear(0,0,cols,rows)` call into the vendored
+  emulator's reset path so the sink can do `session.reset()` and have
+  it actually blank the screen.
+
+- **No emulator-thread synchronisation primitives.** The host
+  composable uses `Handler.post` to marshal socket.io callbacks onto
+  the main thread because Termux's `TerminalEmulator` is not
+  thread-safe. This works but couples the architecture to a Looper.
+  Phase 4 could introduce a `TerminalEmulatorChannel` (a
+  `Channel<String>` consumed by a `LaunchedEffect` on Dispatchers.Main)
+  for slightly cleaner semantics — current code is good enough for
+  ship.
+
+- **`auth.token` handshake is the only socket.io auth knob.** The
+  server's `/terminal/<uuid>` namespace accepts the token via
+  `auth: { token }` (socket.io v3 handshake). The pinned-TLS OkHttp
+  client is wired to BOTH `callFactory` and `webSocketFactory`; without
+  the `webSocketFactory` override the engine.io layer would build its
+  own OkHttp client and bypass the pin. Make sure any future
+  socket.io-client upgrade keeps both setters.
+
+- **`SocketIoTransport.kt` is the only file with real connect-time
+  network behavior.** The gated test path stops at IO.Options
+  assertions and FakeTransport-driven state-machine tests, so a real
+  TLS-pinned smoke against the live backend is the only thing that
+  catches handshake regressions. Worth scheduling an emulator-based
+  instrumented test in a later phase even though it stays out of the
+  gated run.
