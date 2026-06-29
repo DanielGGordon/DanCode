@@ -67,6 +67,10 @@ tasks.whenTaskAdded {
 }
 
 dependencies {
+    // Vendored Termux libraries (Phase 1). :terminal-view depends on
+    // :terminal-emulator so picking it up brings both into :app.
+    implementation(project(":terminal-view"))
+
     val composeBom = platform("androidx.compose:compose-bom:2024.09.00")
     implementation(composeBom)
 

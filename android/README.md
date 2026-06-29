@@ -1,8 +1,15 @@
 # android/ — DanCode native Android client
 
-Native replacement for the mobile web client. Phase 0 is a Compose skeleton:
-one screen, two trivial tests, and the build/test loop the agent uses for
-every later phase.
+Native replacement for the mobile web client.
+
+- **Phase 0** — Compose skeleton: one screen, two trivial tests, and the
+  toolchain bootstrap that every later phase reuses.
+- **Phase 1** — Vendored Termux `:terminal-emulator` + `:terminal-view`
+  modules wired into `:app`, plus a pure-JVM golden-test suite under
+  `:terminal-emulator` that drives recorded byte streams through the
+  emulator and asserts screen-buffer snapshots, alt-screen and
+  mouse-tracking transitions. See
+  [`terminal-emulator/README.md`](./terminal-emulator/README.md).
 
 ## One-time setup
 
@@ -43,7 +50,9 @@ android/
 ├── .toolchain/                      Bootstrapped JDK + SDK (gitignored)
 ├── gradlew                          Wrapper, sources .toolchain/env.sh
 ├── gradle/wrapper/                  Standard Gradle 8.9 wrapper jar + props
-├── settings.gradle.kts              Registers :app (more modules in Phase 1+)
+├── settings.gradle.kts              Registers :app, :terminal-emulator, :terminal-view
+├── terminal-emulator/               Phase 1: vendored Termux emulator (GPLv3) + golden tests
+├── terminal-view/                   Phase 1: vendored Termux View (GPLv3)
 ├── build.gradle.kts                 Top-level plugins (AGP 8.5.2, Kotlin 1.9.24)
 ├── gradle.properties                AndroidX on, parallel + caching enabled
 ├── local.properties                 Generated — sdk.dir=<.toolchain/android-sdk>
