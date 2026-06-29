@@ -100,3 +100,128 @@
   regenerator will see this test fail. Don't delete it — it's how we
   catch the silent class of bug where the code says "this is the
   recording" but the on-disk bytes have drifted.
+
+## After Phase 2 (proposed by Phase 2 generator)
+
+- **`isReturnDefaultValues = true` is a foot-gun for `org.json.*` in
+  tests.** Phase 0's `testOptions` block left `isReturnDefaultValues = true`
+  on. That swaps the "Method ... not mocked" exception for silent
+  nulls, which broke `AuthApi` only at the boundary `JSONObject.toString()`
+  call — the test gave us a `NullPointerException` 5 frames deep instead
+  of an obvious "you forgot Robolectric". Fix in this phase: every test
+  that touches `org.json.*` or `EncryptedSharedPreferences` uses
+  `@RunWith(RobolectricTestRunner::class) @Config(sdk = [33])`. Future
+  phases that introduce networking/serialization should default to
+  Robolectric for the same reason; alternatively, consider dropping the
+  `isReturnDefaultValues` flag for the project — making the failure mode
+  the louder "Method not mocked" exception would be a real win.
+
+- **Pin sync is two-step and easy to forget.** `reverse-proxy/scripts/sync-pin.sh`
+  must run *after* every cert regeneration; otherwise the app pins a
+  stale SPKI hash and the next install silently fails to reach the
+  server. Consider a `make` target (or a pre-commit hook) that calls
+  `generate-cert.sh` and `sync-pin.sh` in sequence, plus a CI check that
+  verifies `openssl x509 -in reverse-proxy/certs/server.crt -pubkey
+  -noout | openssl dgst -sha256 -binary | base64` matches the literal
+  pin in `network_security_config.xml`. That guards against the case
+  where the cert is regenerated but the sync step is skipped.
+
+- **HTTPS endpoint port is `:8443` — pin this everywhere.** Phase 3's
+  socket.io setup must reuse the same `LoginController.DEFAULT_SERVER_URL`
+  (or a shared `AppConfig` object) so the WebSocket handshake also goes
+  through the pinned terminator. Right now there is no shared constant;
+  if Phase 3 hardcodes `wss://5.78.231.51:???` it's easy to drift. Worth
+  extracting `DEFAULT_SERVER_URL` into a `com.dancode.android.config`
+  package on first use.
+
+- **Cert is committed but the key is not — pin reproducibility vs.
+  rotation.** `reverse-proxy/certs/server.crt` is committed so anyone
+  who checks the repo out can run the test suite against the canonical
+  SPKI hash. `server.key` is `.gitignore`d so a leak doesn't trivially
+  let a MITM spoof the pinned channel. When you eventually rotate the
+  cert in production, you must commit the *new* `server.crt`, re-run
+  `sync-pin.sh`, **and** re-publish a new APK — the old APK will refuse
+  to connect to the new cert. Document this in `deploy.md` when Phase 5
+  or so adds an actual deploy doc.
+
+- **`EncryptedSharedPreferences` fallback path is a soft failure.**
+  `TokenStorage.create()` silently falls back to plain `SharedPreferences`
+  if the master-key build throws. The fallback is what makes the
+  Robolectric test green (the keystore shadow is finicky), but on a real
+  device a fallback would mean the token is stored *unencrypted*. Phase
+  3+ should add a logged warning (or a `Log.wtf`) when the fallback path
+  triggers in production builds; the gated test suite doesn't catch
+  this since it deliberately exercises the fallback.
+
+- **No `:8443` integration test against a real backend.** The gated
+  test path uses MockWebServer over plain HTTP because spinning up a
+  TLS-pinned MockWebServer with a matching SPKI is brittle. The
+  consequence: the pinning code is exercised manually via on-device
+  smoke only. If Phase 4+ has spare cycles, an instrumented (emulator)
+  test that points at a MockWebServer with a self-signed cert and
+  asserts the pin rejects a *different* cert would close that gap.
+
+- **`AppNav` in `MainActivity.kt` is hand-rolled state, not Navigation-Compose.**
+  Adding `androidx.navigation:navigation-compose` would let phase 3 add
+  a project-list → terminal-list → terminal-view three-level nav with
+  proper back-stack semantics, deep links, and rotation survival. The
+  current `var screen: Screen by remember` pattern works for two screens
+  but won't scale.
+
+- **Server URL has no validation.** `LoginController.submit()` rejects
+  blanks but happily lets you type `not-a-url` and propagates the
+  resulting `MalformedURLException` as a "Network error" toast. A
+  trivial regex check (or `HttpUrl.parse(...)` from OkHttp) would give
+  a friendlier message.
+
+## After Phase 3 (proposed by Phase 3 generator)
+
+- **`AppNav` is now four screens and obviously outgrown the hand-rolled
+  `sealed class Screen` pattern.** Phase 4 will add the key bar, raw
+  mode, and inter-terminal swipe — all of which want a real back stack.
+  Move to `androidx.navigation:navigation-compose` before adding more
+  screens; the current `var screen: Screen by remember` survives only
+  because nothing yet needs system Back to navigate up.
+
+- **`TerminalSession` had to be un-finalized.** Phase 1 vendored
+  Termux's source as-is; Phase 3 needed to subclass it for the
+  remote-PTY variant. The change is a one-token edit
+  (`public final class` → `public class`) but it diverges from
+  upstream. Worth either (a) carrying a tiny vendoring patch file that
+  records the diff or (b) submitting upstream a "make
+  `initializeEmulator` overridable" patch so future syncs are cheaper.
+
+- **Sink reset uses control sequences, not a renderer call.** The
+  Termux `TerminalEmulator.reset()` resets state (cursor style,
+  effects, DEC flags) but does NOT clear the cell buffer. The Phase 3
+  sink works around this by writing `ESC c` + `ESC[?1049l` + `ESC[3J` +
+  `ESC[2J` + `ESC[H` ahead of `session.reset()`. If Phase 4 ever needs
+  a "true" clear (e.g. for explicit `terminal.clear()` UI), consider
+  adding a `blockClear(0,0,cols,rows)` call into the vendored
+  emulator's reset path so the sink can do `session.reset()` and have
+  it actually blank the screen.
+
+- **No emulator-thread synchronisation primitives.** The host
+  composable uses `Handler.post` to marshal socket.io callbacks onto
+  the main thread because Termux's `TerminalEmulator` is not
+  thread-safe. This works but couples the architecture to a Looper.
+  Phase 4 could introduce a `TerminalEmulatorChannel` (a
+  `Channel<String>` consumed by a `LaunchedEffect` on Dispatchers.Main)
+  for slightly cleaner semantics — current code is good enough for
+  ship.
+
+- **`auth.token` handshake is the only socket.io auth knob.** The
+  server's `/terminal/<uuid>` namespace accepts the token via
+  `auth: { token }` (socket.io v3 handshake). The pinned-TLS OkHttp
+  client is wired to BOTH `callFactory` and `webSocketFactory`; without
+  the `webSocketFactory` override the engine.io layer would build its
+  own OkHttp client and bypass the pin. Make sure any future
+  socket.io-client upgrade keeps both setters.
+
+- **`SocketIoTransport.kt` is the only file with real connect-time
+  network behavior.** The gated test path stops at IO.Options
+  assertions and FakeTransport-driven state-machine tests, so a real
+  TLS-pinned smoke against the live backend is the only thing that
+  catches handshake regressions. Worth scheduling an emulator-based
+  instrumented test in a later phase even though it stays out of the
+  gated run.

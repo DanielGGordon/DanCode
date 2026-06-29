@@ -10,6 +10,17 @@ Native replacement for the mobile web client.
   emulator and asserts screen-buffer snapshots, alt-screen and
   mouse-tracking transitions. See
   [`terminal-emulator/README.md`](./terminal-emulator/README.md).
+- **Phase 2** — TLS-pinned networking, a TOTP-based login flow that
+  persists the auth token in `EncryptedSharedPreferences`, and a
+  dashboard listing the user's projects from `GET /api/projects`, served
+  through a server-side Caddy TLS terminator (`reverse-proxy/`).
+- **Phase 3** — Tap a project → tap a terminal → full-screen live PTY.
+  Output streams over Socket.io to a Termux-backed `TerminalView`;
+  reconnects clear the screen before the ring-buffer replay so nothing
+  duplicates; a "reconnecting" overlay covers transient drops. Input is
+  cooked-mode: the bottom Compose field sends the typed line plus `\r`.
+  Resizes derived from view metrics fire on attach and on every layout
+  change.
 
 ## One-time setup
 
@@ -53,21 +64,78 @@ android/
 ├── settings.gradle.kts              Registers :app, :terminal-emulator, :terminal-view
 ├── terminal-emulator/               Phase 1: vendored Termux emulator (GPLv3) + golden tests
 ├── terminal-view/                   Phase 1: vendored Termux View (GPLv3)
-├── build.gradle.kts                 Top-level plugins (AGP 8.5.2, Kotlin 1.9.24)
+├── build.gradle.kts                 Top-level plugins (AGP 8.7.3, Kotlin 1.9.24)
 ├── gradle.properties                AndroidX on, parallel + caching enabled
 ├── local.properties                 Generated — sdk.dir=<.toolchain/android-sdk>
+├── reverse-proxy/                   Phase 2: Caddy config + self-signed
+│   │                                cert + APK download route (server-side)
+│   ├── Caddyfile                    https://5.78.231.51:8443 → 127.0.0.1:3000
+│   ├── install.sh                   Copy cert + symlink config into /etc/caddy
+│   ├── README.md                    One-time setup + rebuild flow
+│   ├── certs/server.crt             Self-signed cert (committed for pin reproducibility)
+│   └── scripts/
+│       ├── generate-cert.sh         Mint self-signed cert with SAN=IP:5.78.231.51
+│       ├── sync-pin.sh              Copy cert to raw/, update NSC pin in app
+│       └── publish-apk.sh           Build :app:assembleDebug, copy → /var/lib/dancode-apk/
 └── app/
-    ├── build.gradle.kts             Compose, minSdk 30, targetSdk 34
+    ├── build.gradle.kts             Compose, minSdk 30, targetSdk 35
     └── src/
         ├── main/
-        │   ├── AndroidManifest.xml
+        │   ├── AndroidManifest.xml          INTERNET + networkSecurityConfig
+        │   ├── res/raw/dancode_server.crt   Pinned trust anchor (Phase 2)
         │   ├── res/values/themes.xml
+        │   ├── res/xml/network_security_config.xml  Pins SPKI hash to 5.78.231.51
         │   └── java/com/dancode/android/
-        │       ├── MainActivity.kt          ComponentActivity host
-        │       └── ui/HomeScreen.kt         Phase-0 placeholder composable
+        │       ├── MainActivity.kt          ComponentActivity hosting AppNav
+        │       ├── auth/
+        │       │   ├── TokenStorage.kt      EncryptedSharedPreferences wrapper
+        │       │   ├── AuthApi.kt           POST /api/auth/login (OkHttp)
+        │       │   ├── LoginController.kt   Form state + submit + token persist
+        │       │   └── LoginScreen.kt       Compose form (URL + user + pw + TOTP)
+        │       ├── net/
+        │       │   └── BearerAuthInterceptor.kt  Injects Authorization: Bearer
+        │       ├── projects/
+        │       │   ├── Project.kt           name/slug/path record
+        │       │   ├── ProjectsApi.kt       GET /api/projects (sealed ListResult)
+        │       │   ├── DashboardController.kt  Loads + dispatches 401 to onUnauthorized
+        │       │   └── DashboardScreen.kt   LazyColumn over project names; onSelect → terminal list
+        │       └── terminal/                Phase 3: live terminal slice
+        │           ├── TerminalSummary.kt           id/projectSlug/label/command/cwd
+        │           ├── TerminalsApi.kt              GET /api/terminals?project=<slug>
+        │           ├── TerminalListController.kt    Loading lifecycle + 401 routing
+        │           ├── TerminalListScreen.kt        LazyColumn over terminals; onSelect → terminal
+        │           ├── TerminalInputEncoder.kt      cooked-mode: line + "\r"
+        │           ├── TerminalViewMetrics.kt       cols/rows from view px + cell px
+        │           ├── TerminalTransport.kt         Transport + listener + sink interfaces
+        │           ├── TerminalConnection.kt        Idle→Connecting→Connected→Reconnecting; clears sink on reconnect
+        │           ├── SocketIoTransport.kt         Production transport (io.socket:socket.io-client)
+        │           ├── TerminalEmulatorSink.kt      Writes/clears the Termux emulator
+        │           ├── TerminalScreen.kt            Compose: header + view slot + input + overlay
+        │           └── TerminalHost.kt              Wires transport+session+sink+connection to TerminalView
+        ├── java/com/termux/terminal/
+        │   └── RemoteTerminalSession.kt    TerminalSession that never opens a JNI PTY
         └── test/java/com/dancode/android/
             ├── SmokeTest.kt                 JUnit unit test (2+2=4)
-            └── HomeScreenRenderTest.kt      Robolectric Compose render test
+            ├── auth/TokenStorageTest.kt        Robolectric round-trip
+            ├── auth/AuthApiTest.kt             MockWebServer + Robolectric
+            ├── auth/LoginControllerTest.kt     Persist + onLoggedIn + error paths
+            ├── auth/LoginScreenRenderTest.kt   Compose render + typing
+            ├── net/BearerAuthInterceptorTest.kt MockWebServer header assertion
+            ├── net/NetworkSecurityConfigTest.kt XML pin scoped to 5.78.231.51
+            ├── projects/ProjectsApiTest.kt     MockWebServer Bearer + parse + 401
+            ├── projects/DashboardControllerTest.kt  401 → onUnauthorized fires
+            ├── projects/DashboardScreenTest.kt  Loading / Loaded / Error / Empty / onSelect
+            └── terminal/
+                ├── TerminalInputEncoderTest.kt   line + "\r" encoding edge cases
+                ├── TerminalViewMetricsTest.kt    floor; min-one-by-one; font scale
+                ├── TerminalsApiTest.kt           MockWebServer Bearer + parse + 401
+                ├── TerminalListControllerTest.kt Loading/Loaded/Error; 401 routing
+                ├── TerminalListScreenTest.kt     Loading/Loaded/Error/Empty + onSelect
+                ├── TerminalScreenTest.kt         Overlay on Reconnecting; Send forwards line
+                ├── TerminalConnectionTest.kt     State machine + reconnect-dedup + buffered resize
+                ├── SocketIoTransportOptionsTest.kt  IO.Options: WS-only, auth.token, OkHttp factory
+                ├── RemoteTerminalSessionTest.kt  initializeEmulator without JNI; write forwards
+                └── TerminalEmulatorSinkTest.kt   reset clears screen before next replay
 ```
 
 ## Versions
@@ -84,6 +152,27 @@ android/
 | `minSdk`          | 30                                 |
 | `targetSdk`       | 35                                 |
 | `applicationId`   | `com.dancode.android`              |
+
+## Manual smoke (Phase 3, not gated)
+
+The gated `android/gradlew test` run uses no device, no network, no live
+backend. The on-phone path is exercised by hand as part of each Phase 3
+release smoke:
+
+1. Build a fresh debug APK: `android/gradlew :app:assembleDebug`.
+2. Sideload from the phone browser via the APK download route on the
+   pinned-TLS endpoint.
+3. Open the app, log in with username/password/TOTP.
+4. Tap any project → the project's terminals appear.
+5. Tap a shell terminal → the full-screen view opens and prints the
+   shell's prompt (the server's ring-buffer replay).
+6. In the Send field type `ls` and press Send — file listing should
+   appear in the view.
+7. Drop the network (airplane mode or unplug Wi-Fi) — the
+   "Reconnecting…" overlay must surface.
+8. Restore the network — the overlay clears, the screen resets cleanly
+   (no doubled prompt or duplicated `ls` output), and live output keeps
+   streaming.
 
 ## Why `testReleaseUnitTest` is disabled
 
