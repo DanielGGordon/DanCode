@@ -49,12 +49,16 @@ fun TerminalHost(
     httpClient: OkHttpClient,
     token: String,
     onBack: () -> Unit,
+    fontSizeStore: TerminalFontSizeStore? = null,
 ) {
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val sessionClient = remember { LoggingSessionClient }
     var emuModeState by remember { mutableStateOf(EmulatorModeState(false, false)) }
     val inputModePolicy = remember { InputModePolicy() }
     var manualOverride by remember { mutableStateOf<InputMode?>(null) }
+    var fontSizeSp by remember(terminal.id, fontSizeStore) {
+        mutableStateOf(fontSizeStore?.read(terminal.id) ?: TerminalFontSizeStore.DEFAULT)
+    }
 
     val plumbing = remember(terminal.id, serverBaseUrl, token) {
         val transport = SocketIoTransport(baseUrl = serverBaseUrl, httpClient = httpClient)
@@ -118,6 +122,20 @@ fun TerminalHost(
         manualOverride = manualOverride,
         onKey = { key -> plumbing.connection.sendRaw(key.bytes) },
         onSetManualOverride = { manualOverride = it },
+        onFontSizeAction = { action ->
+            fontSizeSp = when (action) {
+                FontSizeAction.Increase -> fontSizeStore?.step(terminal.id, +1)
+                    ?: (fontSizeSp + TerminalFontSizeStore.STEP)
+                        .coerceAtMost(TerminalFontSizeStore.MAX)
+                FontSizeAction.Decrease -> fontSizeStore?.step(terminal.id, -1)
+                    ?: (fontSizeSp - TerminalFontSizeStore.STEP)
+                        .coerceAtLeast(TerminalFontSizeStore.MIN)
+                FontSizeAction.Reset -> {
+                    fontSizeStore?.reset(terminal.id)
+                    TerminalFontSizeStore.DEFAULT
+                }
+            }
+        },
         terminalContent = {
             Box(
                 modifier = Modifier
@@ -171,6 +189,7 @@ fun TerminalHost(
                         }
                     },
             ) {
+                val lastAppliedFontSize = remember { mutableStateOf(-1) }
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { ctx ->
@@ -180,6 +199,12 @@ fun TerminalHost(
                         }
                     },
                     update = { tv ->
+                        val dp = tv.resources.displayMetrics.density
+                        val targetPx = (fontSizeSp * dp).toInt().coerceAtLeast(8)
+                        if (lastAppliedFontSize.value != targetPx) {
+                            tv.setTextSize(targetPx)
+                            lastAppliedFontSize.value = targetPx
+                        }
                         val renderer = tv.mRenderer
                         val cellWidth = renderer?.fontWidth ?: 12f
                         val cellHeight = (renderer?.fontLineSpacing ?: 24).toFloat()
