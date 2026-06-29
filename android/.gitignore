@@ -1,0 +1,11 @@
+# Project-local Android toolchain (JDK 17 + SDK) — never committed.
+.toolchain/
+
+# AGP / Gradle outputs and per-machine config.
+.gradle/
+build/
+local.properties
+captures/
+.cxx/
+*.iml
+.idea/
