@@ -162,6 +162,33 @@ class TerminalConnectionTest {
     }
 
     @Test
+    fun send_raw_forwards_bytes_verbatim_to_the_transport() {
+        val (conn, transport, _) = build()
+        conn.start()
+        transport.listener!!.onConnected()
+        // Verbatim — no cooked-mode trailing CR. Used by the control key
+        // bar (ControlKey.Esc, ArrowUp, …) and the SGR mouse-wheel sink.
+        conn.sendRaw("[A")
+        assertTrue(
+            "expected input:ESC[A got ${transport.calls}",
+            transport.calls.contains("input:[A"),
+        )
+    }
+
+    @Test
+    fun send_raw_is_ignored_when_not_connected() {
+        val (conn, transport, _) = build()
+        conn.start()
+        // Pre-connect raw must NOT be queued or sent — there's no shell
+        // to send it to yet and silent retries would be confusing.
+        conn.sendRaw("")
+        assertFalse(
+            "raw input must not be forwarded before connect, got ${transport.calls}",
+            transport.calls.any { it.startsWith("input:") },
+        )
+    }
+
+    @Test
     fun resize_calls_before_connect_are_buffered_and_replayed_after_connect() {
         val (conn, transport, _) = build()
         conn.start()
