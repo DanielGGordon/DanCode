@@ -192,6 +192,22 @@ class TerminalScreenTest {
         assertNull(null) // self-documenting placeholder
     }
 
+    @Test
+    fun font_size_buttons_emit_increase_decrease_and_reset() {
+        val events = mutableListOf<FontSizeAction>()
+        renderScreen(
+            state = TerminalConnection.State.Connected,
+            onFontSizeAction = { events += it },
+        )
+        composeRule.onNodeWithTag(TerminalScreenTags.FONT_INC).performScrollTo().performClick()
+        composeRule.onNodeWithTag(TerminalScreenTags.FONT_DEC).performScrollTo().performClick()
+        composeRule.onNodeWithTag(TerminalScreenTags.FONT_RESET).performScrollTo().performClick()
+        assertEquals(
+            listOf(FontSizeAction.Increase, FontSizeAction.Decrease, FontSizeAction.Reset),
+            events,
+        )
+    }
+
     private fun renderScreen(
         state: TerminalConnection.State,
         inputMode: InputMode = InputMode.Cooked,
@@ -200,6 +216,7 @@ class TerminalScreenTest {
         onBack: () -> Unit = {},
         onKey: (ControlKey) -> Unit = {},
         onSetManualOverride: (InputMode?) -> Unit = {},
+        onFontSizeAction: (FontSizeAction) -> Unit = {},
     ) {
         composeRule.setContent {
             TerminalScreen(
@@ -211,6 +228,7 @@ class TerminalScreenTest {
                 manualOverride = manualOverride,
                 onKey = onKey,
                 onSetManualOverride = onSetManualOverride,
+                onFontSizeAction = onFontSizeAction,
                 terminalContent = { Text("xterm-placeholder") },
             )
         }

@@ -84,4 +84,32 @@ class DashboardScreenTest {
 
         assertEquals(projects[1], selected)
     }
+
+    @Test
+    fun sign_out_button_invokes_on_sign_out() {
+        var signedOut = 0
+        composeRule.setContent {
+            DashboardScreen(
+                state = DashboardState.Loaded(emptyList()),
+                onSelect = {},
+                onSignOut = { signedOut++ },
+            )
+        }
+        composeRule.onNodeWithTag(DashboardScreenTags.SIGN_OUT).assertIsDisplayed().performClick()
+        assertEquals(1, signedOut)
+    }
+
+    @Test
+    fun error_state_renders_retry_and_invokes_callback() {
+        var retries = 0
+        composeRule.setContent {
+            DashboardScreen(
+                state = DashboardState.Error("Network error"),
+                onSelect = {},
+                onRetry = { retries++ },
+            )
+        }
+        composeRule.onNodeWithTag(DashboardScreenTags.RETRY).assertIsDisplayed().performClick()
+        assertEquals(1, retries)
+    }
 }

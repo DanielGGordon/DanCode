@@ -18,13 +18,13 @@ import com.dancode.android.auth.TokenStorage
 import com.dancode.android.net.BearerAuthInterceptor
 import com.dancode.android.projects.DashboardController
 import com.dancode.android.projects.DashboardScreen
-import com.dancode.android.projects.Project
-import com.dancode.android.projects.ProjectsApi
+import com.dancode.android.terminal.TerminalFontSizeStore
 import com.dancode.android.terminal.TerminalHost
 import com.dancode.android.terminal.TerminalListController
 import com.dancode.android.terminal.TerminalListScreen
-import com.dancode.android.terminal.TerminalSummary
+import com.dancode.android.terminal.TerminalListState
 import com.dancode.android.terminal.TerminalsApi
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
 class MainActivity : ComponentActivity() {
@@ -35,8 +35,9 @@ class MainActivity : ComponentActivity() {
             .addInterceptor(BearerAuthInterceptor { tokenStorage.read() })
             .build()
         val authApi = AuthApi(OkHttpClient())
-        val projectsApi = ProjectsApi(authedClient)
+        val projectsApi = ProjectsApiProvider(authedClient)
         val terminalsApi = TerminalsApi(authedClient)
+        val fontSizeStore = TerminalFontSizeStore.create(this)
 
         setContent {
             MaterialTheme {
@@ -46,46 +47,42 @@ class MainActivity : ComponentActivity() {
                     projectsApi = projectsApi,
                     terminalsApi = terminalsApi,
                     authedClient = authedClient,
+                    fontSizeStore = fontSizeStore,
                 )
             }
         }
     }
 }
 
-private sealed class Screen {
-    data object Login : Screen()
-    data object Dashboard : Screen()
-    data class TerminalList(val project: Project) : Screen()
-    data class Terminal(val project: Project, val terminal: TerminalSummary) : Screen()
-}
+private typealias ProjectsApiProvider = com.dancode.android.projects.ProjectsApi
 
 @Composable
 private fun AppNav(
     tokenStorage: TokenStorage,
     authApi: AuthApi,
-    projectsApi: ProjectsApi,
+    projectsApi: ProjectsApiProvider,
     terminalsApi: TerminalsApi,
     authedClient: OkHttpClient,
+    fontSizeStore: TerminalFontSizeStore,
 ) {
-    var screen: Screen by remember {
-        mutableStateOf(if (tokenStorage.read() != null) Screen.Dashboard else Screen.Login)
-    }
+    val nav = remember { AppNavController(initialHasToken = tokenStorage.read() != null) }
     var serverUrl by remember { mutableStateOf(LoginController.DEFAULT_SERVER_URL) }
+    val screen by nav.state.collectAsState()
 
-    val onUnauthorized: () -> Unit = remember {
+    val onUnauthorized: () -> Unit = remember(nav) {
         {
             tokenStorage.clear()
-            screen = Screen.Login
+            nav.unauthorized()
         }
     }
 
     when (val current = screen) {
         is Screen.Login -> {
-            val controller = remember {
+            val controller = remember(nav) {
                 LoginController(
                     authApi = authApi,
                     tokenStorage = tokenStorage,
-                    onLoggedIn = { screen = Screen.Dashboard },
+                    onLoggedIn = { nav.onLoggedIn() },
                     initialServerUrl = serverUrl,
                 )
             }
@@ -104,9 +101,15 @@ private fun AppNav(
             }
             LaunchedEffect(controller) { controller.load() }
             val state by controller.state.collectAsState()
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
             DashboardScreen(
                 state = state,
-                onSelect = { project -> screen = Screen.TerminalList(project) },
+                onSelect = { project -> nav.navigateTo(Screen.TerminalList(project)) },
+                onSignOut = {
+                    tokenStorage.clear()
+                    nav.signOut()
+                },
+                onRetry = { scope.launch { controller.load() } },
             )
         }
         is Screen.TerminalList -> {
@@ -120,9 +123,15 @@ private fun AppNav(
             }
             LaunchedEffect(controller) { controller.load() }
             val state by controller.state.collectAsState()
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
             TerminalListScreen(
                 state = state,
-                onSelect = { terminal -> screen = Screen.Terminal(current.project, terminal) },
+                onSelect = { terminal ->
+                    val terminals = (state as? TerminalListState.Loaded)?.terminals ?: listOf(terminal)
+                    nav.navigateTo(Screen.Terminal(current.project, terminal, terminals))
+                },
+                onBack = { nav.back() },
+                onRetry = { scope.launch { controller.load() } },
             )
         }
         is Screen.Terminal -> {
@@ -130,14 +139,51 @@ private fun AppNav(
             if (token == null) {
                 onUnauthorized()
             } else {
-                TerminalHost(
-                    terminal = current.terminal,
+                // Single-terminal host until Phase 5's swipe-pager lands;
+                // the pager wraps this and is wired in slice 9.
+                TerminalPagerHost(
+                    project = current.project,
+                    terminals = current.terminals,
+                    initialTerminal = current.terminal,
                     serverBaseUrl = serverUrl,
                     httpClient = authedClient,
                     token = token,
-                    onBack = { screen = Screen.TerminalList(current.project) },
+                    fontSizeStore = fontSizeStore,
+                    onBack = { nav.back() },
                 )
             }
         }
     }
+}
+
+@Composable
+private fun TerminalPagerHost(
+    project: com.dancode.android.projects.Project,
+    terminals: List<com.dancode.android.terminal.TerminalSummary>,
+    initialTerminal: com.dancode.android.terminal.TerminalSummary,
+    serverBaseUrl: String,
+    httpClient: OkHttpClient,
+    token: String,
+    fontSizeStore: TerminalFontSizeStore,
+    onBack: () -> Unit,
+) {
+    val list = if (terminals.isEmpty()) listOf(initialTerminal) else terminals
+    val initialIndex = list.indexOfFirst { it.id == initialTerminal.id }.coerceAtLeast(0)
+    com.dancode.android.terminal.TerminalSwiper(
+        terminals = list,
+        initialIndex = initialIndex,
+        page = { terminal ->
+            TerminalHost(
+                terminal = terminal,
+                serverBaseUrl = serverBaseUrl,
+                httpClient = httpClient,
+                token = token,
+                fontSizeStore = fontSizeStore,
+                onBack = onBack,
+            )
+        },
+    )
+    // `project` parameter is kept on the signature so future per-project
+    // affordances (terminal-add button, etc.) don't change the call site.
+    @Suppress("UNUSED_EXPRESSION") project
 }

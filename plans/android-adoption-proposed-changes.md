@@ -40,3 +40,47 @@ worth changing in the plan or in code they didn't own.
   enum order. If we want a different visual order without changing
   the byte-sequence assertions, expose a separate `displayOrder: Int`
   field on `ControlKey` or change the iteration order in `KeyBar`.
+
+## After Phase 5 (proposed by Phase 5 generator)
+
+- `TerminalSwiper` always creates `HorizontalPager` with `pageCount =
+  terminals.size` and never re-fetches, so terminal-list changes that
+  happen *while* the user is inside a terminal (e.g. another client
+  opens a new terminal in the same project) won't appear until they
+  back out and re-enter. A polling refresh inside the swiper — or
+  better, a server-pushed "terminals changed" event — would close that
+  gap. Until then, the contract is: the terminal list snapshot is taken
+  at the moment of navigation.
+- The pager renders every TerminalHost for every page that Compose
+  composes. `HorizontalPager` by default also pre-composes neighbours,
+  so two adjacent socket connections may be open at once during a
+  swipe. For Phase 5 this is fine (the server already supports
+  concurrent attach), but on lower-end devices it could double network
+  cost. A `beyondViewportPageCount = 0` knob is available — worth
+  considering once we have real-device measurements.
+- Pinch-to-zoom and the two-finger drag both live on the terminal view
+  as separate `pointerInput` blocks. They generally play nicely, but a
+  noisy hand might enter "scroll mode" *and* a small pinch on the same
+  frame. If we see drift in practice, a single `awaitPointerEvent`
+  loop that arbitrates between scroll and zoom would be cleaner than
+  two parallel detectors.
+- `TerminalHost` falls back to a non-persistent in-memory font size
+  when `fontSizeStore` is null. The constructor in `MainActivity`
+  always passes one, but the parameter is `null`-able so test
+  composables don't need to wire it. If a later phase wants different
+  font-size policies (e.g. per-project override), an interface for the
+  store (`FontSizeStore { read/save/reset/step }`) might cleanly slot
+  in there — but YAGNI for now.
+- `MainActivity.AppNav` reads `controller.state.value` directly in a
+  few places (for the terminal-list selection) instead of via
+  `collectAsState`. That's safe in the current code path but is the
+  kind of thing that breaks when a controller switches to async loads.
+  Worth tightening if we ever see "stale list" complaints.
+- The Robolectric configuration-change test asserts `configChanges`
+  flags from the manifest, but doesn't actually fire
+  `Activity.onConfigurationChanged` through Robolectric (the activity
+  controller plumbing for that is fiddly and the value-add of the
+  assertion is small). If a future regression sneaks a `recreate()`
+  back in, this test won't catch it. A heavier integration test that
+  builds the activity, rotates via `RuntimeEnvironment.setQualifiers`,
+  and checks the same Compose tree survives would close that gap.
