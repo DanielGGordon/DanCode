@@ -167,13 +167,23 @@ private fun TerminalPagerHost(
     fontSizeStore: TerminalFontSizeStore,
     onBack: () -> Unit,
 ) {
-    // Pager wiring (slice 9). For now this is a single-terminal host.
-    TerminalHost(
-        terminal = initialTerminal,
-        serverBaseUrl = serverBaseUrl,
-        httpClient = httpClient,
-        token = token,
-        fontSizeStore = fontSizeStore,
-        onBack = onBack,
+    val list = if (terminals.isEmpty()) listOf(initialTerminal) else terminals
+    val initialIndex = list.indexOfFirst { it.id == initialTerminal.id }.coerceAtLeast(0)
+    com.dancode.android.terminal.TerminalSwiper(
+        terminals = list,
+        initialIndex = initialIndex,
+        page = { terminal ->
+            TerminalHost(
+                terminal = terminal,
+                serverBaseUrl = serverBaseUrl,
+                httpClient = httpClient,
+                token = token,
+                fontSizeStore = fontSizeStore,
+                onBack = onBack,
+            )
+        },
     )
+    // `project` parameter is kept on the signature so future per-project
+    // affordances (terminal-add button, etc.) don't change the call site.
+    @Suppress("UNUSED_EXPRESSION") project
 }
