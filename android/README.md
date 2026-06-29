@@ -32,6 +32,25 @@ Native replacement for the mobile web client.
   same gesture falls through to the local scrollback buffer. The mode
   transition is end-to-end golden-tested with a recorded DECSET 1049 /
   1006 / 1000 stream.
+- **Phase 5** — Navigation & polish. Three-level navigation
+  (`dashboard → terminal list → terminal`) with a back affordance at
+  every level (dashboard's is Sign-out). Inside a project,
+  `TerminalSwiper` wraps the terminal in a `HorizontalPager` so a
+  left/right swipe cycles between the project's sibling terminals.
+  Font size is adjustable from a header A-/A/A+ row AND a pinch gesture
+  (a `PinchZoomDetector` accumulates per-frame scale until a 1.20× /
+  0.83× threshold trips). Sizes persist per terminal id through a
+  `TerminalFontSizeStore` backed by `SharedPreferences`. Rotation +
+  soft-keyboard show/hide no longer recreate the activity — the
+  manifest declares `configChanges` for orientation, screen size,
+  screen layout, smallest screen size and keyboard, with
+  `windowSoftInputMode=adjustResize` so the embedded `TerminalView`
+  re-lays-out and emits a fresh resize. Token expiry routes back to
+  login but `AppNavController` stashes the in-progress screen as
+  *pending* and resumes there after a successful re-login; manual
+  Sign-out wipes the pending destination on purpose. Error states on
+  the dashboard and terminal list render a Retry button instead of
+  hanging, and a 401 still triggers the same `onUnauthorized` callback.
 
 ## One-time setup
 
