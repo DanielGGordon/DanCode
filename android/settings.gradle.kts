@@ -22,3 +22,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "dancode-android"
 include(":app")
+include(":terminal-emulator")
+include(":terminal-view")
