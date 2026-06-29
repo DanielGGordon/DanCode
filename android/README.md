@@ -21,6 +21,17 @@ Native replacement for the mobile web client.
   cooked-mode: the bottom Compose field sends the typed line plus `\r`.
   Resizes derived from view metrics fire on attach and on every layout
   change.
+- **Phase 4** — Claude Code on a phone. A 9-key control bar surfaces the
+  keys Claude needs that aren't on a phone soft-keyboard (Esc, four
+  arrows, Enter, Ctrl+C, Tab, Shift+Tab) with golden tests pinning each
+  byte sequence. The input mode auto-flips to raw passthrough when the
+  emulator enters alt-screen / mouse-tracking and back to cooked when it
+  exits; a header toggle cycles Auto → Cooked → Raw for manual override.
+  Two-finger vertical drags inside the alt-screen emit SGR (1006)
+  mouse-wheel bytes so Claude scrolls its own viewport; outside it the
+  same gesture falls through to the local scrollback buffer. The mode
+  transition is end-to-end golden-tested with a recorded DECSET 1049 /
+  1006 / 1000 stream.
 
 ## One-time setup
 
@@ -99,19 +110,23 @@ android/
         │       │   ├── ProjectsApi.kt       GET /api/projects (sealed ListResult)
         │       │   ├── DashboardController.kt  Loads + dispatches 401 to onUnauthorized
         │       │   └── DashboardScreen.kt   LazyColumn over project names; onSelect → terminal list
-        │       └── terminal/                Phase 3: live terminal slice
+        │       └── terminal/                Phase 3+4: live terminal slice
         │           ├── TerminalSummary.kt           id/projectSlug/label/command/cwd
         │           ├── TerminalsApi.kt              GET /api/terminals?project=<slug>
         │           ├── TerminalListController.kt    Loading lifecycle + 401 routing
         │           ├── TerminalListScreen.kt        LazyColumn over terminals; onSelect → terminal
         │           ├── TerminalInputEncoder.kt      cooked-mode: line + "\r"
+        │           ├── ControlKey.kt                Phase 4: enum + golden byte sequences (Esc/arrows/Enter/Ctrl+C/Tab/Shift+Tab)
+        │           ├── InputModePolicy.kt           Phase 4: Cooked↔Raw auto-switch + manual override
+        │           ├── MouseWheelEncoder.kt         Phase 4: SGR (1006) wheel-up/down encoder
+        │           ├── ScrollRouter.kt              Phase 4: two-finger drag → SGR bytes or LocalScroll
         │           ├── TerminalViewMetrics.kt       cols/rows from view px + cell px
         │           ├── TerminalTransport.kt         Transport + listener + sink interfaces
-        │           ├── TerminalConnection.kt        Idle→Connecting→Connected→Reconnecting; clears sink on reconnect
+        │           ├── TerminalConnection.kt        Idle→Connecting→Connected→Reconnecting; clears sink on reconnect; Phase 4: sendRaw()
         │           ├── SocketIoTransport.kt         Production transport (io.socket:socket.io-client)
         │           ├── TerminalEmulatorSink.kt      Writes/clears the Termux emulator
-        │           ├── TerminalScreen.kt            Compose: header + view slot + input + overlay
-        │           └── TerminalHost.kt              Wires transport+session+sink+connection to TerminalView
+        │           ├── TerminalScreen.kt            Compose: header + view slot + key bar + override toggle + input + overlay
+        │           └── TerminalHost.kt              Wires transport+session+sink+connection to TerminalView; polls emulator state for mode policy; pointerInput → ScrollRouter
         ├── java/com/termux/terminal/
         │   └── RemoteTerminalSession.kt    TerminalSession that never opens a JNI PTY
         └── test/java/com/dancode/android/
@@ -131,11 +146,16 @@ android/
                 ├── TerminalsApiTest.kt           MockWebServer Bearer + parse + 401
                 ├── TerminalListControllerTest.kt Loading/Loaded/Error; 401 routing
                 ├── TerminalListScreenTest.kt     Loading/Loaded/Error/Empty + onSelect
-                ├── TerminalScreenTest.kt         Overlay on Reconnecting; Send forwards line
-                ├── TerminalConnectionTest.kt     State machine + reconnect-dedup + buffered resize
+                ├── TerminalScreenTest.kt         Overlay on Reconnecting; Send forwards line; key bar; override toggle
+                ├── TerminalConnectionTest.kt     State machine + reconnect-dedup + buffered resize; sendRaw
                 ├── SocketIoTransportOptionsTest.kt  IO.Options: WS-only, auth.token, OkHttp factory
                 ├── RemoteTerminalSessionTest.kt  initializeEmulator without JNI; write forwards
-                └── TerminalEmulatorSinkTest.kt   reset clears screen before next replay
+                ├── TerminalEmulatorSinkTest.kt   reset clears screen before next replay
+                ├── ControlKeyTest.kt             Phase 4: golden byte sequence per ControlKey
+                ├── InputModePolicyTest.kt        Phase 4: auto-switch + manual override semantics
+                ├── MouseWheelEncoderTest.kt      Phase 4: SGR (1006) encoder, coord clamping
+                ├── ScrollRouterTest.kt           Phase 4: SGR vs local scroll decision
+                └── AltScreenRawModeTransitionTest.kt  Phase 4: real-emulator DECSET 1049/1006/1000 timeline → InputMode timeline
 ```
 
 ## Versions
@@ -173,6 +193,28 @@ release smoke:
 8. Restore the network — the overlay clears, the screen resets cleanly
    (no doubled prompt or duplicated `ls` output), and live output keeps
    streaming.
+
+## Manual smoke (Phase 4, not gated)
+
+Phase 4 adds the headline capability — drive a full Claude Code session
+on the phone. Run on a real device after the Phase 3 smoke passes:
+
+1. Open the Claude terminal in any project. The Send field works in
+   cooked mode until Claude redraws the screen.
+2. Type `claude` and Send. Once the alt-screen takes over, the header
+   mode badge should flip from `Auto` (resolved Cooked) to a resolved
+   Raw mode automatically — the Send field below greys out.
+3. Tap each key in the bar: `Esc`, `↑ ↓ ← →`, `Enter`, `Ctrl+C`, `Tab`,
+   `Shift+Tab` — the menu / prompt should respond as if you typed each.
+4. Two-finger drag inside Claude's view: the viewport should scroll,
+   not the local terminal scrollback.
+5. Force the override: tap the header toggle to `Cooked`. The Send
+   field re-enables even while Claude is on the alt-screen. Tap again
+   to land on `Raw`, then once more to return to `Auto`.
+6. Open a session previously started in the web client (use Resume on
+   the web first, then close the browser; in the app, attach to that
+   terminal). The shellhost-backed PTY reflows on resize — the screen
+   should render the existing session intact.
 
 ## Why `testReleaseUnitTest` is disabled
 

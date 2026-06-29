@@ -52,6 +52,17 @@ class TerminalConnection(
         transport.sendInput(TerminalInputEncoder.cookedLine(line))
     }
 
+    /**
+     * Forward [data] to the PTY verbatim. Used by the on-screen control
+     * key bar and the SGR mouse-wheel encoder — neither of which wants
+     * cooked-mode line-buffering.
+     */
+    fun sendRaw(data: String) {
+        if (_state.value != State.Connected) return
+        if (data.isEmpty()) return
+        transport.sendInput(data)
+    }
+
     fun sendResize(cols: Int, rows: Int) {
         if (_state.value == State.Connected) {
             transport.sendResize(cols, rows)
