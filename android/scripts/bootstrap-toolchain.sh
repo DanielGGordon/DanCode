@@ -29,8 +29,9 @@ JDK_SHA256="9d4dd339bf7e6a9dcba8347661603b74c61ab2a5083ae67bf76da6285da8a778"
 CMDLINE_TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
 
 # Android packages required for assembleDebug + Robolectric test runs.
-SDK_BUILD_TOOLS_VERSION="34.0.0"
-SDK_PLATFORM_VERSION="34"
+# API 35 (Android 15) is the Play Store target requirement as of 2025-08.
+SDK_BUILD_TOOLS_VERSION="35.0.0"
+SDK_PLATFORM_VERSION="35"
 
 log() { printf '[bootstrap-toolchain] %s\n' "$*" >&2; }
 

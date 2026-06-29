@@ -80,6 +80,13 @@ else
     echo "ERROR: android/.toolchain/env.sh missing — run android/scripts/bootstrap-toolchain.sh first." >&2
     exit 1
 fi
+# DanCode-Android: settings.gradle.kts lives in this script's directory, not
+# the caller's CWD.  Chdir so `android/gradlew :app:assembleDebug` works from
+# the project root (or anywhere else) without needing -p android.  The
+# upstream wrapper later derives APP_HOME from $app_path relative to CWD, so
+# pin app_path to an absolute path first.
+app_path="$_dancode_gradlew_dir/${0##*/}"
+cd "$_dancode_gradlew_dir"
 unset _dancode_gradlew_dir
 
 

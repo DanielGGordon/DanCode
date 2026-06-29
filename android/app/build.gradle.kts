@@ -5,12 +5,12 @@ plugins {
 
 android {
     namespace = "com.dancode.android"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.dancode.android"
         minSdk = 30
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "0.1.0-phase0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
