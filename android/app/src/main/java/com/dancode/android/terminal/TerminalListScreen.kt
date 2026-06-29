@@ -1,4 +1,4 @@
-package com.dancode.android.projects
+package com.dancode.android.terminal
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,44 +19,35 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 
-object DashboardScreenTags {
-    const val PROJECT_LIST = "dashboard-project-list"
-    const val LOADING = "dashboard-loading"
-    const val EMPTY = "dashboard-empty"
-    const val PROJECT_ITEM_PREFIX = "dashboard-project-item:"
-}
-
-sealed class DashboardState {
-    data object Loading : DashboardState()
-    data class Loaded(val projects: List<Project>) : DashboardState()
-    data class Error(val message: String) : DashboardState()
+object TerminalListScreenTags {
+    const val LIST = "terminal-list"
+    const val LOADING = "terminal-list-loading"
+    const val EMPTY = "terminal-list-empty"
+    const val ITEM_PREFIX = "terminal-list-item:"
 }
 
 @Composable
-fun DashboardScreen(
-    state: DashboardState,
-    onSelect: (Project) -> Unit = {},
+fun TerminalListScreen(
+    state: TerminalListState,
+    onSelect: (TerminalSummary) -> Unit,
 ) {
     Surface(modifier = Modifier.fillMaxSize()) {
         when (state) {
-            DashboardState.Loading -> LoadingPane()
-            is DashboardState.Loaded -> if (state.projects.isEmpty()) {
+            TerminalListState.Loading -> LoadingPane()
+            is TerminalListState.Loaded -> if (state.terminals.isEmpty()) {
                 EmptyPane()
             } else {
-                ProjectList(state.projects, onSelect)
+                TerminalRows(state.terminals, onSelect)
             }
-            is DashboardState.Error -> ErrorPane(state.message)
+            is TerminalListState.Error -> ErrorPane(state.message)
         }
     }
 }
 
 @Composable
 private fun LoadingPane() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center,
-    ) {
-        CircularProgressIndicator(modifier = Modifier.testTag(DashboardScreenTags.LOADING))
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator(modifier = Modifier.testTag(TerminalListScreenTags.LOADING))
     }
 }
 
@@ -66,42 +57,46 @@ private fun EmptyPane() {
         modifier = Modifier
             .fillMaxSize()
             .padding(24.dp)
-            .testTag(DashboardScreenTags.EMPTY),
+            .testTag(TerminalListScreenTags.EMPTY),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(text = "No projects yet")
+        Text(text = "No terminals in this project yet")
     }
 }
 
 @Composable
-private fun ProjectList(projects: List<Project>, onSelect: (Project) -> Unit) {
+private fun TerminalRows(
+    terminals: List<TerminalSummary>,
+    onSelect: (TerminalSummary) -> Unit,
+) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
-            .testTag(DashboardScreenTags.PROJECT_LIST),
+            .testTag(TerminalListScreenTags.LIST),
     ) {
-        items(items = projects, key = { it.slug }) { project ->
-            ProjectRow(project, onSelect)
+        items(items = terminals, key = { it.id }) { terminal ->
+            TerminalRow(terminal, onSelect)
             HorizontalDivider()
         }
     }
 }
 
 @Composable
-private fun ProjectRow(project: Project, onSelect: (Project) -> Unit) {
+private fun TerminalRow(
+    terminal: TerminalSummary,
+    onSelect: (TerminalSummary) -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag(DashboardScreenTags.PROJECT_ITEM_PREFIX + project.slug)
-            .clickable { onSelect(project) }
+            .testTag(TerminalListScreenTags.ITEM_PREFIX + terminal.id)
+            .clickable { onSelect(terminal) }
             .padding(vertical = 12.dp),
     ) {
-        Text(text = project.name)
-        if (project.path.isNotBlank()) {
-            Text(text = project.path)
-        }
+        Text(text = terminal.label)
+        terminal.command?.takeIf { it.isNotBlank() }?.let { Text(text = it) }
     }
 }
 
