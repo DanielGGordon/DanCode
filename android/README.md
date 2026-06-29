@@ -11,8 +11,8 @@ bash android/scripts/bootstrap-toolchain.sh
 ```
 
 The script installs a project-local **JDK 17** (Temurin 17.0.12+7) and the
-**Android SDK** (cmdline-tools, platform-tools, platforms;android-34,
-build-tools;34.0.0) under `android/.toolchain/`. Nothing outside that
+**Android SDK** (cmdline-tools, platform-tools, platforms;android-35,
+build-tools;35.0.0) under `android/.toolchain/`. Nothing outside that
 directory is touched — the system `java` install (1.8 on the Hetzner box)
 keeps reporting 1.8 after the script finishes. SDK licenses are accepted
 non-interactively. The script is idempotent: re-running it just verifies
@@ -21,13 +21,14 @@ what's already on disk.
 ## Build + test
 
 ```bash
-./android/gradlew -p android :app:assembleDebug   # debug-signed APK
-./android/gradlew -p android test                 # headless unit tests
+android/gradlew :app:assembleDebug   # debug-signed APK
+android/gradlew test                 # headless unit tests
 ```
 
 `android/gradlew` is the standard Gradle wrapper with a tiny header that
-sources `.toolchain/env.sh`, so every invocation gets JDK 17 + the
-project-local Android SDK without changing the caller's environment.
+sources `.toolchain/env.sh` and chdirs into `android/`, so every invocation
+gets JDK 17 + the project-local Android SDK without changing the caller's
+environment and works from any working directory (no `-p android` needed).
 
 Outputs:
 
@@ -66,13 +67,13 @@ android/
 |-------------------|------------------------------------|
 | JDK               | Temurin 17.0.12+7                  |
 | Gradle            | 8.9                                |
-| Android Gradle Plugin | 8.5.2                          |
+| Android Gradle Plugin | 8.7.3                          |
 | Kotlin            | 1.9.24                             |
 | Compose Compiler  | 1.5.14                             |
 | Compose BOM       | 2024.09.00                         |
-| Android SDK       | platforms;android-34, build-tools;34.0.0 |
+| Android SDK       | platforms;android-35, build-tools;35.0.0 |
 | `minSdk`          | 30                                 |
-| `targetSdk`       | 34                                 |
+| `targetSdk`       | 35                                 |
 | `applicationId`   | `com.dancode.android`              |
 
 ## Why `testReleaseUnitTest` is disabled
