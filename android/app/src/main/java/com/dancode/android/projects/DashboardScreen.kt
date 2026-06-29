@@ -4,15 +4,18 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,6 +26,8 @@ object DashboardScreenTags {
     const val PROJECT_LIST = "dashboard-project-list"
     const val LOADING = "dashboard-loading"
     const val EMPTY = "dashboard-empty"
+    const val SIGN_OUT = "dashboard-sign-out"
+    const val RETRY = "dashboard-retry"
     const val PROJECT_ITEM_PREFIX = "dashboard-project-item:"
 }
 
@@ -36,17 +41,43 @@ sealed class DashboardState {
 fun DashboardScreen(
     state: DashboardState,
     onSelect: (Project) -> Unit = {},
+    onSignOut: () -> Unit = {},
+    onRetry: () -> Unit = {},
 ) {
     Surface(modifier = Modifier.fillMaxSize()) {
-        when (state) {
-            DashboardState.Loading -> LoadingPane()
-            is DashboardState.Loaded -> if (state.projects.isEmpty()) {
-                EmptyPane()
-            } else {
-                ProjectList(state.projects, onSelect)
+        Column(modifier = Modifier.fillMaxSize()) {
+            HeaderRow(onSignOut = onSignOut)
+            when (state) {
+                DashboardState.Loading -> LoadingPane()
+                is DashboardState.Loaded -> if (state.projects.isEmpty()) {
+                    EmptyPane()
+                } else {
+                    ProjectList(state.projects, onSelect)
+                }
+                is DashboardState.Error -> ErrorPane(state.message, onRetry)
             }
-            is DashboardState.Error -> ErrorPane(state.message)
         }
+    }
+}
+
+@Composable
+private fun HeaderRow(onSignOut: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Projects",
+            modifier = Modifier
+                .padding(start = 8.dp)
+                .weight(1f),
+        )
+        TextButton(
+            onClick = onSignOut,
+            modifier = Modifier.testTag(DashboardScreenTags.SIGN_OUT),
+        ) { Text("Sign out") }
     }
 }
 
@@ -106,7 +137,7 @@ private fun ProjectRow(project: Project, onSelect: (Project) -> Unit) {
 }
 
 @Composable
-private fun ErrorPane(message: String) {
+private fun ErrorPane(message: String, onRetry: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -115,5 +146,11 @@ private fun ErrorPane(message: String) {
         verticalArrangement = Arrangement.Center,
     ) {
         Text(text = message)
+        Button(
+            onClick = onRetry,
+            modifier = Modifier
+                .padding(top = 16.dp)
+                .testTag(DashboardScreenTags.RETRY),
+        ) { Text("Retry") }
     }
 }
