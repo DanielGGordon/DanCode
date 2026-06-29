@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -58,6 +59,22 @@ fun TerminalHost(
     var manualOverride by remember { mutableStateOf<InputMode?>(null) }
     var fontSizeSp by remember(terminal.id, fontSizeStore) {
         mutableStateOf(fontSizeStore?.read(terminal.id) ?: TerminalFontSizeStore.DEFAULT)
+    }
+    val pinchDetector = remember { PinchZoomDetector() }
+
+    fun applyFontAction(action: FontSizeAction) {
+        fontSizeSp = when (action) {
+            FontSizeAction.Increase -> fontSizeStore?.step(terminal.id, +1)
+                ?: (fontSizeSp + TerminalFontSizeStore.STEP)
+                    .coerceAtMost(TerminalFontSizeStore.MAX)
+            FontSizeAction.Decrease -> fontSizeStore?.step(terminal.id, -1)
+                ?: (fontSizeSp - TerminalFontSizeStore.STEP)
+                    .coerceAtLeast(TerminalFontSizeStore.MIN)
+            FontSizeAction.Reset -> {
+                fontSizeStore?.reset(terminal.id)
+                TerminalFontSizeStore.DEFAULT
+            }
+        }
     }
 
     val plumbing = remember(terminal.id, serverBaseUrl, token) {
@@ -122,24 +139,21 @@ fun TerminalHost(
         manualOverride = manualOverride,
         onKey = { key -> plumbing.connection.sendRaw(key.bytes) },
         onSetManualOverride = { manualOverride = it },
-        onFontSizeAction = { action ->
-            fontSizeSp = when (action) {
-                FontSizeAction.Increase -> fontSizeStore?.step(terminal.id, +1)
-                    ?: (fontSizeSp + TerminalFontSizeStore.STEP)
-                        .coerceAtMost(TerminalFontSizeStore.MAX)
-                FontSizeAction.Decrease -> fontSizeStore?.step(terminal.id, -1)
-                    ?: (fontSizeSp - TerminalFontSizeStore.STEP)
-                        .coerceAtLeast(TerminalFontSizeStore.MIN)
-                FontSizeAction.Reset -> {
-                    fontSizeStore?.reset(terminal.id)
-                    TerminalFontSizeStore.DEFAULT
-                }
-            }
-        },
+        onFontSizeAction = { applyFontAction(it) },
         terminalContent = {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .pointerInput(Unit) {
+                        // Pinch-to-zoom: convert pinch transform events into
+                        // font-size actions. Pan / rotate are ignored — they
+                        // belong to the two-finger drag handler below.
+                        detectTransformGestures { _, _, zoom, _ ->
+                            if (zoom != 1f) {
+                                pinchDetector.onScale(zoom)?.let { applyFontAction(it) }
+                            }
+                        }
+                    }
                     .pointerInput(plumbing, emuModeState) {
                         // Two-finger vertical drag routing. Runs at Initial
                         // pass so the gesture can be inspected before the
