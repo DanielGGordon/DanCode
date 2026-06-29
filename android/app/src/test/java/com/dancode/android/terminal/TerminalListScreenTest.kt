@@ -81,4 +81,32 @@ class TerminalListScreenTest {
 
         assertEquals(terminals[1], selected)
     }
+
+    @Test
+    fun back_button_invokes_on_back() {
+        var backCount = 0
+        composeRule.setContent {
+            TerminalListScreen(
+                state = TerminalListState.Loaded(emptyList()),
+                onSelect = {},
+                onBack = { backCount++ },
+            )
+        }
+        composeRule.onNodeWithTag(TerminalListScreenTags.BACK).assertIsDisplayed().performClick()
+        assertEquals(1, backCount)
+    }
+
+    @Test
+    fun error_pane_renders_retry_and_invokes_callback() {
+        var retries = 0
+        composeRule.setContent {
+            TerminalListScreen(
+                state = TerminalListState.Error("Network error"),
+                onSelect = {},
+                onRetry = { retries++ },
+            )
+        }
+        composeRule.onNodeWithTag(TerminalListScreenTags.RETRY).assertIsDisplayed().performClick()
+        assertEquals(1, retries)
+    }
 }
