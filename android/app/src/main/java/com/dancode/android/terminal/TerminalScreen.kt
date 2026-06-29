@@ -37,10 +37,16 @@ object TerminalScreenTags {
     const val RECONNECTING_OVERLAY = "terminal-screen-reconnecting"
     const val KEY_BAR = "terminal-screen-key-bar"
     const val OVERRIDE_TOGGLE = "terminal-screen-override-toggle"
+    const val FONT_INC = "terminal-screen-font-inc"
+    const val FONT_DEC = "terminal-screen-font-dec"
+    const val FONT_RESET = "terminal-screen-font-reset"
 
     /** Stable test tag for each control-key button. */
     fun keyTag(key: ControlKey): String = "terminal-screen-key-${key.name}"
 }
+
+/** Font-size adjustments emitted by the on-screen font controls or pinch gesture. */
+enum class FontSizeAction { Increase, Decrease, Reset }
 
 /**
  * Full-screen terminal view: header with back, embedded [terminalContent]
@@ -73,6 +79,7 @@ fun TerminalScreen(
     manualOverride: InputMode? = null,
     onKey: (ControlKey) -> Unit = {},
     onSetManualOverride: (InputMode?) -> Unit = {},
+    onFontSizeAction: (FontSizeAction) -> Unit = {},
 ) {
     val connected = state == TerminalConnection.State.Connected
     Surface(modifier = Modifier.fillMaxSize().testTag(TerminalScreenTags.ROOT)) {
@@ -82,6 +89,7 @@ fun TerminalScreen(
                 onBack = onBack,
                 manualOverride = manualOverride,
                 onSetManualOverride = onSetManualOverride,
+                onFontSizeAction = onFontSizeAction,
             )
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 terminalContent()
@@ -104,20 +112,49 @@ private fun HeaderBar(
     onBack: () -> Unit,
     manualOverride: InputMode?,
     onSetManualOverride: (InputMode?) -> Unit,
+    onFontSizeAction: (FontSizeAction) -> Unit,
 ) {
+    // The header sits inside a horizontal scroll so the font + override
+    // controls remain reachable on narrow viewports (e.g. portrait phones)
+    // without truncating the terminal label.
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
             .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         TextButton(
             onClick = onBack,
             modifier = Modifier.testTag(TerminalScreenTags.BACK),
         ) { Text("Back") }
-        Text(text = label, modifier = Modifier.padding(start = 8.dp).weight(1f))
+        Text(text = label, modifier = Modifier.padding(horizontal = 8.dp))
+        FontSizeControls(onFontSizeAction = onFontSizeAction)
         OverrideToggle(manualOverride = manualOverride, onSetManualOverride = onSetManualOverride)
     }
+}
+
+@Composable
+private fun FontSizeControls(onFontSizeAction: (FontSizeAction) -> Unit) {
+    OutlinedButton(
+        onClick = { onFontSizeAction(FontSizeAction.Decrease) },
+        modifier = Modifier
+            .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
+            .testTag(TerminalScreenTags.FONT_DEC),
+    ) { Text("A-") }
+    OutlinedButton(
+        onClick = { onFontSizeAction(FontSizeAction.Reset) },
+        modifier = Modifier
+            .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
+            .testTag(TerminalScreenTags.FONT_RESET),
+    ) { Text("A") }
+    OutlinedButton(
+        onClick = { onFontSizeAction(FontSizeAction.Increase) },
+        modifier = Modifier
+            .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
+            .testTag(TerminalScreenTags.FONT_INC),
+    ) { Text("A+") }
 }
 
 @Composable
