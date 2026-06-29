@@ -19,6 +19,10 @@ Built for Raspberry Pi 5, accessed via Tailscale.
 
 See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the full file tree.
 
+The `android/` tree is the in-progress native Android client that will
+replace the mobile web path. See [android/README.md](android/README.md)
+for the toolchain bootstrap and build commands.
+
 ## Prerequisites
 
 - **Node.js** `^20.19.0 || >=22.12.0` (required by Vite 8; use `nvm install` to pick up the `.nvmrc`)
