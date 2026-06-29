@@ -100,3 +100,76 @@
   regenerator will see this test fail. Don't delete it — it's how we
   catch the silent class of bug where the code says "this is the
   recording" but the on-disk bytes have drifted.
+
+## After Phase 2 (proposed by Phase 2 generator)
+
+- **`isReturnDefaultValues = true` is a foot-gun for `org.json.*` in
+  tests.** Phase 0's `testOptions` block left `isReturnDefaultValues = true`
+  on. That swaps the "Method ... not mocked" exception for silent
+  nulls, which broke `AuthApi` only at the boundary `JSONObject.toString()`
+  call — the test gave us a `NullPointerException` 5 frames deep instead
+  of an obvious "you forgot Robolectric". Fix in this phase: every test
+  that touches `org.json.*` or `EncryptedSharedPreferences` uses
+  `@RunWith(RobolectricTestRunner::class) @Config(sdk = [33])`. Future
+  phases that introduce networking/serialization should default to
+  Robolectric for the same reason; alternatively, consider dropping the
+  `isReturnDefaultValues` flag for the project — making the failure mode
+  the louder "Method not mocked" exception would be a real win.
+
+- **Pin sync is two-step and easy to forget.** `reverse-proxy/scripts/sync-pin.sh`
+  must run *after* every cert regeneration; otherwise the app pins a
+  stale SPKI hash and the next install silently fails to reach the
+  server. Consider a `make` target (or a pre-commit hook) that calls
+  `generate-cert.sh` and `sync-pin.sh` in sequence, plus a CI check that
+  verifies `openssl x509 -in reverse-proxy/certs/server.crt -pubkey
+  -noout | openssl dgst -sha256 -binary | base64` matches the literal
+  pin in `network_security_config.xml`. That guards against the case
+  where the cert is regenerated but the sync step is skipped.
+
+- **HTTPS endpoint port is `:8443` — pin this everywhere.** Phase 3's
+  socket.io setup must reuse the same `LoginController.DEFAULT_SERVER_URL`
+  (or a shared `AppConfig` object) so the WebSocket handshake also goes
+  through the pinned terminator. Right now there is no shared constant;
+  if Phase 3 hardcodes `wss://5.78.231.51:???` it's easy to drift. Worth
+  extracting `DEFAULT_SERVER_URL` into a `com.dancode.android.config`
+  package on first use.
+
+- **Cert is committed but the key is not — pin reproducibility vs.
+  rotation.** `reverse-proxy/certs/server.crt` is committed so anyone
+  who checks the repo out can run the test suite against the canonical
+  SPKI hash. `server.key` is `.gitignore`d so a leak doesn't trivially
+  let a MITM spoof the pinned channel. When you eventually rotate the
+  cert in production, you must commit the *new* `server.crt`, re-run
+  `sync-pin.sh`, **and** re-publish a new APK — the old APK will refuse
+  to connect to the new cert. Document this in `deploy.md` when Phase 5
+  or so adds an actual deploy doc.
+
+- **`EncryptedSharedPreferences` fallback path is a soft failure.**
+  `TokenStorage.create()` silently falls back to plain `SharedPreferences`
+  if the master-key build throws. The fallback is what makes the
+  Robolectric test green (the keystore shadow is finicky), but on a real
+  device a fallback would mean the token is stored *unencrypted*. Phase
+  3+ should add a logged warning (or a `Log.wtf`) when the fallback path
+  triggers in production builds; the gated test suite doesn't catch
+  this since it deliberately exercises the fallback.
+
+- **No `:8443` integration test against a real backend.** The gated
+  test path uses MockWebServer over plain HTTP because spinning up a
+  TLS-pinned MockWebServer with a matching SPKI is brittle. The
+  consequence: the pinning code is exercised manually via on-device
+  smoke only. If Phase 4+ has spare cycles, an instrumented (emulator)
+  test that points at a MockWebServer with a self-signed cert and
+  asserts the pin rejects a *different* cert would close that gap.
+
+- **`AppNav` in `MainActivity.kt` is hand-rolled state, not Navigation-Compose.**
+  Adding `androidx.navigation:navigation-compose` would let phase 3 add
+  a project-list → terminal-list → terminal-view three-level nav with
+  proper back-stack semantics, deep links, and rotation survival. The
+  current `var screen: Screen by remember` pattern works for two screens
+  but won't scale.
+
+- **Server URL has no validation.** `LoginController.submit()` rejects
+  blanks but happily lets you type `not-a-url` and propagates the
+  resulting `MalformedURLException` as a "Network error" toast. A
+  trivial regex check (or `HttpUrl.parse(...)` from OkHttp) would give
+  a friendlier message.
