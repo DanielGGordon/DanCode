@@ -27,7 +27,9 @@ https://5.78.231.51:8443 {
     encode gzip
 
     # Static APK download — `curl -O https://5.78.231.51:8443/downloads/dancode-android-debug.apk`
-    handle /downloads/* {
+    # handle_path strips the /downloads prefix so files live directly under
+    # /var/lib/dancode-apk/ (matching scripts/publish-apk.sh's DST_DIR).
+    handle_path /downloads/* {
         root * /var/lib/dancode-apk
         file_server {
             browse
