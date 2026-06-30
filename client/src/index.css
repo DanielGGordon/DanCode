@@ -19,6 +19,24 @@
   --color-green: #859900;
 }
 
+/* Solarized Light: same semantic token names, tones mirrored.
+   base03<->base3, base02<->base2, base01<->base1, base00<->base0.
+   The accent palette (yellow..green) is shared by both variants, so it
+   is intentionally not overridden here. Every `bg-base03`/`text-base0`
+   utility resolves these vars at the element, so flipping them on the
+   <html> element re-themes all app chrome with no class changes. */
+html[data-theme='light'] {
+  --color-base03: #fdf6e3;
+  --color-base02: #eee8d5;
+  --color-base01: #93a1a1;
+  --color-base00: #839496;
+  --color-base0: #657b83;
+  --color-base1: #586e75;
+  --color-base2: #073642;
+  --color-base3: #002b36;
+  color-scheme: light;
+}
+
 html,
 body {
   margin: 0;

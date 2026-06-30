@@ -22,6 +22,7 @@ function LoadingFallback() {
 }
 
 const TOKEN_KEY = 'dancode-auth-token'
+const THEME_KEY = 'dancode-theme'
 const SIDEBAR_KEY = 'dancode-sidebar-collapsed'
 const FILE_EXPLORER_KEY = 'dancode-file-explorer-collapsed'
 const FILE_EXPLORER_WIDTH_KEY = 'dancode-file-explorer-width'
@@ -59,6 +60,7 @@ function App() {
     const saved = localStorage.getItem(FILE_EXPLORER_WIDTH_KEY)
     return saved ? Number(saved) : 224
   })
+  const [theme, setTheme] = useState(() => localStorage.getItem(THEME_KEY) || 'dark')
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef(null)
   const fileExplorerRef = useRef(null)
@@ -187,6 +189,27 @@ function App() {
     const interval = setInterval(fetchAllTerminalActivity, ms)
     return () => clearInterval(interval)
   }, [fetchAllTerminalActivity, isMobile, token])
+
+  // Apply the Solarized variant to the <html> element. Desktop only: the
+  // theme toggle lives in the desktop top bar, so on mobile we always clear
+  // the attribute and fall back to the default (dark) palette, leaving mobile
+  // rendering unchanged regardless of any persisted desktop choice.
+  useEffect(() => {
+    const root = document.documentElement
+    if (isMobile) {
+      root.removeAttribute('data-theme')
+    } else {
+      root.setAttribute('data-theme', theme)
+    }
+  }, [theme, isMobile])
+
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => {
+      const next = prev === 'dark' ? 'light' : 'dark'
+      localStorage.setItem(THEME_KEY, next)
+      return next
+    })
+  }, [])
 
   // Persist file explorer width
   useEffect(() => {
@@ -609,11 +632,32 @@ function App() {
           + New Project
         </button>
         <button
+          onClick={toggleTheme}
+          data-testid="theme-toggle"
+          data-theme-value={theme}
+          title={theme === 'dark' ? 'Switch to Solarized Light' : 'Switch to Solarized Dark'}
+          aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+          className="ml-auto w-6 h-6 flex items-center justify-center rounded border border-base01/40 text-base01 hover:text-base1 hover:border-base01 transition-colors"
+        >
+          {theme === 'dark' ? (
+            // Sun icon: clicking switches to the light variant
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+            </svg>
+          ) : (
+            // Moon icon: clicking switches back to the dark variant
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          )}
+        </button>
+        <button
           onClick={() => setHelpOpen(true)}
           data-testid="help-button"
           title="Keyboard shortcuts (?)"
           aria-label="Keyboard shortcuts"
-          className="ml-auto w-6 h-6 flex items-center justify-center rounded border border-base01/40 text-xs text-base01 hover:text-base1 hover:border-base01 transition-colors"
+          className="ml-3 w-6 h-6 flex items-center justify-center rounded border border-base01/40 text-xs text-base01 hover:text-base1 hover:border-base01 transition-colors"
         >
           ?
         </button>

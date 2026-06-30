@@ -114,6 +114,64 @@ export function getSelectionText(term) {
     .join('\n')
 }
 
+// Solarized xterm palettes. The accent ANSI colors are shared; only the
+// base tones mirror between variants (base03<->base3, base02<->base2,
+// base01<->base1, base00<->base0), matching the CSS-variable swap that
+// re-themes the app chrome. The active variant follows the <html>
+// data-theme attribute set by App.jsx.
+const XTERM_THEME_DARK = {
+  background: '#002b36',
+  foreground: '#839496',
+  cursor: '#93a1a1',
+  selectionBackground: '#264f78',
+  black: '#073642',
+  red: '#dc322f',
+  green: '#859900',
+  yellow: '#b58900',
+  blue: '#268bd2',
+  magenta: '#d33682',
+  cyan: '#2aa198',
+  white: '#eee8d5',
+  brightBlack: '#586e75',
+  brightRed: '#cb4b16',
+  brightGreen: '#586e75',
+  brightYellow: '#657b83',
+  brightBlue: '#839496',
+  brightMagenta: '#6c71c4',
+  brightCyan: '#93a1a1',
+  brightWhite: '#fdf6e3',
+}
+
+const XTERM_THEME_LIGHT = {
+  background: '#fdf6e3',
+  foreground: '#657b83',
+  cursor: '#586e75',
+  selectionBackground: '#eee8d5',
+  black: '#eee8d5',
+  red: '#dc322f',
+  green: '#859900',
+  yellow: '#b58900',
+  blue: '#268bd2',
+  magenta: '#d33682',
+  cyan: '#2aa198',
+  white: '#073642',
+  brightBlack: '#93a1a1',
+  brightRed: '#cb4b16',
+  brightGreen: '#93a1a1',
+  brightYellow: '#839496',
+  brightBlue: '#657b83',
+  brightMagenta: '#6c71c4',
+  brightCyan: '#586e75',
+  brightWhite: '#002b36',
+}
+
+function currentXtermTheme() {
+  const t = typeof document !== 'undefined'
+    ? document.documentElement.getAttribute('data-theme')
+    : null
+  return t === 'light' ? XTERM_THEME_LIGHT : XTERM_THEME_DARK
+}
+
 const Terminal = forwardRef(function Terminal({
   token,
   terminalId,
@@ -232,33 +290,26 @@ const Terminal = forwardRef(function Terminal({
       // Generous scrollback so the disk-backed replay (~50KB; up to ~25k
       // lines of short output like `yes`) is fully retained client-side.
       scrollback: 100_000,
-      theme: {
-        background: '#002b36',
-        foreground: '#839496',
-        cursor: '#93a1a1',
-        selectionBackground: '#264f78',
-        black: '#073642',
-        red: '#dc322f',
-        green: '#859900',
-        yellow: '#b58900',
-        blue: '#268bd2',
-        magenta: '#d33682',
-        cyan: '#2aa198',
-        white: '#eee8d5',
-        brightBlack: '#586e75',
-        brightRed: '#cb4b16',
-        brightGreen: '#586e75',
-        brightYellow: '#657b83',
-        brightBlue: '#839496',
-        brightMagenta: '#6c71c4',
-        brightCyan: '#93a1a1',
-        brightWhite: '#fdf6e3',
-      },
+      theme: currentXtermTheme(),
     })
 
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     term.open(container)
+
+    // Live-switch the xterm palette when the app theme toggles. We observe
+    // the <html> data-theme attribute rather than threading a prop down
+    // through TerminalLayout, keeping the wiring self-contained here.
+    let themeObserver = null
+    if (typeof MutationObserver !== 'undefined') {
+      themeObserver = new MutationObserver(() => {
+        if (termRef.current) termRef.current.options.theme = currentXtermTheme()
+      })
+      themeObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['data-theme'],
+      })
+    }
 
     termRef.current = term
     fitAddonRef.current = fitAddon
@@ -429,6 +480,7 @@ const Terminal = forwardRef(function Terminal({
       clearTimeout(connectTimer)
       clearReconnectTimer()
       resizeObserver?.disconnect()
+      themeObserver?.disconnect()
       document.removeEventListener('mousedown', handleDocMouseDown, true)
       document.removeEventListener('mouseup', handleDocMouseUp, true)
       if (selectionDisposable && typeof selectionDisposable.dispose === 'function') {

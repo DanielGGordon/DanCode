@@ -589,3 +589,82 @@ describe('App', () => {
     fetchSpy.mockRestore()
   })
 })
+
+describe('Theme toggle (Solarized Dark/Light)', () => {
+  afterEach(() => {
+    // Reset the attribute the App effect writes onto <html> so tests don't leak.
+    document.documentElement.removeAttribute('data-theme')
+  })
+
+  function mockMobile() {
+    window.matchMedia = vi.fn().mockImplementation((query) => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }))
+  }
+
+  it('renders the toggle in the desktop top bar and defaults to dark', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
+    const { getByTestId } = render(<App />)
+    await waitFor(() => {
+      expect(getByTestId('theme-toggle')).toBeDefined()
+    })
+    expect(getByTestId('theme-toggle').dataset.themeValue).toBe('dark')
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
+  })
+
+  it('flips theme state and persists to localStorage on click', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    mockFetch(200, { valid: true })
+    const { getByTestId } = render(<App />)
+    await waitFor(() => {
+      expect(getByTestId('theme-toggle')).toBeDefined()
+    })
+
+    fireEvent.click(getByTestId('theme-toggle'))
+    expect(getByTestId('theme-toggle').dataset.themeValue).toBe('light')
+    expect(localStorageMock.setItem).toHaveBeenCalledWith('dancode-theme', 'light')
+    await waitFor(() => {
+      expect(document.documentElement.getAttribute('data-theme')).toBe('light')
+    })
+
+    fireEvent.click(getByTestId('theme-toggle'))
+    expect(getByTestId('theme-toggle').dataset.themeValue).toBe('dark')
+    expect(localStorageMock.setItem).toHaveBeenCalledWith('dancode-theme', 'dark')
+    await waitFor(() => {
+      expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
+    })
+  })
+
+  it('applies the persisted theme on initial load', async () => {
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    localStorageMock.setItem('dancode-theme', 'light')
+    mockFetch(200, { valid: true })
+    const { getByTestId } = render(<App />)
+    await waitFor(() => {
+      expect(getByTestId('theme-toggle').dataset.themeValue).toBe('light')
+    })
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light')
+  })
+
+  it('does not render the toggle on mobile and leaves chrome unthemed', async () => {
+    mockMobile()
+    localStorageMock.setItem('dancode-auth-token', 'test-token')
+    // Even with a persisted light choice, mobile must stay on the default palette.
+    localStorageMock.setItem('dancode-theme', 'light')
+    mockFetch(200, { valid: true })
+    const { getByTestId, queryByTestId } = render(<App />)
+    await waitFor(() => {
+      expect(getByTestId('mobile-dashboard')).toBeDefined()
+    })
+    expect(queryByTestId('theme-toggle')).toBeNull()
+    expect(document.documentElement.getAttribute('data-theme')).toBeNull()
+  })
+})

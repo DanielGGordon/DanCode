@@ -11,6 +11,17 @@
     <link rel="icon" type="image/svg+xml" href="/icon-192.svg" />
     <link rel="apple-touch-icon" href="/icon-192.svg" />
     <title>DanCode</title>
+    <script>
+      // Apply the persisted Solarized variant before first paint to avoid a
+      // flash. Desktop only (>=1024px): the theme toggle is desktop-only, so
+      // mobile always keeps the default dark palette. Mirrors App.jsx logic.
+      try {
+        if (window.innerWidth >= 1024) {
+          var t = localStorage.getItem('dancode-theme') || 'dark';
+          if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
