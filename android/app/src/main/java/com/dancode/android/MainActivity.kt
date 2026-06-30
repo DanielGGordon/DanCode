@@ -3,13 +3,16 @@ package com.dancode.android
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import androidx.compose.runtime.setValue
 import com.dancode.android.auth.AuthApi
 import com.dancode.android.auth.LoginController
@@ -40,15 +43,20 @@ class MainActivity : ComponentActivity() {
         val fontSizeStore = TerminalFontSizeStore.create(this)
 
         setContent {
-            MaterialTheme {
-                AppNav(
-                    tokenStorage = tokenStorage,
-                    authApi = authApi,
-                    projectsApi = projectsApi,
-                    terminalsApi = terminalsApi,
-                    authedClient = authedClient,
-                    fontSizeStore = fontSizeStore,
-                )
+            DanCodeTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background,
+                ) {
+                    AppNav(
+                        tokenStorage = tokenStorage,
+                        authApi = authApi,
+                        projectsApi = projectsApi,
+                        terminalsApi = terminalsApi,
+                        authedClient = authedClient,
+                        fontSizeStore = fontSizeStore,
+                    )
+                }
             }
         }
     }

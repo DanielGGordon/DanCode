@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.DanCode" parent="android:Theme.Material.NoActionBar" />
+    <!-- Solarized Dark window chrome: dark window background (no white launch
+         flash) + base02 status bar. The Compose UI uses a Solarized Dark
+         Material3 colorScheme (see SolarizedTheme.kt). -->
+    <style name="Theme.DanCode" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/solarized_base03</item>
+        <item name="android:colorBackground">@color/solarized_base03</item>
+        <item name="android:statusBarColor">@color/solarized_base02</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
 </resources>

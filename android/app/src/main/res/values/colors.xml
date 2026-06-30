@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Solarized base03 — the window background, used before Compose draws
+         so there is no white flash on launch. -->
+    <color name="solarized_base03">#002B36</color>
+    <color name="solarized_base02">#073642</color>
+</resources>
