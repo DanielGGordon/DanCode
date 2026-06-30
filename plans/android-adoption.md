@@ -113,6 +113,7 @@ The Hetzner box is both build host and backend, so "deploy" = publish a new APK 
 ---
 
 ## Phase 3: One live terminal end-to-end
+<!-- PHASE 3 COMPLETE -->
 
 **Worktree**: `git worktree add .claude/worktrees/android-phase-3 -b android/phase-3 android/integration`. Work there; merge to `android/integration` on green; `git worktree remove`. Depends on Phases 1 and 2 (needs the vendored terminal core *and* an authenticated connection), so it starts after both merge.
 
@@ -129,6 +130,7 @@ The Hetzner box is both build host and backend, so "deploy" = publish a new APK 
 ---
 
 ## Phase 4: Claude Code works (key bar, raw mode, TUI scroll)
+<!-- PHASE 4 COMPLETE -->
 
 **Worktree**: `git worktree add .claude/worktrees/android-phase-4 -b android/phase-4 android/integration`. Work there; merge to `android/integration` on green; `git worktree remove`. Depends on Phase 3.
 
@@ -144,6 +146,7 @@ The Hetzner box is both build host and backend, so "deploy" = publish a new APK 
 ---
 
 ## Phase 5: Navigation & polish
+<!-- PHASE 5 COMPLETE -->
 
 **Worktree**: `git worktree add .claude/worktrees/android-phase-5 -b android/phase-5 android/integration`. Work there; merge to `android/integration` on green; `git worktree remove`. Depends on Phase 4.
 
