@@ -77,6 +77,14 @@ fun TerminalHost(
         }
     }
 
+    // Holds the live TerminalView so the output sink can invalidate it.
+    // Appending bytes to the emulator updates its buffer but does NOT
+    // repaint the view — Termux relies on the session client calling
+    // onScreenUpdated(), which our remote path bypasses. Without this the
+    // terminal stays blank until some unrelated event (resize, tap) forces
+    // a redraw.
+    val viewHolder = remember { TerminalViewHolder() }
+
     val plumbing = remember(terminal.id, serverBaseUrl, token) {
         val transport = SocketIoTransport(baseUrl = serverBaseUrl, httpClient = httpClient)
         val session = RemoteTerminalSession(
@@ -87,7 +95,11 @@ fun TerminalHost(
                 transport.sendInput(slice)
             },
         )
-        val sink = MainThreadSink(TerminalEmulatorSink(session), mainHandler)
+        val sink = MainThreadSink(
+            delegate = TerminalEmulatorSink(session),
+            handler = mainHandler,
+            afterWrite = { viewHolder.view?.onScreenUpdated() },
+        )
         val connection = TerminalConnection(
             transport = transport,
             sink = sink,
@@ -210,6 +222,7 @@ fun TerminalHost(
                         TerminalView(ctx, /* attributes */ null).also { tv ->
                             tv.setTerminalViewClient(NoopTerminalViewClient)
                             tv.attachSession(plumbing.session)
+                            viewHolder.view = tv
                         }
                     },
                     update = { tv ->
@@ -239,6 +252,12 @@ fun TerminalHost(
                                 )
                             }
                         }
+                        // Paint whatever is already in the buffer (scrollback
+                        // replay, or output that arrived before layout). Live
+                        // streaming redraws come from the sink's afterWrite.
+                        if (plumbing.session.getEmulator() != null) {
+                            tv.onScreenUpdated()
+                        }
                     },
                 )
             }
@@ -246,14 +265,22 @@ fun TerminalHost(
     )
 }
 
-/** Marshalls sink calls onto the main thread; the emulator is not thread-safe. */
+/**
+ * Marshalls sink calls onto the main thread (the emulator is not
+ * thread-safe) and invalidates the view after each one so new output is
+ * actually painted.
+ */
 private class MainThreadSink(
     private val delegate: TerminalSink,
     private val handler: Handler,
+    private val afterWrite: () -> Unit,
 ) : TerminalSink {
-    override fun write(data: String) { handler.post { delegate.write(data) } }
-    override fun reset() { handler.post { delegate.reset() } }
+    override fun write(data: String) { handler.post { delegate.write(data); afterWrite() } }
+    override fun reset() { handler.post { delegate.reset(); afterWrite() } }
 }
+
+/** Mutable holder for the live TerminalView; set in the AndroidView factory. */
+private class TerminalViewHolder { var view: TerminalView? = null }
 
 private data class Plumbing(
     val transport: SocketIoTransport,

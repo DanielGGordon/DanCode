@@ -3,7 +3,10 @@ package com.dancode.android
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -48,14 +51,24 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    AppNav(
-                        tokenStorage = tokenStorage,
-                        authApi = authApi,
-                        projectsApi = projectsApi,
-                        terminalsApi = terminalsApi,
-                        authedClient = authedClient,
-                        fontSizeStore = fontSizeStore,
-                    )
+                    // Background bleeds full-screen (looks right under curved
+                    // corners); content is inset below the status bar, above
+                    // the nav bar, and clear of the display cutout/notch.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .systemBarsPadding()
+                            .displayCutoutPadding(),
+                    ) {
+                        AppNav(
+                            tokenStorage = tokenStorage,
+                            authApi = authApi,
+                            projectsApi = projectsApi,
+                            terminalsApi = terminalsApi,
+                            authedClient = authedClient,
+                            fontSizeStore = fontSizeStore,
+                        )
+                    }
                 }
             }
         }
