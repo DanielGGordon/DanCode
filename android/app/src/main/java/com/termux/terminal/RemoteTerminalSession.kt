@@ -45,4 +45,26 @@ class RemoteTerminalSession(
     override fun write(data: ByteArray, offset: Int, count: Int) {
         outputBytes(data, offset, count)
     }
+
+    /**
+     * Resize the local emulator only. The parent's [TerminalSession.updateSize]
+     * calls `JNI.setPtyWindowSize` once the emulator exists, which triggers
+     * `System.loadLibrary("termux")` — but there is no local PTY (and no
+     * bundled native lib), so that throws `UnsatisfiedLinkError` and crashes
+     * the app the moment the view re-lays-out. The server-side PTY is resized
+     * separately via the socket.io `resize` event, so we never touch JNI here.
+     */
+    override fun updateSize(
+        columns: Int,
+        rows: Int,
+        cellWidthPixels: Int,
+        cellHeightPixels: Int,
+    ) {
+        val emulator = mEmulator
+        if (emulator == null) {
+            initializeEmulator(columns, rows, cellWidthPixels, cellHeightPixels)
+        } else {
+            emulator.resize(columns, rows, cellWidthPixels, cellHeightPixels)
+        }
+    }
 }

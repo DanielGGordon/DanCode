@@ -37,6 +37,26 @@ class RemoteTerminalSessionTest {
     }
 
     @Test
+    fun update_size_after_emulator_exists_resizes_without_loading_jni() {
+        val session = RemoteTerminalSession(
+            client = NoopClient,
+            outputBytes = { _, _, _ -> },
+        )
+        // First updateSize initializes the emulator (mEmulator == null path).
+        session.updateSize(80, 24, 12, 24)
+        assertNotNull(session.getEmulator())
+
+        // Regression: the parent TerminalSession.updateSize calls
+        // JNI.setPtyWindowSize once the emulator exists, which triggers
+        // System.loadLibrary("termux") → UnsatisfiedLinkError and crashed the
+        // app on the second layout pass. The override must resize the
+        // emulator only and never touch JNI.
+        session.updateSize(100, 30, 12, 24)
+        assertEquals(100, session.getEmulator()!!.mColumns)
+        assertEquals(30, session.getEmulator()!!.mRows)
+    }
+
+    @Test
     fun write_forwards_bytes_to_the_supplied_callback() {
         val captured = mutableListOf<String>()
         val session = RemoteTerminalSession(
